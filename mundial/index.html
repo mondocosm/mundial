@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geome Map</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.1.0/ol.css">
+   <style>
+/* Basic Reset & Body */
+body {
+   margin: 0;
+   padding: 0;
+   font-family: sans-serif;
+   background-color: #222; /* Dark background */
+   color: #eee; /* Light base text */
+}
+
+#map {
+   position: absolute;
+   top: 0;
+   bottom: 0;
+   width: 100%;
+}
+
+/* Control Panels */
+.control-panel {
+   position: absolute;
+   width: 220px;
+   background: rgba(50, 50, 50, 0.9); /* Dark background */
+   color: #eee;
+   padding: 10px;
+   border-radius: 5px;
+   border: 1px solid #555; /* Lighter border */
+   box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+   font-size: 14px;
+   box-sizing: border-box;
+}
+
+#layer-switcher { top: 10px; left: 10px; z-index: 1000; }
+#user-layers-panel { top: 10px; right: 10px; z-index: 999; }
+#app-controls { bottom: 10px; right: 10px; z-index: 998; }
+
+/* Panel Headers */
+.panel-header {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   margin-bottom: 5px;
+}
+.panel-header h4, .panel-header h5 { /* Target h5 as well */
+   margin: 0;
+   color: #eee;
+   font-weight: bold;
+}
+
+/* Buttons */
+button {
+   padding: 5px 8px;
+   cursor: pointer;
+   background-color: #555;
+   color: #eee;
+   border: 1px solid #777;
+   border-radius: 3px;
+}
+button:hover { background-color: #666; }
+button:disabled { background-color: #444; color: #888; cursor: not-allowed; border-color: #666; }
+
+.add-btn {
+   font-size: 16px;
+   font-weight: bold;
+   padding: 0 6px;
+   line-height: 1;
+   /* Inherits dark button styles */
+}
+
+.settings-btn-small {
+   font-size: 12px;
+   padding: 1px 4px;
+   vertical-align: middle;
+   /* Inherits dark button styles */
+   /* margin-left is handled dynamically in JS */
+}
+
+/* Inputs & Selects */
+select, input[type="text"], input[type="url"], textarea {
+   padding: 4px;
+   margin-bottom: 5px;
+   width: 100%;
+   box-sizing: border-box;
+   background-color: #444;
+   color: #eee;
+   border: 1px solid #666;
+   border-radius: 3px;
+}
+input[type="color"] {
+   padding: 0;
+   border: 1px solid #666;
+   height: 25px;
+   width: 40px; /* Keep specific size */
+   vertical-align: middle;
+   cursor: pointer;
+   background-color: #444; /* Match other inputs */
+}
+input::placeholder, textarea::placeholder { color: #aaa; }
+
+/* User Layer List */
+#user-layer-list {
+   margin-bottom: 10px;
+   max-height: 150px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   padding: 5px;
+   background: #444; /* Match tileset list */
+}
+#user-layer-list .layer-item {
+   padding: 4px 6px;
+   margin-bottom: 2px;
+   cursor: pointer;
+   display: flex;
+   align-items: center;
+   /* justify-content: space-between; Removed for left alignment */
+}
+#user-layer-list .layer-item:hover { background-color: #555; }
+#user-layer-list .layer-item.selected {
+   background-color: #5a5a5a; /* Darker highlight */
+   font-weight: bold;
+}
+#user-layer-list .layer-item input[type="checkbox"] {
+   width: auto;
+   cursor: pointer;
+   margin-right: 5px; /* Consistent spacing */
+}
+#user-layer-list .layer-item span {
+   flex-grow: 1; /* Allow name to take space */
+}
+
+/* Tileset List */
+#tileset-list {
+   height: 100px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   margin-bottom: 10px;
+   padding: 5px;
+   background: #444;
+}
+#tileset-list div { /* Style for each tileset item */
+   padding: 2px 4px;
+   margin-bottom: 2px;
+   color: #eee;
+   display: flex;
+   align-items: center;
+   cursor: default; /* Default cursor for the row */
+}
+#tileset-list div:hover { background-color: #555; }
+#tileset-list div input[type="checkbox"] { /* Target checkbox specifically */
+     width: auto;
+     cursor: pointer;
+     margin-right: 5px; /* Add margin after checkbox */
+     /* margin-left: 5px; Removed */
+}
+#tileset-list div span { /* Target name span specifically */
+   flex-grow: 1; /* Allow name to take up space */
+   cursor: pointer; /* Make name clickable for zoom */
+}
+#tileset-list div .button-container { /* Container for buttons */
+   margin-left: 5px;
+}
+
+
+/* Modal Styles */
+/* Modal Styles (Now used for Tileset Details Side Panel) */
+.modal { /* Keep general modal class for show/hide */
+   display: none; /* Initially hidden */
+   /* Base positioning moved to ID selector below */
+}
+
+/* Position the specific details modal */
+#tileset-details-modal {
+    position: absolute;
+    z-index: 1001; /* Above layer switcher */
+    width: 220px; /* Match other control panels */
+    bottom: 10px; /* Align with app-controls */
+    right: 10px;  /* Align with app-controls */
+}
+.modal-content {
+   /* Style the content box */
+   background: rgba(50, 50, 50, 0.9); /* Match control panels */
+   color: #eee;
+   padding: 10px;
+   border: 1px solid #555;
+   border-radius: 5px;
+   box-shadow: 0 2px 5px rgba(0,0,0,0.5); /* Match control panels */
+   box-sizing: border-box;
+   /* Width and positioning are now handled by #tileset-details-modal */
+}
+.modal-content label {
+    font-weight: bold;
+    margin-right: 5px;
+    color: #eee;
+}
+.modal-content h2 { /* Style modal header */
+   margin-top: 0;
+   border-bottom: 1px solid #555;
+   padding-bottom: 10px;
+   margin-bottom: 15px;
+}
+.close-btn {
+   color: #aaa;
+   float: right;
+   font-size: 28px;
+   font-weight: bold;
+   line-height: 1;
+   margin-top: -5px; /* Adjust position slightly */
+}
+.close-btn:hover,
+.close-btn:focus {
+   color: #eee;
+   text-decoration: none;
+   cursor: pointer;
+}
+
+/* Specific Modal Elements */
+#settings-color-picker {
+    vertical-align: middle;
+    margin-left: 5px;
+    /* Inherits dark input styles */
+}
+.modal-content small { /* Style small text in modal */
+   color: #bbb;
+}
+.modal-content hr { /* Style horizontal rules in modal */
+   border: 0;
+   border-top: 1px solid #555;
+   margin: 15px 0;
+}
+
+
+/* Tileset Details Modal Specifics */
+.modal-section {
+   margin-bottom: 15px; /* Space between sections */
+}
+.modal-section label {
+   display: block; /* Label on its own line */
+   margin-bottom: 3px;
+   font-weight: bold;
+}
+.modal-section span { /* For displaying data like coords */
+    display: inline-block;
+    margin-left: 5px;
+    color: #ccc; /* Lighter color for displayed data */
+}
+.modal-actions {
+    margin-top: 20px;
+    text-align: left; /* Align label/color picker left */
+}
+.modal-actions label {
+    display: inline-block; /* Keep label inline */
+    margin-right: 5px;
+}
+   </style>
+</head>
+<body>
+    <div id="map"></div> {/* Use the single map div again */}
+
+    <div id="layer-switcher" class="control-panel"> {/* Added control-panel class */}
+        <h4>Base Layers</h4>
+        <select id="base-layer-select">
+            <option value="satellite">Satellite</option>
+            <option value="osm">OpenStreetMap</option>
+            <option value="topo">Topographic</option>
+            <option value="add-custom">Add Custom Layer...</option>
+        </select>
+        <div id="custom-layer-inputs" style="display: none; margin-top: 10px;">
+            <input type="text" id="custom-layer-name" placeholder="Layer Name" style="margin-bottom: 5px; width: 95%;">
+            <input type="text" id="custom-layer-url" placeholder="XYZ URL Template" style="margin-bottom: 5px; width: 95%;" size="40">
+            <button id="add-custom-layer-btn" style="width: 100%;">Add Layer</button> <!-- Moved button inside -->
+        </div> <!-- Closed custom-layer-inputs div here -->
+    </div> <!-- Closed layer-switcher div here -->
+
+    <div id="user-layers-panel" class="control-panel">
+        <div class="panel-header">
+            <h4>User Layers</h4>
+            <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button>
+        </div>
+        <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 5px;">
+            <div class="layer-item selected" data-layer-id="layer-0"> <!-- Added selected class -->
+                <span>Layer0 (Default)</span>
+                <input type="checkbox" class="layer-visibility-toggle" checked title="Toggle Layer Visibility">
+            </div>
+            {/* Layer items will be added here by JS */}
+            <small><i>No layers created yet.</i></small>
+        </div>
+
+        <hr style="margin: 10px 0;">
+
+        <h5>Tilesets in Layer:</h5>
+        <div id="tileset-list">
+            <small><i>Select a layer above.</i></small>
+            <!-- Tilesets for the selected layer will be listed here -->
+        </div>
+
+        <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none;">Selected: 0 / 1000</div>
+        <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button> {/* Moved here, initially hidden */}
+        <div id="selection-actions" style="display: none;"> {/* This now only contains save controls */}
+             {/* Counter and Clear button moved above */}
+             <input type="text" id="tileset-name-input" placeholder="Enter Tileset Name" style="display: none; margin-bottom: 5px;">
+             <button id="save-selection-btn" style="width: 100%;">Save Selection to Layer</button>
+        </div>
+        <!-- Inline Tileset Color Picker (Initially Hidden) -->
+        <div id="inline-color-picker-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #555;">
+            <h5>Selected Tileset Color:</h5>
+            <div style="display: flex; align-items: center;">
+                <input type="color" id="inline-color-picker" style="margin-right: 10px; width: 50px;">
+                <span id="inline-color-picker-name" style="font-style: italic;"></span>
+            </div>
+        </div>
+
+    </div>
+
+     <div id="app-controls" class="control-panel">
+        <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
+        <button id="settings-btn" style="width: 100%;" disabled title="Settings not yet implemented">Settings</button>
+    </div>
+
+    <!-- Only include OpenLayers script -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
+    <script src="main.js"></script>
+
+
+    <!-- Tileset Details Modal -->
+    <div id="tileset-details-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-tileset-details-modal">&times;</span>
+            <h2>Tileset Details</h2>
+
+            <div class="modal-section">
+                <label for="details-tileset-name">Name:</label>
+                <input type="text" id="details-tileset-name" placeholder="Tileset Name">
+            </div>
+
+            <div class="modal-section">
+                <label>Center Coordinates (DD):</label>
+                <span id="details-tileset-coords">N/A</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Location Info:</label>
+                <span id="details-location-info">Loading...</span> <!-- Placeholder for reverse geocoding -->
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-image">Image:</label>
+                <img id="details-tileset-image" src="" alt="Tileset Image" style="max-width: 100%; height: auto; display: none; margin-top: 5px;">
+                <input type="url" id="details-tileset-image-url" placeholder="Image URL (optional)" style="margin-top: 5px;">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-link">Hyperlink:</label>
+                <input type="url" id="details-tileset-link" placeholder="Link URL (optional)">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-tags">Tags/Metadata:</label>
+                <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
+            </div>
+
+            <hr>
+
+            <div class="modal-actions">
+                 <label>Color:</label>
+                 <input type="color" id="details-color-picker" style="vertical-align: middle;">
+                 <button id="details-save-btn" style="float: right;">Save Changes</button>
+                 <button id="details-more-settings-btn" style="float: right; margin-right: 5px;" disabled>More Settings</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
+
+
+
+
+    <!-- Modal Removed -->
