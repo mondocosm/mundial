@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- User Layers Setup ---
     const layer0Id = 'layer-0';
-    const layer0Name = 'Layer0 (Default)';
+    const layer0Name = 'Layer 0'; // Changed name
     const layer0Source = new ol.source.Vector();
      // Style for saved *tileset features* within a user layer
      const tilesetFeatureStyle = new ol.style.Style({
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addCustomLayerBtn = document.getElementById('add-custom-layer-btn');
     const userLayersPanel = document.getElementById('user-layers-panel');
     const userLayerList = document.getElementById('user-layer-list'); // Changed from userLayerSelect
-    const createLayerBtn = document.getElementById('create-layer-btn'); // The '+' button
+    const createLayerBtn = document.getElementById('create-layer-btn'); // The '+' button in Layers panel header
     const tilesetListDiv = document.getElementById('tileset-list');
     const selectionActionsDiv = document.getElementById('selection-actions');
     const clearSelectionBtn = document.getElementById('clear-selection-btn');
@@ -160,18 +160,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Tileset Details Modal Logic ---
-    let currentEditingFeatureId = null; // Track which feature is being edited in the modal
+    let currentEditingGroupId = null; // Track which *group* is being edited in the modal
 
-    function openTilesetDetailsModal(feature) {
-        if (!feature) return;
-        currentEditingFeatureId = feature.getId(); // Store the ID of the feature being edited
+    function openTilesetDetailsModal(firstFeatureOfGroup) {
+        if (!firstFeatureOfGroup) return;
+        const groupId = firstFeatureOfGroup.get('tilesetGroupId');
+        if (!groupId) {
+            console.warn("Cannot open modal: Feature is not part of a group.");
+            return;
+        }
+        currentEditingGroupId = groupId; // Store the GROUP ID
 
-        // Populate fields
-        detailsTilesetNameInput.value = feature.get('tilesetName') || '';
-        detailsColorPicker.value = feature.get('color') || '#008080'; // Default to teal
-        detailsTilesetImageUrlInput.value = feature.get('imageUrl') || '';
-        detailsTilesetLinkInput.value = feature.get('linkUrl') || '';
-        detailsTilesetTagsTextarea.value = feature.get('tags') || '';
+        // Find all features in the group
+        const layer = userLayers[selectedLayerId]?.layer;
+        if (!layer) return;
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+        const tileCount = groupFeatures.length; // Get the count
+
+        if (tileCount === 0) {
+             console.warn(`No features found for group ${groupId} when opening modal.`);
+             currentEditingGroupId = null;
+             return;
+        }
+
+        // Populate fields using the first feature's data (assuming consistency within group)
+        detailsTilesetNameInput.value = firstFeatureOfGroup.get('tilesetName') || '';
+        detailsColorPicker.value = firstFeatureOfGroup.get('color') || '#008080'; // Default to teal
+        detailsTilesetImageUrlInput.value = firstFeatureOfGroup.get('imageUrl') || '';
+        detailsTilesetLinkInput.value = firstFeatureOfGroup.get('linkUrl') || '';
+        detailsTilesetTagsTextarea.value = firstFeatureOfGroup.get('tags') || '';
 
         // Display image if URL exists
         if (detailsTilesetImageUrlInput.value) {
@@ -182,11 +200,23 @@ document.addEventListener('DOMContentLoaded', () => {
             detailsTilesetImage.src = '';
         }
 
-        // Calculate and display center coordinates
-        const extent = feature.getGeometry().getExtent();
-        const center = ol.extent.getCenter(extent);
-        const centerLonLat = ol.proj.toLonLat(center); // Convert to Lon/Lat
-        detailsTilesetCoordsSpan.textContent = `${centerLonLat[1].toFixed(6)}, ${centerLonLat[0].toFixed(6)}`; // Lat, Lon format
+        // Calculate and display center coordinates of the *entire group*
+        const groupExtent = ol.extent.createEmpty();
+        groupFeatures.forEach(f => ol.extent.extend(groupExtent, f.getGeometry().getExtent()));
+        if (!ol.extent.isEmpty(groupExtent)) {
+            const center = ol.extent.getCenter(groupExtent);
+            const centerLonLat = ol.proj.toLonLat(center); // Convert to Lon/Lat
+            detailsTilesetCoordsSpan.textContent = `${centerLonLat[1].toFixed(6)}, ${centerLonLat[0].toFixed(6)}`; // Lat, Lon format
+        } else {
+             detailsTilesetCoordsSpan.textContent = 'N/A';
+        }
+
+        // Display Tile Count
+        const tileCountSpan = document.getElementById('details-tileset-tile-count');
+        if (tileCountSpan) {
+            tileCountSpan.textContent = tileCount;
+        }
+
 
         // Placeholder for location info (requires reverse geocoding API)
         detailsLocationInfoSpan.textContent = 'Lookup not implemented';
@@ -198,59 +228,139 @@ document.addEventListener('DOMContentLoaded', () => {
     // Close modal logic
     closeTilesetDetailsModalBtn.addEventListener('click', () => {
         tilesetDetailsModal.style.display = 'none';
-        currentEditingFeatureId = null; // Clear the editing state
+        currentEditingGroupId = null; // Clear the editing state
     });
     // Close modal if clicking outside the content
     window.addEventListener('click', (event) => {
         if (event.target === tilesetDetailsModal) {
             tilesetDetailsModal.style.display = 'none';
-            currentEditingFeatureId = null; // Clear the editing state
+            currentEditingGroupId = null; // Clear the editing state
         }
     });
 
     // Save changes from modal (REMOVED - Now handled by color picker input)
     // detailsSaveBtn.addEventListener('click', () => { ... });
 
-    // Update image preview when URL changes
-    detailsTilesetImageUrlInput.addEventListener('change', () => {
-        const url = detailsTilesetImageUrlInput.value.trim();
-        if (url) {
-            detailsTilesetImage.src = url;
-            detailsTilesetImage.style.display = 'block';
-        } else {
-            detailsTilesetImage.style.display = 'none';
-            detailsTilesetImage.src = '';
+    // --- Modal Input Change Handlers (Apply to Group) ---
+
+    function applyGroupPropertyChange(propertyName, value) {
+        if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) {
+            console.warn(`Cannot update ${propertyName}: No group or layer context.`);
+            return false;
         }
+        const layer = userLayers[selectedLayerId].layer;
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
+
+        if (groupFeatures.length === 0) {
+            console.warn(`Cannot update ${propertyName}: No features found for group ${currentEditingGroupId}.`);
+            return false;
+        }
+
+        groupFeatures.forEach(feature => {
+            feature.set(propertyName, value);
+        });
+        console.log(`Updated ${propertyName} for group ${currentEditingGroupId} to "${value}"`);
+        return true;
+    }
+
+    // Update Name (also updates list item if successful)
+    detailsTilesetNameInput.addEventListener('change', (event) => {
+        const newName = event.target.value.trim();
+        if (newName === '') {
+            alert("Tileset name cannot be empty.");
+            // Revert input to original name? Requires fetching original name again.
+            // For simplicity, we'll just prevent empty save for now.
+            return;
+        }
+        if (applyGroupPropertyChange('tilesetName', newName)) {
+            // Update the name in the list UI as well
+            const listItem = tilesetListDiv.querySelector(`.layer-item[data-tileset-group-id="${currentEditingGroupId}"]`);
+            if (listItem) {
+                const nameSpan = listItem.querySelector('span');
+                if (nameSpan) nameSpan.textContent = newName;
+                // Update button tooltips too
+                listItem.querySelectorAll('button').forEach(btn => {
+                     if (btn.title.includes('Edit name')) btn.title = `Edit name for "${newName}"`;
+                     if (btn.title.includes('Delete tileset')) btn.title = `Delete tileset "${newName}"`;
+                });
+                 const checkbox = listItem.querySelector('input[type="checkbox"]');
+                 if (checkbox) checkbox.title = `Toggle visibility of "${newName}"`;
+            }
+        }
+    });
+
+
+    // Update Image URL and Preview
+    detailsTilesetImageUrlInput.addEventListener('change', (event) => {
+        const url = event.target.value.trim();
+        if (applyGroupPropertyChange('imageUrl', url)) {
+            // Update preview
+            if (url) {
+                detailsTilesetImage.src = url;
+                detailsTilesetImage.style.display = 'block';
+            } else {
+                detailsTilesetImage.style.display = 'none';
+                detailsTilesetImage.src = '';
+            }
+        }
+    });
+
+    // Update Link URL
+    detailsTilesetLinkInput.addEventListener('change', (event) => {
+        applyGroupPropertyChange('linkUrl', event.target.value.trim());
+    });
+
+    // Update Tags
+    detailsTilesetTagsTextarea.addEventListener('change', (event) => {
+        applyGroupPropertyChange('tags', event.target.value.trim());
+    });
+
+    // Update Link URL
+    detailsTilesetLinkInput.addEventListener('change', (event) => {
+        applyGroupPropertyChange('linkUrl', event.target.value.trim());
+    });
+
+    // Update Tags
+    detailsTilesetTagsTextarea.addEventListener('change', (event) => {
+        applyGroupPropertyChange('tags', event.target.value.trim());
     });
 
     // --- Instant Color Update Logic ---
     detailsColorPicker.addEventListener('input', (event) => {
-        if (!currentEditingFeatureId || !selectedLayerId || !userLayers[selectedLayerId]) {
-            console.warn("Cannot update color: No feature or layer context.");
+        if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) {
+            console.warn("Cannot update color: No group or layer context.");
             return;
         }
         const layer = userLayers[selectedLayerId].layer;
-        const feature = layer.getSource().getFeatureById(currentEditingFeatureId);
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
 
-        if (!feature) {
-            console.warn("Cannot update color: Feature not found.");
+        if (groupFeatures.length === 0) {
+            console.warn(`Cannot update color: No features found for group ${currentEditingGroupId}.`);
             return;
         }
 
         const newColor = event.target.value;
-        feature.set('color', newColor); // Store the color on the feature
 
-        // Update style immediately if visible
-        if (feature.get('isVisible') !== false) {
-            feature.setStyle(new ol.style.Style({
-                stroke: new ol.style.Stroke({ color: newColor, width: 3 }),
-                // Add fill using the same color but with some transparency
-                fill: new ol.style.Fill({ color: ol.color.asString([...ol.color.asArray(newColor).slice(0, 3), 0.2]) })
-            }));
-        }
-        // Optionally refresh the list item style if needed, though populateTilesetList on close/save handles this too
-        // populateTilesetList(selectedLayerId); // Could cause flicker on every input change
-        console.log(`Updated color for ${currentEditingFeatureId} to ${newColor}`);
+        // Apply color and update style for all features in the group
+        groupFeatures.forEach(feature => {
+            feature.set('color', newColor); // Store the color on the feature
+
+            // Update style immediately only if the group (and thus the feature) is visible
+            if (feature.get('isVisible') !== false) {
+                 // Apply the new style with the chosen color
+                 feature.setStyle(new ol.style.Style({
+                     stroke: new ol.style.Stroke({ color: newColor, width: 3 }),
+                     // Optional: Add fill using the same color but with some transparency
+                     // fill: new ol.style.Fill({ color: ol.color.asString([...ol.color.asArray(newColor).slice(0, 3), 0.2]) })
+                 }));
+            }
+             // If the feature is hidden, its style should remain null (handled by visibility toggle)
+        });
+
+        console.log(`Updated color for group ${currentEditingGroupId} to ${newColor}`);
+        // No need to call populateTilesetList here, styles are updated directly.
     });
 
 
@@ -354,11 +464,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Check if tile is already part of a saved tileset on the current layer
             if (selectedLayerId && userLayers[selectedLayerId]) {
                 const targetSource = userLayers[selectedLayerId].layer.getSource();
-                const existingTilesets = targetSource.getFeatures();
-                for (const tileset of existingTilesets) {
-                    const existingIds = tileset.get('tileIds');
-                    if (existingIds && existingIds.includes(tileId)) {
-                        // alert(`Tile already belongs to tileset "${tileset.get('tilesetName') || 'Unnamed Tileset'}" on this layer.`);
+                const existingTileFeatures = targetSource.getFeatures(); // Get all features (saved tiles)
+                for (const existingFeature of existingTileFeatures) {
+                    // Check if any existing feature has the same original tileId
+                    if (existingFeature.get('tileId') === tileId) {
+                        // Optional: alert or console log
+                        // console.log(`Tile ${tileId} already belongs to tileset "${existingFeature.get('tilesetName') || 'Unnamed'}"`);
                         return; // Prevent selection
                     }
                 }
@@ -372,37 +483,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const clickSelectHandler = function (evt) {
         if (currentInteractionMode !== 'select' || Math.floor(map.getView().getZoom()) < GRID_VISIBILITY_MIN_ZOOM) return;
 
-        let clickedExistingTileset = false;
+        let clickedExistingTilesetGroup = false;
         // Check if click hit an existing tileset feature on the active layer
         map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
-            if (clickedExistingTileset) return; // Process only the first hit tileset
+            if (clickedExistingTilesetGroup) return; // Process only the first hit group
 
-            // Check if the feature belongs to the currently selected user layer
-            if (layer && layer.get('title') === selectedLayerId && feature.get('tilesetName')) {
-                clickedExistingTileset = true;
-                const featureId = feature.getId();
-                const featureName = feature.get('tilesetName');
-                console.log(`Clicked existing tileset: ${featureName} (ID: ${featureId})`);
+            const groupId = feature.get('tilesetGroupId');
+            const tilesetName = feature.get('tilesetName');
 
-                // Highlight the clicked feature
+            // Check if the feature belongs to the currently selected user layer AND is part of a group
+            if (layer && layer.get('title') === selectedLayerId && groupId && tilesetName) {
+                clickedExistingTilesetGroup = true;
+                console.log(`Clicked tile belonging to group: ${tilesetName} (Group ID: ${groupId})`);
+
+                // Find all features belonging to this group
+                const source = layer.getSource();
+                const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+
+                // Highlight *all* features in the group
                 highlightSource.clear(); // Clear previous highlight
-                const highlightFeature = new ol.Feature(feature.getGeometry().clone()); // Use cloned geometry
-                highlightSource.addFeature(highlightFeature);
+                const highlightFeatures = groupFeatures.map(f => new ol.Feature(f.getGeometry().clone()));
+                if (highlightFeatures.length > 0) {
+                    highlightSource.addFeatures(highlightFeatures);
+                }
 
-                // Open the new details modal instead of the inline picker
-                openTilesetDetailsModal(feature);
-                // currentEditingFeatureId is now set inside openTilesetDetailsModal
-
-                // Old inline picker logic removed
+                // Open the details modal using the *first* feature of the group
+                // The modal logic will need to know it's editing a group.
+                // We'll pass the first feature, and the modal logic can retrieve the group ID from it.
+                if (groupFeatures.length > 0) {
+                    openTilesetDetailsModal(groupFeatures[0]); // Pass the first feature
+                    // currentEditingGroupId is set inside openTilesetDetailsModal
+                    highlightListItem(groupId); // Highlight the corresponding list item
+                }
             }
         }, {
             layerFilter: (layer) => layer === userLayers[selectedLayerId]?.layer, // Only check the active user layer
             hitTolerance: 3 // Adjust tolerance as needed
         });
 
-        // If an existing tileset was clicked, don't proceed with individual tile selection
-        if (clickedExistingTileset) {
-            return;
+        // If an existing tileset group was clicked, don't proceed with individual tile selection
+        if (clickedExistingTilesetGroup) {
+             return;
         }
 
          // If no existing tileset was clicked, clear highlight, hide picker, and proceed with tile selection/deselection
@@ -445,21 +566,25 @@ document.addEventListener('DOMContentLoaded', () => {
             let filteredFeaturesToAdd = featuresToAdd;
             if (selectedLayerId && userLayers[selectedLayerId]) {
                 const targetSource = userLayers[selectedLayerId].layer.getSource();
-                const existingTilesets = targetSource.getFeatures();
-                const allExistingTileIds = new Set();
-                existingTilesets.forEach(tileset => {
-                    const ids = tileset.get('tileIds');
-                    if (ids && Array.isArray(ids)) {
-                        ids.forEach(id => allExistingTileIds.add(id));
+                const existingTileFeatures = targetSource.getFeatures(); // Get all saved tile features
+                const allExistingOriginalTileIds = new Set(); // Store the *original* tile IDs from saved features
+
+                existingTileFeatures.forEach(existingFeature => {
+                    const originalTileId = existingFeature.get('tileId'); // Get the stored original tile ID
+                    if (originalTileId) {
+                        allExistingOriginalTileIds.add(originalTileId);
                     }
                 });
 
-                if (allExistingTileIds.size > 0) {
-                    filteredFeaturesToAdd = featuresToAdd.filter(feature => !allExistingTileIds.has(feature.getId()));
-                    // Optional: Alert if some were filtered out?
-                    // if (filteredFeaturesToAdd.length < featuresToAdd.length) {
-                    //     alert('Some tiles were not selected because they already belong to a saved tileset on this layer.');
-                    // }
+                if (allExistingOriginalTileIds.size > 0) {
+                    // Filter the featuresToAdd: keep only those whose ID is NOT in the set of existing original tile IDs
+                    filteredFeaturesToAdd = featuresToAdd.filter(feature => !allExistingOriginalTileIds.has(feature.getId()));
+
+                    // Optional: Alert if some were filtered out
+                    if (filteredFeaturesToAdd.length < featuresToAdd.length) {
+                         console.log(`${featuresToAdd.length - filteredFeaturesToAdd.length} tiles were not selected because they already belong to a saved tileset on this layer.`);
+                        // alert('Some tiles were not selected because they already belong to a saved tileset on this layer.');
+                    }
                 }
             }
 
@@ -474,20 +599,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSelectionActionsVisibility() {
         const hasSelection = selectionSource.getFeatures().length > 0;
-        const userLayerSelected = selectedLayerId !== null; // Use the tracked selectedLayerId
-        selectionActionsDiv.style.display = hasSelection && userLayerSelected ? 'block' : 'none';
-        tilesetNameInput.style.display = hasSelection && userLayerSelected ? 'block' : 'none';
-        saveSelectionBtn.disabled = !(hasSelection && userLayerSelected);
+        // A layer must be selected (Layer 0 is selected by default)
+        const userLayerSelected = selectedLayerId !== null;
 
-        // Pre-fill default tileset name if layer is selected
-        if (userLayerSelected && userLayers[selectedLayerId]) {
+        // Show selection actions if tiles are selected AND a layer is selected
+        const showActions = hasSelection && userLayerSelected;
+        selectionActionsDiv.style.display = showActions ? 'block' : 'none';
+        tilesetNameInput.style.display = showActions ? 'block' : 'none';
+
+        // Disable save button only if no selection or no layer selected
+        saveSelectionBtn.disabled = !showActions;
+        saveSelectionBtn.title = "Save selected tiles to the current layer"; // Reset title
+
+
+        // Pre-fill default tileset name if actions are shown and layer exists
+        if (showActions && userLayers[selectedLayerId]) {
             const currentCount = userLayers[selectedLayerId].tilesetCount || 0;
             tilesetNameInput.value = `Tileset ${currentCount + 1}`;
         } else {
-            tilesetNameInput.value = ''; // Clear if no layer selected
+            tilesetNameInput.value = ''; // Clear if actions not shown
         }
 
-        // clearSelectionBtn visibility/disabled state is now handled by updateSelectedTileCountDisplay
+        // clearSelectionBtn visibility/disabled state is handled by updateSelectedTileCountDisplay
     } // End of updateSelectionActionsVisibility
 
     function updateSelectedTileCountDisplay() {
@@ -509,105 +642,267 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Removed extra closing brace
     function populateTilesetList(layerId) {
-        tilesetListDiv.innerHTML = '';
+        tilesetListDiv.innerHTML = ''; // Clear existing list
         if (!layerId || !userLayers[layerId]) {
-            tilesetListDiv.innerHTML = '<small><i>Select a layer above.</i></small>'; return;
+            tilesetListDiv.innerHTML = '<small><i>Select a layer above.</i></small>';
+            return;
         }
-        const targetSource = userLayers[layerId].layer.getSource();
-        const tilesetFeatures = targetSource.getFeatures();
-        if (tilesetFeatures.length === 0) {
-            tilesetListDiv.innerHTML = '<small><i>No tilesets saved.</i></small>'; return;
-        }
-        tilesetFeatures.forEach(feature => {
-            const tilesetName = feature.get('tilesetName') || 'Unnamed Tileset';
-            const featureId = feature.getId();
 
-            // Apply style based on visibility and color
-            const isVisible = feature.get('isVisible') !== false; // Default to true if undefined
-            if (isVisible) {
-                const customColor = feature.get('color');
-                if (customColor) {
-                    feature.setStyle(new ol.style.Style({
-                         stroke: new ol.style.Stroke({ color: customColor, width: 2 })
-                    }));
-                } else {
-                     // Apply default layer style (tilesetFeatureStyle)
-                     feature.setStyle(tilesetFeatureStyle); // Explicitly set default style
+        const targetSource = userLayers[layerId].layer.getSource();
+        const allFeatures = targetSource.getFeatures();
+
+        // Group features by tilesetGroupId
+        const tilesetGroups = {}; // { groupId: { name: '...', features: [...] }, ... }
+        allFeatures.forEach(feature => {
+            const groupId = feature.get('tilesetGroupId');
+            const tilesetName = feature.get('tilesetName');
+            if (groupId && tilesetName) { // Only process features that are part of a group
+                if (!tilesetGroups[groupId]) {
+                    tilesetGroups[groupId] = { name: tilesetName, features: [] };
                 }
-            } else {
-                 // Feature is not visible, set style to null
-                 feature.setStyle(null);
+                tilesetGroups[groupId].features.push(feature);
             }
+        });
+
+        if (Object.keys(tilesetGroups).length === 0) {
+            tilesetListDiv.innerHTML = '<small><i>No tilesets saved.</i></small>';
+            return;
+        }
+
+        // Create list items for each group
+        Object.entries(tilesetGroups).forEach(([groupId, groupData]) => {
+            const tilesetName = groupData.name;
+            const groupFeatures = groupData.features;
+            if (groupFeatures.length === 0) return; // Skip empty groups
+
+            // Determine group visibility (visible if *any* feature in the group is visible)
+            // Determine group color (use color of the first feature, assume they are the same)
+            let isGroupVisible = groupFeatures.some(f => f.get('isVisible') !== false);
+            let groupColor = groupFeatures[0].get('color'); // Use first feature's color
+
+            // Apply style to all features in the group based on visibility/color
+            groupFeatures.forEach(feature => {
+                feature.set('isVisible', isGroupVisible); // Ensure consistency
+                if (isGroupVisible) {
+                    const styleColor = feature.get('color') || groupColor; // Use feature's own color if set, else group's
+                    feature.setStyle(styleColor
+                        ? new ol.style.Style({ stroke: new ol.style.Stroke({ color: styleColor, width: 3 }) }) // Use color
+                        : tilesetFeatureStyle // Use default style
+                    );
+                } else {
+                    feature.setStyle(null); // Hide feature
+                }
+            });
+
 
             const listItem = document.createElement('div');
-            listItem.dataset.featureId = featureId;
-            listItem.style.display = 'flex'; // Use flexbox for alignment
+            listItem.dataset.tilesetGroupId = groupId; // Store group ID
+            listItem.style.display = 'flex';
             listItem.style.alignItems = 'center';
-            // listItem.style.justifyContent = 'space-between'; // Removed for left alignment
 
-            // Checkbox for visibility
-            const visibilityCheckbox = document.createElement('input');
-            visibilityCheckbox.type = 'checkbox';
-            visibilityCheckbox.checked = isVisible; // Use the isVisible property
-            visibilityCheckbox.title = `Toggle visibility of "${tilesetName}"`;
-            visibilityCheckbox.classList.add('tileset-visibility-toggle'); // Add class for event listener
-            visibilityCheckbox.dataset.featureId = featureId; // Link checkbox to feature
-            visibilityCheckbox.style.marginRight = '5px'; // Add margin after checkbox
-            // visibilityCheckbox.style.marginLeft = '5px'; // Removed
-            // listItem.appendChild(visibilityCheckbox); // Append later
-
-            // Span for the name (to allow clicking for zoom)
+            // Span for the name (clickable for zoom)
             const nameSpan = document.createElement('span');
             nameSpan.textContent = tilesetName;
             nameSpan.title = `Click to zoom to "${tilesetName}"`;
-            nameSpan.style.cursor = 'pointer'; // Indicate clickable
-            nameSpan.style.flexGrow = '1'; // Allow name to take up space
+            nameSpan.style.cursor = 'pointer';
+            nameSpan.style.flexGrow = '1';
             nameSpan.addEventListener('click', () => {
-                const clickedFeature = targetSource.getFeatureById(featureId);
-                if (clickedFeature) {
-                    map.getView().fit(clickedFeature.getGeometry().getExtent(), { padding: [50, 50, 50, 50], duration: 500 });
+                // 1. Highlight features on map
+                highlightSource.clear(); // Clear previous highlight
+                const highlightFeatures = groupFeatures.map(f => new ol.Feature(f.getGeometry().clone()));
+                if (highlightFeatures.length > 0) {
+                    highlightSource.addFeatures(highlightFeatures);
+                }
+
+                // 2. Open Details Modal
+                if (groupFeatures.length > 0) {
+                    openTilesetDetailsModal(groupFeatures[0]); // Pass the first feature
+                }
+
+                // 3. Highlight list item (call helper function)
+                highlightListItem(groupId);
+
+                // 4. Optionally zoom
+                const groupExtent = ol.extent.createEmpty();
+                groupFeatures.forEach(f => ol.extent.extend(groupExtent, f.getGeometry().getExtent()));
+                if (!ol.extent.isEmpty(groupExtent)) {
+                     map.getView().fit(groupExtent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: TILE_SELECTION_ZOOM }); // Limit max zoom
                 }
             });
 
-            // --- Define Buttons ---
-            // Add Edit button
+            // Edit button
             const editBtn = document.createElement('button');
-            editBtn.textContent = '✏️'; // Pencil icon
-            editBtn.classList.add('settings-btn-small'); // Reuse style
-            editBtn.title = `Edit name for \"${tilesetName}\"`;
-            editBtn.style.marginLeft = '5px'; // Space after name
+            editBtn.textContent = '✏️';
+            editBtn.classList.add('settings-btn-small');
+            editBtn.title = `Edit name for "${tilesetName}"`;
+            editBtn.style.marginLeft = '5px';
             editBtn.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent zoom
-                editTilesetName(featureId, nameSpan); // Call new function
+                event.stopPropagation();
+                // Pass groupId and nameSpan to the (modified) edit function
+                editTilesetGroupName(groupId, nameSpan);
             });
 
-            // Add Delete button
+            // Delete button
             const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '🗑️'; // Trash can icon
-            deleteBtn.classList.add('settings-btn-small'); // Use existing style if available
-            deleteBtn.title = `Delete tileset \"${tilesetName}\"`;
-            deleteBtn.style.marginLeft = '5px'; // Space after edit button
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.classList.add('settings-btn-small');
+            deleteBtn.title = `Delete tileset "${tilesetName}"`;
+            deleteBtn.style.marginLeft = '5px';
             deleteBtn.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent zoom or other parent actions
-                // Confirmation dialog before deleting
-                if (confirm(`Are you sure you want to delete the tileset \"${tilesetName}\"?`)) {
-                    deleteTileset(featureId); // Call the delete function
+                event.stopPropagation();
+                if (confirm(`Are you sure you want to delete the tileset "${tilesetName}"?`)) {
+                    // Pass groupId to the (modified) delete function
+                    deleteTilesetGroup(groupId);
+
+    // --- Tileset Group Actions (New) ---
+
+    function editTilesetGroupName(groupId, nameSpanElement) {
+        const layer = userLayers[selectedLayerId]?.layer;
+        if (!layer) return;
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+        if (groupFeatures.length === 0) return;
+
+        const currentName = groupFeatures[0].get('tilesetName') || 'Unnamed Tileset';
+        const newName = prompt(`Enter new name for tileset group "${currentName}":`, currentName);
+
+        if (newName && newName.trim() !== '' && newName !== currentName) {
+            const trimmedName = newName.trim();
+            groupFeatures.forEach(feature => {
+                feature.set('tilesetName', trimmedName);
+            });
+            nameSpanElement.textContent = trimmedName; // Update the list item text
+            nameSpanElement.title = `Click to zoom to "${trimmedName}"`; // Update tooltip
+
+            // If this group is currently being edited in the modal, update the modal name
+            const firstFeatureId = groupFeatures[0].getId();
+            if (currentEditingFeatureId === firstFeatureId && detailsTilesetNameInput) {
+                 detailsTilesetNameInput.value = trimmedName;
+            }
+
+            console.log(`Renamed tileset group ${groupId} to "${trimmedName}"`);
+        } else if (newName === '') {
+            alert("Tileset name cannot be empty.");
+        }
+    }
+
+    function deleteTilesetGroup(groupId) {
+        console.log(`Attempting to delete tileset group ${groupId}`);
+        if (!selectedLayerId || !userLayers[selectedLayerId]) {
+            console.error("Cannot delete tileset group: No layer selected or layer not found.");
+            alert("Error: Please select the layer containing the tileset first.");
+            return;
+        }
+
+        const targetLayer = userLayers[selectedLayerId].layer;
+        const targetSource = targetLayer.getSource();
+        const featuresToDelete = targetSource.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+
+        if (featuresToDelete.length > 0) {
+            try {
+                featuresToDelete.forEach(feature => targetSource.removeFeature(feature));
+                console.log(`Tileset group ${groupId} (${featuresToDelete.length} tiles) removed successfully from layer ${selectedLayerId}.`);
+
+                // Decrement the main tileset count for the layer (used for default naming)
+                if (userLayers[selectedLayerId].tilesetCount > 0) {
+                     userLayers[selectedLayerId].tilesetCount--;
+                }
+                // Refresh the list to show the change
+                populateTilesetList(selectedLayerId);
+
+                 // Also clear highlight and modal if the deleted group was being edited
+                 const firstFeatureId = featuresToDelete[0].getId(); // Check if the first feature was the one being edited
+                 if (currentEditingFeatureId === firstFeatureId) {
+                     highlightSource.clear();
+                     tilesetDetailsModal.style.display = 'none';
+                     currentEditingFeatureId = null;
+                 }
+            } catch (error) {
+                console.error(`Error removing features for group ${groupId}:`, error);
+                alert("An error occurred while trying to delete the tileset group.");
+            }
+        } else {
+            console.warn(`Could not find any features for tileset group ${groupId} on layer ${selectedLayerId} to delete.`);
+            populateTilesetList(selectedLayerId); // Refresh list anyway
+        }
+    }
+
+    function toggleTilesetGroupVisibility(groupId, isVisible) {
+        console.log(`Toggling visibility for group ${groupId} to ${isVisible}`);
+        const layer = userLayers[selectedLayerId]?.layer;
+        if (!layer) return;
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+
+        if (groupFeatures.length > 0) {
+            const groupColor = groupFeatures[0].get('color'); // Get color from first feature
+
+            groupFeatures.forEach(feature => {
+                feature.set('isVisible', isVisible); // Update stored visibility
+
+                if (isVisible) {
+                    // Make visible: Apply style (custom color or default)
+                    const styleColor = feature.get('color') || groupColor; // Use feature's color or group's
+                    feature.setStyle(styleColor
+                        ? new ol.style.Style({ stroke: new ol.style.Stroke({ color: styleColor, width: 3 }) })
+                        : tilesetFeatureStyle
+                    );
+                } else {
+                    // Make invisible: Set style to null
+                    feature.setStyle(null);
+                }
+            });
+            console.log(`Visibility for group ${groupId} set to ${isVisible}`);
+        } else {
+             console.warn(`No features found for group ${groupId} to toggle visibility.`);
+        }
+        // No need to call populateTilesetList here, as the styles are updated directly.
+    }
+
+
                 }
             });
 
-            // --- Append Elements in Order ---
-            // Append Name First
+             // Visibility Checkbox
+             const visibilityCheckbox = document.createElement('input');
+             visibilityCheckbox.type = 'checkbox';
+             visibilityCheckbox.checked = isGroupVisible;
+             visibilityCheckbox.title = `Toggle visibility of "${tilesetName}"`;
+             visibilityCheckbox.classList.add('tileset-visibility-toggle'); // Keep class for potential delegation
+
+    // Function to highlight a specific tileset group in the list
+    function highlightListItem(groupId) {
+        // Remove highlight from all items first
+        tilesetListDiv.querySelectorAll('.tileset-item').forEach(item => {
+            item.classList.remove('highlighted');
+        });
+        // Add highlight to the target item
+        const targetItem = tilesetListDiv.querySelector(`.tileset-item[data-tileset-group-id="${groupId}"]`);
+        if (targetItem) {
+            targetItem.classList.add('highlighted');
+            // Optional: Scroll item into view
+            targetItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+
+             visibilityCheckbox.dataset.tilesetGroupId = groupId; // Link checkbox to group
+             visibilityCheckbox.style.marginLeft = '5px'; // Add margin before checkbox
+             visibilityCheckbox.addEventListener('change', (event) => {
+                 const checked = event.target.checked;
+                 const changedGroupId = event.target.dataset.tilesetGroupId;
+                 toggleTilesetGroupVisibility(changedGroupId, checked);
+             });
+
+
+            // Append elements
             listItem.appendChild(nameSpan);
-            // Append Edit Button Second
             listItem.appendChild(editBtn);
-            // Append Delete Button Third
             listItem.appendChild(deleteBtn);
-            // Append Checkbox Fourth
-            listItem.appendChild(visibilityCheckbox);
-            // Append the completed list item to the main list div
+            listItem.appendChild(visibilityCheckbox); // Append checkbox last
             tilesetListDiv.appendChild(listItem);
-        }); // End of tilesetFeatures.forEach loop
-    } // End of populateTilesetList
+        });
+    } // End of populateTilesetList (Refactored)
 
 
     // --- Tileset Name Editing ---
@@ -678,50 +973,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Tileset Visibility Toggle Logic ---
+    // --- Tileset Visibility Toggle Logic (Old - Handled by checkbox listener in populateTilesetList calling toggleTilesetGroupVisibility) ---
+    /*
     tilesetListDiv.addEventListener('click', (event) => {
-        const target = event.target;
-        if (target.type === 'checkbox' && target.classList.contains('tileset-visibility-toggle')) {
-            const featureId = target.dataset.featureId;
-            const isVisible = target.checked;
-            const currentLayerId = selectedLayerId; // Use the currently selected layer
-
-            if (!currentLayerId || !userLayers[currentLayerId] || !featureId) {
-                console.error("Could not toggle tileset visibility: Missing layer or feature ID.");
-                return;
-            }
-
-            const targetSource = userLayers[currentLayerId].layer.getSource();
-            const feature = targetSource.getFeatureById(featureId);
-
-            if (feature) {
-                // Update the feature's stored visibility state
-                feature.set('isVisible', isVisible);
-
-                if (isVisible) {
-                    // Make visible: Apply original style (default or custom color)
-                    const customColor = feature.get('color');
-                    if (customColor) {
-                        // Apply custom color style
-                        feature.setStyle(new ol.style.Style({
-                            stroke: new ol.style.Stroke({ color: customColor, width: 3 }) // Increased width
-                        }));
-                    } else {
-                        // Apply default layer style (tilesetFeatureStyle)
-                        // Setting null might work if the layer has a default style set,
-                        // but explicitly setting the default style is safer.
-                        feature.setStyle(tilesetFeatureStyle);
-                    }
-                    console.log(`Tileset ${featureId} made visible.`);
-                } else {
-                    // Make invisible: Set style to null
-                    feature.setStyle(null);
-                    console.log(`Tileset ${featureId} made invisible.`);
-                }
-            } else {
-                console.error(`Could not find feature ${featureId} in layer ${currentLayerId} to toggle visibility.`);
-            }
-        }
+       // ... (old code for individual feature toggle) ...
     });
+    */
 
     selectionSource.on(['addfeature', 'removefeature', 'clear'], () => {
         updateSelectionActionsVisibility();
@@ -740,34 +997,64 @@ document.addEventListener('DOMContentLoaded', () => {
         layerItem.classList.add('layer-item');
         layerItem.dataset.layerId = layerId;
 
-        // Checkbox first for alignment
-        const visibilityCheckbox = document.createElement('input');
-        visibilityCheckbox.type = 'checkbox';
-        visibilityCheckbox.checked = isVisible;
-        visibilityCheckbox.title = 'Toggle layer visibility';
-        // Add margin for spacing
-        visibilityCheckbox.style.marginRight = '5px';
-        layerItem.appendChild(visibilityCheckbox);
-
-        // Then the name
+        // Name Span (Append First)
         const nameSpan = document.createElement('span');
         nameSpan.textContent = layerName;
         nameSpan.style.flexGrow = '1'; // Allow name to take space
         layerItem.appendChild(nameSpan);
 
-        // Add settings button only for non-default layers
+        // Add Edit/Delete/PublicToggle buttons *only* for non-default layers
         if (layerId !== layer0Id) {
-            const settingsBtn = document.createElement('button');
-            settingsBtn.textContent = '⚙️';
-            settingsBtn.classList.add('settings-btn-small');
-            settingsBtn.title = `Settings for layer "${layerName}"`;
-            settingsBtn.style.marginLeft = '5px'; // Add some space
-            settingsBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent layer selection when clicking button
-                openLayerSettingsModal(layerId);
+            // Edit Button
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '✏️';
+            editBtn.classList.add('settings-btn-small');
+            editBtn.title = `Edit name for layer "${layerName}"`;
+            editBtn.style.marginLeft = '5px';
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                editLayerName(layerId, nameSpan);
             });
-            layerItem.appendChild(settingsBtn);
+            layerItem.appendChild(editBtn);
+
+            // Delete Button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.classList.add('settings-btn-small');
+            deleteBtn.title = `Delete layer "${layerName}"`;
+            deleteBtn.style.marginLeft = '5px';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteLayer(layerId);
+            });
+            layerItem.appendChild(deleteBtn);
+
+            // Public/Private Toggle Button
+            const privacyBtn = document.createElement('button');
+            // Determine initial state (default to public for now)
+            const isPublic = userLayers[layerId]?.isPublic !== false; // Assume public if not set
+            privacyBtn.textContent = isPublic ? '🌐' : '🔒'; // Globe / Lock icons
+            privacyBtn.classList.add('settings-btn-small', 'privacy-toggle-btn');
+            privacyBtn.title = isPublic ? `Make layer "${layerName}" private` : `Make layer "${layerName}" public`;
+            privacyBtn.style.marginLeft = '5px';
+            privacyBtn.dataset.layerId = layerId; // Store layerId for listener
+            // Listener is handled by delegation on userLayerList
+            layerItem.appendChild(privacyBtn);
+        } else {
+             // For Layer0, add some padding to align with other rows that have buttons
+             // Estimate width of 3 buttons + margins
+             nameSpan.style.paddingRight = '80px'; // Adjust as needed
         }
+
+
+        // Visibility Checkbox (Append Last for ALL layers)
+        const visibilityCheckbox = document.createElement('input');
+        visibilityCheckbox.type = 'checkbox';
+        visibilityCheckbox.checked = isVisible;
+        visibilityCheckbox.title = `Toggle visibility of "${layerName}"`;
+        visibilityCheckbox.style.marginLeft = '5px';
+        layerItem.appendChild(visibilityCheckbox);
+
 
         userLayerList.appendChild(layerItem);
     }
@@ -791,6 +1078,115 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!targetItem) return; // Clicked outside an item
 
         const layerId = targetItem.dataset.layerId;
+
+    // --- Layer Edit/Delete Functions ---
+
+    function editLayerName(layerId, nameSpanElement) {
+        const layerInfo = userLayers[layerId];
+        if (!layerInfo || layerId === layer0Id) {
+            console.warn("Cannot edit name for non-existent or default layer:", layerId);
+            return;
+        }
+
+        const currentName = layerInfo.name;
+        const newName = prompt(`Enter new name for layer "${currentName}":`, currentName);
+
+        if (newName && newName.trim() !== '' && newName.trim() !== currentName) {
+    // --- Layer Privacy Toggle Function ---
+    function toggleLayerPrivacy(layerId, buttonElement) {
+        const layerInfo = userLayers[layerId];
+        if (!layerInfo || layerId === layer0Id) {
+            console.warn("Cannot toggle privacy for non-existent or default layer:", layerId);
+            return;
+        }
+
+        // Toggle the state (default to public if undefined)
+        const currentIsPublic = layerInfo.isPublic !== false;
+        const newIsPublic = !currentIsPublic;
+        layerInfo.isPublic = newIsPublic; // Update internal state
+
+        // Update button appearance and title
+        buttonElement.textContent = newIsPublic ? '🌐' : '🔒';
+        buttonElement.title = newIsPublic ? `Make layer "${layerInfo.name}" private` : `Make layer "${layerInfo.name}" public`;
+
+        console.log(`Layer ${layerId} (${layerInfo.name}) set to ${newIsPublic ? 'Public' : 'Private'}`);
+        // NOTE: Actual enforcement of public/private (e.g., during data saving/loading)
+        // would need to be implemented elsewhere based on this 'isPublic' flag.
+    }
+
+
+
+            const trimmedName = newName.trim();
+            // Update internal state
+            layerInfo.name = trimmedName;
+            layerInfo.layer.set('userLayerName', trimmedName);
+
+            // Update UI list item
+            nameSpanElement.textContent = trimmedName;
+            const layerItem = nameSpanElement.closest('.layer-item');
+            if (layerItem) {
+                const editBtn = layerItem.querySelector('button[title*="Edit name"]');
+                const deleteBtn = layerItem.querySelector('button[title*="Delete layer"]');
+                const visibilityCheckbox = layerItem.querySelector('input[type="checkbox"]');
+                if (editBtn) editBtn.title = `Edit name for layer "${trimmedName}"`;
+                if (deleteBtn) deleteBtn.title = `Delete layer "${trimmedName}"`;
+                if (visibilityCheckbox) visibilityCheckbox.title = `Toggle visibility of "${trimmedName}"`;
+            }
+
+            console.log(`Renamed layer ${layerId} to "${trimmedName}"`);
+        } else if (newName === '') {
+            alert("Layer name cannot be empty.");
+        }
+    }
+
+    function deleteLayer(layerId) {
+        const layerInfo = userLayers[layerId];
+        if (!layerInfo || layerId === layer0Id) {
+            console.warn("Cannot delete non-existent or default layer:", layerId);
+            return;
+        }
+
+        if (confirm(`Are you sure you want to delete layer "${layerInfo.name}"? This will also delete all its tilesets and cannot be undone.`)) {
+            try {
+                // Remove layer from map
+                map.removeLayer(layerInfo.layer);
+                // Remove from internal tracking
+                delete userLayers[layerId];
+                // Remove from UI list
+                const listItem = userLayerList.querySelector(`.layer-item[data-layer-id="${layerId}"]`);
+                if (listItem) listItem.remove();
+
+                console.log(`Deleted layer ${layerId} ("${layerInfo.name}")`);
+
+                // If the deleted layer was selected, select the default layer
+                if (selectedLayerId === layerId) {
+                    selectedLayerId = layer0Id; // Internal selection defaults to Layer0
+                    // selectLayerInList(layer0Id); // Don't visually select Layer0
+                    populateTilesetList(layer0Id); // Show Layer0's tilesets (likely none)
+                    updateSelectionActionsVisibility();
+                    highlightSource.clear();
+                    tilesetDetailsModal.style.display = 'none';
+                    currentEditingGroupId = null;
+                    console.log("Selected layer deleted, defaulting to Layer0 internally.");
+                }
+
+                // Add back the 'No layers' message if the list is now empty
+                if (userLayerList.querySelectorAll('.layer-item').length === 0) {
+                    const existingSmall = userLayerList.querySelector('small');
+                    if (!existingSmall) {
+                        const noLayersMsg = document.createElement('small');
+                        noLayersMsg.innerHTML = '<i>No layers created yet.</i>';
+                        userLayerList.appendChild(noLayersMsg);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error deleting layer ${layerId}:`, error);
+                alert("An error occurred while deleting the layer.");
+            }
+        }
+    }
+
+
 
         // Handle checkbox click separately
         if (event.target.type === 'checkbox') {
@@ -870,48 +1266,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const tilesetName = tilesetNameInput.value.trim() || `Tileset ${userLayers[selectedLayerId].tilesetCount + 1}`;
         const targetSource = userLayers[selectedLayerId].layer.getSource();
+        const featuresToAdd = [];
+        const addedTileIds = []; // Keep track of added tile IDs
 
-        // Combine geometries of selected tiles into one MultiPolygon
-        const geometries = selectedFeatures.map(f => f.getGeometry());
-        // Simple union approach (might be slow for many features, consider turf.js for complex cases)
-        let combinedGeometry = geometries[0]; // Start with the first geometry
-        for (let i = 1; i < geometries.length; i++) {
-            // This basic approach just takes the last geometry's extent for simplicity.
-            // A true geometric union is more complex. For visualization, often just
-            // storing the individual tile IDs is enough.
-            // For now, we'll just use the extent of all selected features.
-        }
-        // Calculate the bounding extent of all selected features
-        const combinedExtent = ol.extent.createEmpty();
-        selectedFeatures.forEach(f => ol.extent.extend(combinedExtent, f.getGeometry().getExtent()));
-        const combinedPolygon = ol.geom.Polygon.fromExtent(combinedExtent);
+        // Generate a unique ID for this *group* of tiles being saved
+        const tilesetGroupId = `tileset-group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
+        selectedFeatures.forEach(feature => {
+            const tileId = feature.getId();
+            // Clone the feature from the selection source
+            const clonedFeature = feature.clone();
+            // Assign a unique ID for the individual saved tile feature
+            const featureId = `tileset-tile-${tilesetFeatureCounter++}`;
+            clonedFeature.setId(featureId);
 
-        // Store the individual tile IDs
-        const tileIds = selectedFeatures.map(f => f.getId());
+            // Set properties on the cloned feature
+            clonedFeature.set('tilesetName', tilesetName);
+            clonedFeature.set('tilesetGroupId', tilesetGroupId); // Add the group ID
+            clonedFeature.set('tileId', tileId); // Store original tile ID if needed
+            clonedFeature.set('isVisible', true); // Tilesets are visible by default
+            clonedFeature.set('color', null); // Default color (will use layer style)
+            // Remove properties specific to selection layer if any (optional)
+            // clonedFeature.unset('selectionProperty');
 
-        // Create a single feature representing the tileset
-        const tilesetFeature = new ol.Feature({
-            geometry: combinedPolygon, // Use the combined extent polygon
-            tilesetName: tilesetName,
-            tileIds: tileIds, // Store the IDs of the included tiles
-            isVisible: true, // Tilesets are visible by default
-            color: null // Default color (will use layer style)
+            featuresToAdd.push(clonedFeature);
+            addedTileIds.push(tileId);
         });
 
-        // Assign a unique ID to the tileset feature itself
-        const featureId = `tileset-${tilesetFeatureCounter++}`;
-        tilesetFeature.setId(featureId);
+        if (featuresToAdd.length > 0) {
+            targetSource.addFeatures(featuresToAdd); // Add all cloned features
+            userLayers[selectedLayerId].tilesetCount = (userLayers[selectedLayerId].tilesetCount || 0) + 1; // Increment counter ONCE per save operation
 
-        targetSource.addFeature(tilesetFeature);
-        userLayers[selectedLayerId].tilesetCount = (userLayers[selectedLayerId].tilesetCount || 0) + 1; // Increment counter
+            selectionSource.clear(); // Clear the temporary selection
+            populateTilesetList(selectedLayerId); // Refresh the list
+            updateSelectionActionsVisibility(); // Hide save controls etc.
+            tilesetNameInput.value = ''; // Clear input
 
-        selectionSource.clear(); // Clear the temporary selection
-        populateTilesetList(selectedLayerId); // Refresh the list
-        updateSelectionActionsVisibility(); // Hide save controls etc.
-        tilesetNameInput.value = ''; // Clear input
-
-        console.log(`Saved ${tileIds.length} tiles as "${tilesetName}" (ID: ${featureId}) to layer ${selectedLayerId}`);
+            console.log(`Saved ${featuresToAdd.length} tiles as "${tilesetName}" to layer ${selectedLayerId}`);
+        } else {
+            console.warn("No features were added during save operation.");
+        }
     });
 
 
@@ -946,68 +1340,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Old Inline Color Picker Logic Removed ---
 
     // --- Layer Settings Modal Logic (Placeholder/Example) ---
-    function openLayerSettingsModal(layerId) {
-        const layerInfo = userLayers[layerId];
-        if (!layerInfo) return;
-
-        // Example: Simple prompt for renaming
-        const newName = prompt(`Enter new name for layer "${layerInfo.name}":`, layerInfo.name);
-        if (newName && newName.trim() !== layerInfo.name) {
-            layerInfo.name = newName.trim();
-            layerInfo.layer.set('userLayerName', layerInfo.name); // Update internal property if needed
-
-            // Update the name in the UI list
-            const listItem = userLayerList.querySelector(`.layer-item[data-layer-id="${layerId}"]`);
-            if (listItem) {
-                const nameSpan = listItem.querySelector('span');
-                if (nameSpan) nameSpan.textContent = layerInfo.name;
-                // Update settings button title too
-                const settingsBtn = listItem.querySelector('.settings-btn-small');
-                if (settingsBtn) settingsBtn.title = `Settings for layer "${layerInfo.name}"`;
-            }
-            console.log(`Renamed layer ${layerId} to "${layerInfo.name}"`);
-        }
-
-        // Example: Simple confirm for deletion
-        if (confirm(`Are you sure you want to delete layer "${layerInfo.name}"? This cannot be undone.`)) {
-            // Remove layer from map
-            map.removeLayer(layerInfo.layer);
-            // Remove from internal tracking
-            delete userLayers[layerId];
-            // Remove from UI list
-            const listItem = userLayerList.querySelector(`.layer-item[data-layer-id="${layerId}"]`);
-            if (listItem) listItem.remove();
-
-            // If the deleted layer was selected, select the default layer
-            if (selectedLayerId === layerId) {
-                selectedLayerId = layer0Id;
-                selectLayerInList(layer0Id);
-                populateTilesetList(layer0Id);
-                updateSelectionActionsVisibility();
-                highlightSource.clear();
-                // inlineColorPickerContainer.style.display = 'none'; // Old picker removed
-                tilesetDetailsModal.style.display = 'none'; // Close details modal too
-                currentEditingFeatureId = null;
-            }
-
-            // Add back the 'No layers' message if the list is now empty (excluding default)
-            if (Object.keys(userLayers).length === 1 && userLayers[layer0Id]) {
-                 const existingSmall = userLayerList.querySelector('small');
-                 if (!existingSmall) {
-                     const noLayersMsg = document.createElement('small');
-                     noLayersMsg.innerHTML = '<i>No layers created yet.</i>';
-                     userLayerList.appendChild(noLayersMsg);
-                 }
-            }
-
-
-            console.log(`Deleted layer ${layerId} ("${layerInfo.name}")`);
-        }
-    }
+    // --- Old Layer Settings Modal Logic (Removed - Replaced by inline Edit/Delete buttons) ---
+    // --- Old Layer Settings Modal Logic (Removed) ---
+    /* Functionality moved to inline buttons in addLayerToList */
 
 
     // --- Initial UI Setup ---
-    addLayerToList(layer0Id, layer0Name, true); // Add default layer to list
+    addLayerToList(layer0Id, layer0Name, true); // Add default layer back to list visually
     selectLayerInList(layer0Id); // Select default layer visually
     populateTilesetList(layer0Id); // Populate tilesets for default layer
     updateSelectionActionsVisibility(); // Initial state for save controls
@@ -1015,13 +1354,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mapElement) mapElement.style.cursor = 'crosshair'; // Initial cursor for select mode - FIXED
 
 
-    // --- Helper to find the feature being edited ---
-    function findCurrentFeature() {
-        if (!selectedLayerId || !userLayers[selectedLayerId] || !currentEditingFeatureId) {
-            return null;
+    // --- Helper to find the features being edited (by group ID) ---
+    function findCurrentGroupFeatures() {
+        if (!selectedLayerId || !userLayers[selectedLayerId] || !currentEditingGroupId) {
+            return []; // Return empty array if no group context
         }
         const source = userLayers[selectedLayerId].layer.getSource();
-        return source.getFeatureById(currentEditingFeatureId);
+        return source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
     }
 
 
