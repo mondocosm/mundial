@@ -13,7 +13,7 @@ Thumbs.db
 *.vscode/
 
 # Optional directories
-mundial/
+# mundial/ # Keep mundial tracked now
 mundial1/
 
 # Node modules (if applicable in the future)
