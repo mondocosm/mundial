@@ -1,4 +1,59 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+
+    // --- Draggable Panels ---
+    function makeDraggable(elmnt) {
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      // Use the header if available, otherwise the element itself
+      const dragHandle = elmnt.querySelector('.panel-header') || elmnt.querySelector('h2') || elmnt;
+
+      if (dragHandle) {
+        dragHandle.style.cursor = 'move';
+        dragHandle.onmousedown = dragMouseDown;
+      } else {
+        // Fallback if no header found (less ideal)
+        elmnt.style.cursor = 'move';
+        elmnt.onmousedown = dragMouseDown;
+      }
+
+      function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // Get the mouse cursor position at startup:
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        // Call a function whenever the cursor moves:
+        document.onmousemove = elementDrag;
+      }
+
+      function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // Calculate the new cursor position:
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        // Set the element's new position:
+        // Ensure element stays within viewport bounds (simple check)
+        const newTop = Math.max(0, Math.min(window.innerHeight - elmnt.offsetHeight, elmnt.offsetTop - pos2));
+        const newLeft = Math.max(0, Math.min(window.innerWidth - elmnt.offsetWidth, elmnt.offsetLeft - pos1));
+        elmnt.style.top = newTop + "px";
+        elmnt.style.left = newLeft + "px";
+        // Clear bottom/right if setting top/left
+        elmnt.style.bottom = '';
+        elmnt.style.right = '';
+      }
+
+      function closeDragElement() {
+        // Stop moving when mouse button is released:
+        document.onmouseup = null;
+        document.onmousemove = null;
+      }
+    }
+
+
     // --- OpenLayers Setup ---
 const osmLayer = new ol.layer.Tile({ source: new ol.source.OSM(), visible: false, title: 'osm' });
 const satelliteLayer = new ol.layer.Tile({
@@ -65,6 +120,7 @@ const map = new ol.Map({
     target: 'map',
     layers: [ ...baseLayers, layer0Layer, gridLayerZ21, selectionLayer, highlightLayer ], // Add highlight layer
     view: new ol.View({ center: ol.proj.fromLonLat([-74.0060, 40.7128]), zoom: 10, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }),
+    controls: [], // Remove default controls (like zoom buttons)
 });
 
 // --- UI Element References ---
@@ -947,6 +1003,14 @@ populateTilesetList(selectedLayerId); // Use the tracked ID
 
 // --- Tileset Settings Modal Logic ---
 // Variables will be defined inside DOMContentLoaded
+
+
+
+    // --- Make Panels Draggable ---
+    makeDraggable(document.getElementById('layer-switcher'));
+    makeDraggable(document.getElementById('user-layers-panel'));
+    makeDraggable(document.getElementById('app-controls'));
+    makeDraggable(document.getElementById('tileset-details-modal')); // Make the details panel draggable too
 
 // Helper to find feature (needed in multiple places)
 function findCurrentFeature() {
