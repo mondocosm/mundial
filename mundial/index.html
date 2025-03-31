@@ -26,18 +26,22 @@ body {
 .control-panel {
    position: absolute;
    width: 220px;
+   min-width: 180px; /* Prevent getting too narrow */
+   min-height: 40px; /* Minimum height for header */
    background: rgba(50, 50, 50, 0.9); /* Dark background */
    color: #eee;
    /* padding: 10px; Moved to panel-content */
    border-radius: 5px;
    border: 1px solid #555; /* Lighter border */
    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-   font-size: 14px;
+   font-size: 14px; /* Base font size */
    box-sizing: border-box;
-   overflow: hidden; /* Hide content when minimized */
+   overflow: auto; /* Changed from hidden to allow resize */
+   resize: vertical; /* Allow vertical resizing */
 }
 
 #layer-switcher { top: 10px; left: 10px; z-index: 1000; }
+
 #user-layers-panel { top: 10px; right: 10px; z-index: 999; }
 #app-controls { bottom: 10px; right: 10px; z-index: 998; }
 
@@ -52,11 +56,13 @@ body {
    border-bottom: 1px solid #555; /* Separator */
    cursor: move; /* Indicate draggable */
 }
-.panel-header h4, .panel-header h5 { /* Target h5 as well */
+.panel-header h4, .panel-header h5, .panel-header h2 { /* Target h2, h4, h5 */
    margin: 0;
    color: #eee;
    font-weight: bold;
    flex-grow: 1; /* Allow title to take space */
+   font-size: 1em; /* Consistent header font size relative to panel base */
+   line-height: 1.2; /* Adjust line height for headers */
 }
 
 /* Panel Content */
@@ -189,6 +195,10 @@ input::placeholder, textarea::placeholder { color: #aaa; }
 #tileset-list div .button-container { /* Container for buttons */
    margin-left: 5px;
 }
+.tileset-item.highlighted { /* Style for highlighted list item */
+   background-color: #6a6a6a; /* Slightly lighter highlight than layer selection */
+   font-weight: bold;
+}
 
 
 /* Modal Styles */
@@ -224,15 +234,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     margin-right: 5px;
     color: #eee;
 }
-.modal-content h2 { /* Style modal header */
-   margin-top: 0;
-   /* border-bottom: 1px solid #555; Use panel-header style */
-   padding-bottom: 0; /* Remove extra padding */
-   margin-bottom: 0; /* Remove extra margin */
-   font-size: 1em; /* Match h4/h5 */
-   flex-grow: 1; /* Allow title to take space */
-   font-weight: bold; /* Match h4/h5 */
-}
+/* .modal-content h2 styling removed - now handled by .panel-header h2 */
 .close-btn { /* Style close button like minimize */
    color: #eee;
    /* float: right; Handled by flexbox */
@@ -292,11 +294,13 @@ input::placeholder, textarea::placeholder { color: #aaa; }
    </style>
 </head>
 <body>
+
+
     <div id="map"></div>
 
     <div id="layer-switcher" class="control-panel">
         <div class="panel-header">
-             <h4>Base Layers</h4>
+             <h4>Maps</h4>
              <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
         <div class="panel-content">
@@ -316,20 +320,16 @@ input::placeholder, textarea::placeholder { color: #aaa; }
 
     <div id="user-layers-panel" class="control-panel">
         <div class="panel-header">
-            <h4>User Layers</h4>
-            <!-- Add button moved to header -->
-            <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button>
+            <h4 style="flex-grow: 0; margin-right: 5px;">Layers</h4> <!-- Allow h4 to shrink, add margin -->
+            <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
+            <div style="flex-grow: 1;"></div> <!-- Spacer to push minimize button right -->
             <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
         <div class="panel-content">
             <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #555; padding: 5px; background: #444;"> <!-- Adjusted styles -->
-                <div class="layer-item selected" data-layer-id="layer-0">
-                    <span>Layer0 (Default)</span>
-                    <input type="checkbox" class="layer-visibility-toggle" checked title="Toggle Layer Visibility">
-                    <!-- No settings button for default layer -->
-                </div>
                 <!-- Layer items will be added here by JS -->
-                <small><i>No layers created yet.</i></small>
+                <!-- Removed static Layer0 item -->
+                <small><i>No layers created yet.</i></small> <!-- Keep initial message -->
             </div>
 
             <hr style="margin: 10px 0;">
@@ -375,8 +375,13 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             </div>
 
             <div class="modal-section">
-                <label>Center Coordinates (DD):</label>
+                <label>Coordinates:</label>
                 <span id="details-tileset-coords">N/A</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Tile Count:</label>
+                <span id="details-tileset-tile-count">0</span>
             </div>
 
             <div class="modal-section">
