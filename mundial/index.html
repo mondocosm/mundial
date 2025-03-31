@@ -28,12 +28,13 @@ body {
    width: 220px;
    background: rgba(50, 50, 50, 0.9); /* Dark background */
    color: #eee;
-   padding: 10px;
+   /* padding: 10px; Moved to panel-content */
    border-radius: 5px;
    border: 1px solid #555; /* Lighter border */
    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
    font-size: 14px;
    box-sizing: border-box;
+   overflow: hidden; /* Hide content when minimized */
 }
 
 #layer-switcher { top: 10px; left: 10px; z-index: 1000; }
@@ -45,13 +46,28 @@ body {
    display: flex;
    justify-content: space-between;
    align-items: center;
-   margin-bottom: 5px;
+   /* margin-bottom: 5px; Removed, padding handles spacing */
+   padding: 5px 10px; /* Add padding to header */
+   background-color: rgba(60, 60, 60, 0.95); /* Slightly different header background */
+   border-bottom: 1px solid #555; /* Separator */
+   cursor: move; /* Indicate draggable */
 }
 .panel-header h4, .panel-header h5 { /* Target h5 as well */
    margin: 0;
    color: #eee;
    font-weight: bold;
+   flex-grow: 1; /* Allow title to take space */
 }
+
+/* Panel Content */
+.panel-content {
+    padding: 10px; /* Original panel padding */
+    display: block; /* Default state */
+}
+.minimized .panel-content {
+    display: none; /* Hide content when minimized */
+}
+
 
 /* Buttons */
 button {
@@ -61,6 +77,7 @@ button {
    color: #eee;
    border: 1px solid #777;
    border-radius: 3px;
+   line-height: 1; /* Ensure consistent button height */
 }
 button:hover { background-color: #666; }
 button:disabled { background-color: #444; color: #888; cursor: not-allowed; border-color: #666; }
@@ -69,7 +86,6 @@ button:disabled { background-color: #444; color: #888; cursor: not-allowed; bord
    font-size: 16px;
    font-weight: bold;
    padding: 0 6px;
-   line-height: 1;
    /* Inherits dark button styles */
 }
 
@@ -79,6 +95,14 @@ button:disabled { background-color: #444; color: #888; cursor: not-allowed; bord
    vertical-align: middle;
    /* Inherits dark button styles */
    /* margin-left is handled dynamically in JS */
+}
+
+.minimize-btn {
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title */
+    flex-shrink: 0; /* Prevent shrinking */
 }
 
 /* Inputs & Selects */
@@ -181,42 +205,50 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     width: 220px; /* Match other control panels */
     bottom: 90px; /* Position above app-controls */
     right: 10px;  /* Align with app-controls */
+    /* Inherits .control-panel styles for background, border etc. */
 }
 .modal-content {
    /* Style the content box */
-   background: rgba(50, 50, 50, 0.9); /* Match control panels */
-   color: #eee;
-   padding: 10px;
-   border: 1px solid #555;
-   border-radius: 5px;
-   box-shadow: 0 2px 5px rgba(0,0,0,0.5); /* Match control panels */
+   /* background: rgba(50, 50, 50, 0.9); Moved to .control-panel */
+   /* color: #eee; Moved to .control-panel */
+   padding: 10px; /* Content padding */
+   /* border: 1px solid #555; Moved to .control-panel */
+   /* border-radius: 5px; Moved to .control-panel */
+   /* box-shadow: 0 2px 5px rgba(0,0,0,0.5); Moved to .control-panel */
    box-sizing: border-box;
    /* Width and positioning are now handled by #tileset-details-modal */
+   /* Add specific styles if needed, different from panel-content */
 }
-.modal-content label {
+.modal-content label { /* Keep specific label style if needed */
     font-weight: bold;
     margin-right: 5px;
     color: #eee;
 }
 .modal-content h2 { /* Style modal header */
    margin-top: 0;
-   border-bottom: 1px solid #555;
-   padding-bottom: 10px;
-   margin-bottom: 15px;
+   /* border-bottom: 1px solid #555; Use panel-header style */
+   padding-bottom: 0; /* Remove extra padding */
+   margin-bottom: 0; /* Remove extra margin */
+   font-size: 1em; /* Match h4/h5 */
+   flex-grow: 1; /* Allow title to take space */
+   font-weight: bold; /* Match h4/h5 */
 }
-.close-btn {
-   color: #aaa;
-   float: right;
-   font-size: 28px;
+.close-btn { /* Style close button like minimize */
+   color: #eee;
+   /* float: right; Handled by flexbox */
+   font-size: 14px;
    font-weight: bold;
    line-height: 1;
-   margin-top: -5px; /* Adjust position slightly */
-}
-.close-btn:hover,
-.close-btn:focus {
-   color: #eee;
-   text-decoration: none;
+   /* margin-top: -5px; */
+   padding: 0 6px;
+   margin-left: 5px;
+   background: none;
+   border: none;
    cursor: pointer;
+}
+.close-btn:hover {
+   color: #fff;
+   background: none;
 }
 
 /* Specific Modal Elements */
@@ -260,79 +292,83 @@ input::placeholder, textarea::placeholder { color: #aaa; }
    </style>
 </head>
 <body>
-    <div id="map"></div> {/* Use the single map div again */}
+    <div id="map"></div>
 
     <div id="layer-switcher" class="control-panel">
-        <h4>Base Layers</h4>
-        <select id="base-layer-select">
-            <option value="satellite">Satellite</option>
-            <option value="osm">OpenStreetMap</option>
-            <option value="topo">Topographic</option>
-            <option value="add-custom">Add Custom Layer...</option>
-        </select>
-        <div id="custom-layer-inputs" style="display: none; margin-top: 10px;">
-            <input type="text" id="custom-layer-name" placeholder="Layer Name" style="margin-bottom: 5px; width: 95%;">
-            <input type="text" id="custom-layer-url" placeholder="XYZ URL Template" style="margin-bottom: 5px; width: 95%;" size="40">
-            <button id="add-custom-layer-btn" style="width: 100%;">Add Layer</button> <!-- Moved button inside -->
-        </div> <!-- Closed custom-layer-inputs div here -->
-    </div> <!-- Closed layer-switcher div here -->
+        <div class="panel-header">
+             <h4>Base Layers</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <select id="base-layer-select">
+                <option value="satellite">Satellite</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="topo">Topographic</option>
+                <option value="add-custom">Add Custom Layer...</option>
+            </select>
+            <div id="custom-layer-inputs" style="display: none; margin-top: 10px;">
+                <input type="text" id="custom-layer-name" placeholder="Layer Name" style="margin-bottom: 5px; width: 100%;"> <!-- Use 100% width -->
+                <input type="text" id="custom-layer-url" placeholder="XYZ URL Template" style="margin-bottom: 5px; width: 100%;"> <!-- Use 100% width -->
+                <button id="add-custom-layer-btn" style="width: 100%;">Add Layer</button>
+            </div>
+        </div>
+    </div>
 
     <div id="user-layers-panel" class="control-panel">
         <div class="panel-header">
             <h4>User Layers</h4>
+            <!-- Add button moved to header -->
             <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
-        <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 5px;">
-            <div class="layer-item selected" data-layer-id="layer-0"> <!-- Added selected class -->
-                <span>Layer0 (Default)</span>
-                <input type="checkbox" class="layer-visibility-toggle" checked title="Toggle Layer Visibility">
+        <div class="panel-content">
+            <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #555; padding: 5px; background: #444;"> <!-- Adjusted styles -->
+                <div class="layer-item selected" data-layer-id="layer-0">
+                    <span>Layer0 (Default)</span>
+                    <input type="checkbox" class="layer-visibility-toggle" checked title="Toggle Layer Visibility">
+                    <!-- No settings button for default layer -->
+                </div>
+                <!-- Layer items will be added here by JS -->
+                <small><i>No layers created yet.</i></small>
             </div>
-            <!-- Layer items will be added here by JS -->
-            <small><i>No layers created yet.</i></small>
-        </div>
 
-        <hr style="margin: 10px 0;">
+            <hr style="margin: 10px 0;">
 
-        <h5>Tilesets in Layer:</h5>
-        <div id="tileset-list">
-            <small><i>Select a layer above.</i></small>
-            <!-- Tilesets for the selected layer will be listed here -->
-        </div>
-
-        <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none;">Selected: 0 / 1000</div>
-        <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button>
-        <div id="selection-actions" style="display: none;">
-             <!-- Counter and Clear button moved above -->
-             <input type="text" id="tileset-name-input" placeholder="Enter Tileset Name" style="display: none; margin-bottom: 5px;">
-             <button id="save-selection-btn" style="width: 100%;">Save Selection to Layer</button>
-        </div>
-        <!-- Inline Tileset Color Picker (Initially Hidden) -->
-        <div id="inline-color-picker-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #555;">
-            <h5>Selected Tileset Color:</h5>
-            <div style="display: flex; align-items: center;">
-                <input type="color" id="inline-color-picker" style="margin-right: 10px; width: 50px;">
-                <span id="inline-color-picker-name" style="font-style: italic;"></span>
+            <h5>Tilesets in Layer:</h5>
+            <div id="tileset-list">
+                <small><i>Select a layer above.</i></small>
+                <!-- Tilesets for the selected layer will be listed here -->
             </div>
-        </div>
 
+            <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none;">Selected: 0 / 1000</div>
+            <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button>
+            <div id="selection-actions" style="display: none;">
+                 <input type="text" id="tileset-name-input" placeholder="Enter Tileset Name" style="display: none; margin-bottom: 5px;">
+                 <button id="save-selection-btn" style="width: 100%;">Save Selection to Layer</button>
+            </div>
+            <!-- Old Inline Tileset Color Picker Removed -->
+        </div>
     </div>
 
      <div id="app-controls" class="control-panel">
-        <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
-        <button id="settings-btn" style="width: 100%;" disabled title="Settings not yet implemented">Settings</button>
+         <div class="panel-header">
+             <h4>App Controls</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+            <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
+            <button id="settings-btn" style="width: 100%;" disabled title="Settings not yet implemented">Settings</button>
+         </div>
     </div>
 
-    <!-- Only include OpenLayers script -->
-    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
-    <script src="main.js"></script>
-
-
-    <!-- Tileset Details Modal -->
-    <div id="tileset-details-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" id="close-tileset-details-modal">&times;</span>
-            <h2>Tileset Details</h2>
-
+    <!-- Tileset Details Modal (Styled as Panel) -->
+    <div id="tileset-details-modal" class="modal control-panel"> <!-- Added control-panel class -->
+         <div class="panel-header"> <!-- Added panel header -->
+             <h2>Tileset Details</h2>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+             <span class="close-btn" id="close-tileset-details-modal" title="Close Details">&times;</span>
+         </div>
+        <div class="modal-content panel-content"> <!-- Added panel-content class -->
             <div class="modal-section">
                 <label for="details-tileset-name">Name:</label>
                 <input type="text" id="details-tileset-name" placeholder="Tileset Name">
@@ -369,16 +405,14 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             <div class="modal-actions">
                  <label>Color:</label>
                  <input type="color" id="details-color-picker" style="vertical-align: middle;">
-                 <button id="details-save-btn" style="float: right;">Save Changes</button>
-                 <button id="details-more-settings-btn" style="float: right; margin-right: 5px;" disabled>More Settings</button>
+                 <!-- Save/More Settings buttons removed -->
             </div>
         </div>
     </div>
 
+    <!-- Only include OpenLayers script -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
+    <script src="main.js"></script>
+
 </body>
 </html>
-
-
-
-
-    <!-- Modal Removed -->
