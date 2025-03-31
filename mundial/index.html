@@ -179,7 +179,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     position: absolute;
     z-index: 1001; /* Above layer switcher */
     width: 220px; /* Match other control panels */
-    bottom: 10px; /* Align with app-controls */
+    bottom: 90px; /* Position above app-controls */
     right: 10px;  /* Align with app-controls */
 }
 .modal-content {
@@ -262,7 +262,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
 <body>
     <div id="map"></div> {/* Use the single map div again */}
 
-    <div id="layer-switcher" class="control-panel"> {/* Added control-panel class */}
+    <div id="layer-switcher" class="control-panel">
         <h4>Base Layers</h4>
         <select id="base-layer-select">
             <option value="satellite">Satellite</option>
@@ -287,7 +287,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
                 <span>Layer0 (Default)</span>
                 <input type="checkbox" class="layer-visibility-toggle" checked title="Toggle Layer Visibility">
             </div>
-            {/* Layer items will be added here by JS */}
+            <!-- Layer items will be added here by JS -->
             <small><i>No layers created yet.</i></small>
         </div>
 
@@ -300,9 +300,9 @@ input::placeholder, textarea::placeholder { color: #aaa; }
         </div>
 
         <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none;">Selected: 0 / 1000</div>
-        <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button> {/* Moved here, initially hidden */}
-        <div id="selection-actions" style="display: none;"> {/* This now only contains save controls */}
-             {/* Counter and Clear button moved above */}
+        <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button>
+        <div id="selection-actions" style="display: none;">
+             <!-- Counter and Clear button moved above -->
              <input type="text" id="tileset-name-input" placeholder="Enter Tileset Name" style="display: none; margin-bottom: 5px;">
              <button id="save-selection-btn" style="width: 100%;">Save Selection to Layer</button>
         </div>
