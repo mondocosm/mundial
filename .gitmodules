@@ -1,0 +1,15 @@
+[submodule "packages/gun"]
+	path = packages/gun
+	url = https://github.com/amark/gun.git
+[submodule "packages/janusweb"]
+	path = packages/janusweb
+	url = https://github.com/jbaicoianu/janusweb.git
+[submodule "packages/kart"]
+	path = packages/kart
+	url = https://github.com/koordinates/kart
+[submodule "packages/maplibre-gl-js"]
+	path = packages/maplibre-gl-js
+	url = https://github.com/maplibre/maplibre-gl-js.git
+[submodule "packages/openglobus"]
+	path = packages/openglobus
+	url = https://github.com/openglobus/openglobus.git
