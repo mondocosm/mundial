@@ -1,4 +1,4 @@
-// mundial/main.js - Reconstructed for Side-by-Side View with Sync on Toggle
+// mundial/main.js - Reconstructed FINAL for Side-by-Side View
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- OpenGlobus Initialization ---
     let globus = null;
     let ogBaseLayers = {};
-    let gridLayerOG = null; // Renamed to avoid conflict
+    let gridLayerOG = null;
     const globusElement = document.getElementById('globusContainer'); // OpenGlobus container
 
     function initializeOpenGlobus() {
@@ -100,21 +100,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         super(name, options);
                         this.minZoom = options.minZoom === undefined ? 16 : options.minZoom;
                         this.maxZoom = options.maxZoom === undefined ? 21 : options.maxZoom;
-                        // Define drawTile as an instance property (arrow function)
-                        this.drawTile = (material, applyTexture) => {
-                            const canvas = this.createCanvas(material.segment.tileZoom);
-                            const ctx = canvas.getContext('2d');
-                            const size = canvas.width;
-                            if (material.segment.tileZoom >= this.minZoom && material.segment.tileZoom <= this.maxZoom) {
-                                ctx.clearRect(0, 0, size, size);
-                                ctx.strokeStyle = 'rgba(0, 0, 0, 1)'; ctx.lineWidth = 1;
-                                ctx.beginPath();
-                                ctx.moveTo(0, 0); ctx.lineTo(size, 0); ctx.moveTo(size, 0); ctx.lineTo(size, size);
-                                ctx.moveTo(size, size); ctx.lineTo(0, size); ctx.moveTo(0, size); ctx.lineTo(0, 0);
-                                ctx.stroke();
-                            } else { ctx.clearRect(0, 0, size, size); }
-                            applyTexture(canvas);
-                        };
+                    }
+                    // Define drawTile as a prototype method
+                    drawTile(material, applyTexture) {
+                        const canvas = this.createCanvas(material.segment.tileZoom); // Use base class method
+                        const ctx = canvas.getContext('2d');
+                        const size = canvas.width;
+                        if (material.segment.tileZoom >= this.minZoom && material.segment.tileZoom <= this.maxZoom) {
+                            ctx.clearRect(0, 0, size, size);
+                            ctx.strokeStyle = 'rgba(0, 0, 0, 1)'; ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0); ctx.lineTo(size, 0); ctx.moveTo(size, 0); ctx.lineTo(size, size);
+                            ctx.moveTo(size, size); ctx.lineTo(0, size); ctx.moveTo(0, size); ctx.lineTo(0, 0);
+                            ctx.stroke();
+                        } else { ctx.clearRect(0, 0, size, size); }
+                        applyTexture(canvas);
                     }
                 }
 
@@ -160,7 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Trigger initial resize
                 setTimeout(() => {
                     if (globus && globus.planet && globus.planet.renderer) {
-                         globus.planet.renderer.handler.onCanvasResize();
+                         // Use the renderer's resize method
+                         globus.planet.renderer.resize();
                          console.log("Triggered initial OpenGlobus resize.");
                     }
                 }, 100);
@@ -379,7 +380,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(coordinate, TILE_SELECTION_ZOOM);
         if (tileCoord) { toggleTileSelection(tileCoord); }
     }
-    const dragBoxInteraction = new ol.interaction.DragBox({ condition: ol.events.condition.platformModifierKeyOnly });
+    // Define and add DragBox interaction for area selection
+    const dragBoxInteraction = new ol.interaction.DragBox({
+        condition: ol.events.condition.platformModifierKeyOnly // Use platformModifierKeyOnly (Cmd/Ctrl + Drag)
+    });
+    map.addInteraction(dragBoxInteraction); // Add initially
+
     dragBoxInteraction.on('boxend', function() {
         if (currentInteractionMode !== 'select') return;
         const extent = dragBoxInteraction.getGeometry().getExtent();
@@ -389,8 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selectionTileGrid.forEachTileCoord(extent, TILE_SELECTION_ZOOM, function (tileCoord) { toggleTileSelection(tileCoord); });
         } catch (error) { console.error("Error during drag-box selection:", error); }
     });
-    map.addInteraction(dragBoxInteraction);
-    map.on('click', clickSelectHandler);
+    map.on('click', clickSelectHandler); // Add click handler
 
     // --- Selection Actions Visibility & Count ---
     function updateSelectionActionsVisibility() {
@@ -740,32 +745,36 @@ document.addEventListener('DOMContentLoaded', () => {
     makeDraggable(document.getElementById('map-panel'));
     makeDraggable(document.getElementById('globe-panel'));
 
-    // --- Minimize/Expand Panel Logic ---
+    // --- Minimize/Expand Panel Logic --- (Updated for View Panels)
     document.body.addEventListener('click', function(event) {
         if (event.target.classList.contains('minimize-btn')) {
-            const panel = event.target.closest('.control-panel, .view-panel'); // Include view panels
+            // Target both control and view panels
+            const panel = event.target.closest('.control-panel, .view-panel');
             if (panel) {
                 panel.classList.toggle('minimized');
                 event.target.textContent = panel.classList.contains('minimized') ? '+' : '-';
                 event.target.title = panel.classList.contains('minimized') ? 'Expand' : 'Minimize';
-                // If expanding map panel, update OL size
-                if (panel.id === 'map-panel' && !panel.classList.contains('minimized')) {
-                    setTimeout(() => map.updateSize(), 50); // Update after animation
-                }
-                // If expanding globe panel, trigger OG resize
-                if (panel.id === 'globe-panel' && !panel.classList.contains('minimized')) {
-                     setTimeout(() => {
-                         if (globus && globus.planet && globus.planet.renderer) {
-                              globus.planet.renderer.handler.onCanvasResize();
-                         }
-                     }, 50);
+
+                // If expanding a view panel, update the corresponding map/globe size
+                if (!panel.classList.contains('minimized')) {
+                    if (panel.id === 'map-panel') {
+                        // Update OL map size after a short delay for CSS transition
+                        setTimeout(() => map.updateSize(), 50);
+                        console.log("Map panel expanded, updated OL size.");
+                    } else if (panel.id === 'globe-panel') {
+                        // Trigger OG resize after a short delay
+                        setTimeout(() => {
+                            if (globus && globus.planet && globus.planet.renderer) {
+                                 // Use the renderer's resize method
+                                 globus.planet.renderer.resize();
+                                 console.log("Globe panel expanded, triggered OG resize.");
+                            }
+                        }, 50);
+                    }
                 }
             }
         }
     });
-
-}); // End DOMContentLoaded
-
 
     // --- Maximize/Restore View Panel Logic ---
     document.body.addEventListener('click', function(event) {
@@ -781,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         otherMaximized.classList.remove('maximized');
                         // Trigger resize on restore
                         if (otherMaximized.id === 'map-panel') setTimeout(() => map.updateSize(), 50);
-                        if (otherMaximized.id === 'globe-panel' && globus) setTimeout(() => globus.planet.renderer.handler.onCanvasResize(), 50);
+                        if (otherMaximized.id === 'globe-panel' && globus && globus.planet.renderer) setTimeout(() => globus.planet.renderer.resize(), 50);
                     }
                 }
 
@@ -791,9 +800,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Update map/globe size after toggling
                 setTimeout(() => {
                     if (panel.id === 'map-panel') map.updateSize();
-                    if (panel.id === 'globe-panel' && globus) globus.planet.renderer.handler.onCanvasResize();
+                    if (panel.id === 'globe-panel' && globus && globus.planet.renderer) globus.planet.renderer.resize();
                 }, 50); // Delay slightly for CSS transition
             }
         }
     });
 
+}); // End DOMContentLoaded
