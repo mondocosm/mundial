@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Geome Map</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.1.0/ol.css">
+    <!-- Cesium Widgets CSS (Keep for potential future use/comparison, but not needed for OpenGlobus) -->
+    <!-- <link href="lib/cesium/Widgets/widgets.css" rel="stylesheet"> -->
+    <!-- OpenGlobus CSS -->
+    <link rel="stylesheet" href="../packages/openglobus/lib/@openglobus/og.css" type="text/css">
    <style>
 /* Basic Reset & Body */
 body {
@@ -15,11 +19,52 @@ body {
    color: #eee; /* Light base text */
 }
 
-#map {
-   position: absolute;
-   top: 0;
+/* Map/Globe View Panels */
+.view-panel {
+    position: absolute;
+    top: 60px; /* Position below layer switcher */
+    bottom: 10px;
+    width: calc(70% - 15px); /* Default map width */
+    background: rgba(50, 50, 50, 0.9);
+    border: 1px solid #555;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    overflow: hidden; /* Hide overflow initially */
+    resize: both; /* Allow resizing */
+    min-width: 50px; /* Allow smaller minimize */
+    min-height: 50px; /* Allow smaller minimize */
+    z-index: 990; /* Below control panels */
+}
+#map-panel {
+    left: 10px;
+}
+#globe-panel {
+    right: 10px; /* Position on the right */
+    width: calc(30% - 15px); /* Default globe width */
+}
+
+/* Inner Map/Globe Containers */
+#map, #globusContainer {
+   position: absolute; /* Position relative to panel */
+   top: 30px; /* Below panel header */
+   left: 0;
    bottom: 0;
-   width: 100%;
+   right: 0;
+   width: 100%; /* Fill panel content area */
+   height: calc(100% - 30px); /* Fill panel content area */
+   overflow: hidden;
+   /* Remove background color if panel has one */
+}
+
+/* Adjust panel header style slightly for view panels */
+.view-panel .panel-header {
+    height: 30px; /* Fixed header height */
+    padding: 0 10px; /* Adjust padding */
+    line-height: 30px; /* Center text vertically */
+}
+.view-panel .panel-header h4 {
+     font-size: 0.9em; /* Slightly smaller title */
 }
 
 /* Control Panels */
@@ -73,6 +118,31 @@ body {
 .minimized .panel-content {
     display: none; /* Hide content when minimized */
 }
+/* Ensure minimized view panels shrink and hide content */
+.view-panel.minimized {
+    height: 30px !important; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px !important; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+.view-panel.minimized #map,
+.view-panel.minimized #globusContainer {
+    display: none; /* Hide map/globe content */
+}
+
+/* Maximized Panel Style */
+.view-panel.maximized {
+    top: 10px !important; /* Override top */
+    left: 10px !important; /* Override left */
+    right: 10px !important; /* Override right */
+    bottom: 10px !important; /* Override bottom */
+    width: calc(100% - 20px) !important; /* Full width */
+    height: calc(100% - 20px) !important; /* Full height */
+    z-index: 1010 !important; /* Bring to front */
+    resize: none; /* Disable resize when maximized */
+}
 
 
 /* Buttons */
@@ -109,6 +179,14 @@ button:disabled { background-color: #444; color: #888; cursor: not-allowed; bord
     padding: 0 6px;
     margin-left: 5px; /* Space from title */
     flex-shrink: 0; /* Prevent shrinking */
+}
+
+.maximize-btn { /* Style similar to minimize */
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title or other buttons */
+    flex-shrink: 0;
 }
 
 /* Inputs & Selects */
@@ -296,7 +374,26 @@ input::placeholder, textarea::placeholder { color: #aaa; }
 <body>
 
 
-    <div id="map"></div>
+    <!-- Map View Panel -->
+    <div id="map-panel" class="view-panel">
+        <div class="panel-header">
+            <h4>2D Map View</h4>
+            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
+            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div id="map"></div> <!-- OpenLayers target -->
+    </div>
+
+    <!-- Globe View Panel -->
+    <div id="globe-panel" class="view-panel">
+         <div class="panel-header">
+            <h4>3D Globe View</h4>
+            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div id="globusContainer"></div> <!-- OpenGlobus target -->
+    </div>
 
     <div id="layer-switcher" class="control-panel">
         <div class="panel-header">
@@ -308,6 +405,8 @@ input::placeholder, textarea::placeholder { color: #aaa; }
                 <option value="satellite">Satellite</option>
                 <option value="osm">OpenStreetMap</option>
                 <option value="topo">Topographic</option>
+                <option value="terrarium">Terrarium DEM</option>
+
                 <option value="add-custom">Add Custom Layer...</option>
             </select>
             <div id="custom-layer-inputs" style="display: none; margin-top: 10px;">
@@ -416,8 +515,16 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     </div>
 
     <!-- Only include OpenLayers script -->
+    <!-- Cesium JS (Keep for potential future use/comparison) -->
+    <!-- <script src="lib/cesium/Cesium.js"></script> -->
+    <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
-    <script src="main.js"></script>
+    <!-- OlCesium JS (Keep for potential future use/comparison) -->
+    <!-- <script src="lib/olcesium.js"></script> -->
+    <!-- OpenGlobus JS (UMD build) -->
+    <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
+    <!-- Main Application Logic -->
+    <script type="module" src="main.js"></script>
 
 </body>
 </html>
