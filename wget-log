@@ -1,0 +1,6 @@
+--2025-04-02 21:50:05--  https://ubuntu.com/download/desktop/thank-you?version=lts
+Resolving ubuntu.com (ubuntu.com)... 185.125.190.29, 185.125.190.21, 185.125.190.20, ...
+Connecting to ubuntu.com (ubuntu.com)|185.125.190.29|:443... connected.
+HTTP request sent, awaiting response... 400 
+2025-04-02 21:50:05 ERROR 400: (no description).
+

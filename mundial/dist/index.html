@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geome Map</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.1.0/ol.css">
+    <!-- OpenGlobus CSS - Removed, will import in JS -->
+    <!-- <link rel="stylesheet" href="./node_modules/@openglobus/og/lib/og.css" type="text/css"> -->
+    <!-- MapLibre GL JS CSS -->
+    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet">
+    <!-- Glide.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@glidejs/glide/dist/css/glide.core.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@glidejs/glide/dist/css/glide.theme.min.css">
+
+   <style>body {
+  color: #eee;
+  background-color: #222;
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+  overflow: hidden;
+}
+
+#map, #globus, #maplibre-map, #itowns-viewer, #babylon-canvas {
+  width: 100%;
+  height: calc(100% - 40px);
+  display: none;
+  position: absolute;
+  top: 40px;
+  bottom: 0;
+  left: 0;
+}
+
+.control-panel {
+  color: #eee;
+  box-sizing: border-box;
+  resize: vertical;
+  background: #323232e6;
+  border: 1px solid #555;
+  border-radius: 5px;
+  flex-direction: column;
+  width: 220px;
+  min-width: 180px;
+  min-height: 40px;
+  max-height: calc(100% - 60px);
+  font-size: 14px;
+  display: flex;
+  position: absolute;
+  overflow: hidden;
+  box-shadow: 0 2px 5px #00000080;
+}
+
+.panel-content {
+  flex-grow: 1;
+  padding: 10px;
+  display: block;
+  overflow-y: auto;
+}
+
+.minimized .panel-content {
+  display: none;
+}
+
+.minimized {
+  resize: none;
+  min-height: 0;
+  height: auto !important;
+}
+
+#layer-switcher {
+  z-index: 1000;
+  top: 50px;
+  left: 10px;
+}
+
+#user-layers-panel {
+  z-index: 999;
+  top: 50px;
+  right: 10px;
+}
+
+#app-controls {
+  z-index: 998;
+  bottom: 10px;
+  right: 10px;
+}
+
+#rete-editor-panel {
+  z-index: 997;
+  width: 400px;
+  height: 300px;
+  top: 190px;
+  left: 10px;
+}
+
+#geospatial-tools-panel {
+  z-index: 996;
+  width: 220px;
+  top: 500px;
+  left: 10px;
+}
+
+.panel-header {
+  cursor: move;
+  background-color: #3c3c3cf2;
+  border-bottom: 1px solid #555;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  display: flex;
+}
+
+.panel-header h4, .panel-header h5, .panel-header h2 {
+  color: #eee;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  margin: 0;
+  font-size: 1em;
+  font-weight: bold;
+  line-height: 1.2;
+  overflow: hidden;
+}
+
+button {
+  cursor: pointer;
+  color: #eee;
+  box-sizing: border-box;
+  text-align: center;
+  background-color: #555;
+  border: 1px solid #777;
+  border-radius: 3px;
+  width: 100%;
+  margin-bottom: 5px;
+  padding: 5px 8px;
+  line-height: 1;
+}
+
+button:last-child {
+  margin-bottom: 0;
+}
+
+button:hover {
+  background-color: #666;
+}
+
+button:disabled {
+  color: #888;
+  cursor: not-allowed;
+  background-color: #444;
+  border-color: #666;
+}
+
+.add-btn {
+  width: auto;
+  padding: 0 6px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.settings-btn-small {
+  vertical-align: middle;
+  width: auto;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.minimize-btn {
+  flex-shrink: 0;
+  width: auto;
+  margin-bottom: 0;
+  margin-left: 5px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+select, input[type="text"], input[type="url"], input[type="number"], textarea {
+  box-sizing: border-box;
+  color: #eee;
+  background-color: #444;
+  border: 1px solid #666;
+  border-radius: 3px;
+  width: 100%;
+  margin-bottom: 5px;
+  padding: 4px;
+}
+
+input[type="color"] {
+  vertical-align: middle;
+  cursor: pointer;
+  background-color: #444;
+  border: 1px solid #666;
+  width: 40px;
+  height: 25px;
+  padding: 0;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #aaa;
+}
+
+#user-layer-list, #site-list {
+  background: #444;
+  border: 1px solid #555;
+  max-height: 150px;
+  margin-bottom: 10px;
+  padding: 5px;
+  overflow-y: auto;
+}
+
+#user-layer-list .layer-item, #site-list .site-item {
+  cursor: pointer;
+  align-items: center;
+  margin-bottom: 2px;
+  padding: 4px 6px;
+  display: flex;
+}
+
+#user-layer-list .layer-item:hover, #site-list .site-item:hover {
+  background-color: #555;
+}
+
+#user-layer-list .layer-item.selected, #site-list .site-item.selected {
+  background-color: #5a5a5a;
+  font-weight: bold;
+}
+
+#user-layer-list .layer-item input[type="checkbox"] {
+  cursor: pointer;
+  width: auto;
+  margin-right: 5px;
+}
+
+#user-layer-list .layer-item span, #site-list .site-item span {
+  flex-grow: 1;
+}
+
+#tileset-list {
+  background: #444;
+  border: 1px solid #555;
+  height: 100px;
+  margin-bottom: 10px;
+  padding: 5px;
+  overflow-y: auto;
+}
+
+#tileset-list div {
+  color: #eee;
+  cursor: default;
+  align-items: center;
+  margin-bottom: 2px;
+  padding: 2px 4px;
+  display: flex;
+}
+
+#tileset-list div:hover {
+  background-color: #555;
+}
+
+#tileset-list div input[type="checkbox"] {
+  cursor: pointer;
+  width: auto;
+  margin-right: 5px;
+}
+
+#tileset-list div span {
+  cursor: pointer;
+  flex-grow: 1;
+}
+
+#tileset-list div .button-container {
+  margin-left: 5px;
+}
+
+.tileset-item.highlighted {
+  background-color: #6a6a6a;
+  font-weight: bold;
+}
+
+.modal {
+  display: none;
+}
+
+#tileset-details-modal {
+  z-index: 1001;
+  width: 220px;
+  position: absolute;
+  bottom: 90px;
+  right: 10px;
+}
+
+.modal-content {
+  box-sizing: border-box;
+  padding: 10px;
+}
+
+.modal-content label {
+  color: #eee;
+  margin-right: 5px;
+  font-weight: bold;
+}
+
+.close-btn {
+  color: #eee;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: auto;
+  margin-bottom: 0;
+  margin-left: 5px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #fff;
+  background: none;
+}
+
+#settings-color-picker {
+  vertical-align: middle;
+  margin-left: 5px;
+}
+
+.modal-content small {
+  color: #bbb;
+}
+
+.modal-content hr {
+  border: 0;
+  border-top: 1px solid #555;
+  margin: 15px 0;
+}
+
+.modal-section {
+  margin-bottom: 15px;
+}
+
+.modal-section label {
+  margin-bottom: 3px;
+  font-weight: bold;
+  display: block;
+}
+
+.modal-section span {
+  color: #ccc;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.modal-actions {
+  text-align: left;
+  margin-top: 20px;
+}
+
+.modal-actions label {
+  margin-right: 5px;
+  display: inline-block;
+}
+
+.app-controls-section {
+  border-top: 1px solid #555;
+  margin-top: 15px;
+  padding-top: 10px;
+}
+
+.app-controls-section label {
+  margin-bottom: 3px;
+  font-weight: bold;
+  display: block;
+}
+
+.app-controls-section .inline-controls {
+  align-items: center;
+  display: flex;
+}
+
+.app-controls-section .inline-controls label {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  margin-right: 5px;
+}
+
+.app-controls-section .inline-controls input[type="number"] {
+  flex-grow: 1;
+}
+
+#top-menu-bar {
+  z-index: 1005;
+  box-sizing: border-box;
+  color: #eee;
+  background-color: #1e1e1ee6;
+  border-bottom: 1px solid #555;
+  align-items: center;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#top-menu-bar .menu-item {
+  cursor: pointer;
+  padding: 0 10px;
+  line-height: 40px;
+}
+
+#top-menu-bar .menu-item:hover {
+  background-color: #444;
+}
+
+#top-menu-bar .menu-spacer {
+  flex-grow: 1;
+}
+
+#top-menu-bar .auth-buttons button {
+  width: auto;
+  margin-bottom: 0;
+  margin-left: 5px;
+}
+
+#logo-placeholder {
+  color: #ccc;
+  background-color: #555;
+  border: 1px solid #888;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 15px;
+  font-weight: bold;
+  display: flex;
+}
+
+@media (width <= 768px) {
+  .control-panel {
+    width: calc(100% - 20px);
+    max-height: 35%;
+    bottom: auto;
+    left: 10px;
+    right: 10px;
+  }
+
+  #layer-switcher {
+    top: 50px;
+  }
+
+  #user-layers-panel {
+    max-height: 30%;
+    top: calc(60px + 40%);
+    left: 10px;
+    right: 10px;
+  }
+
+  #app-controls {
+    max-height: 30%;
+    top: auto;
+    bottom: 10px;
+  }
+
+  #rete-editor-panel, #tileset-details-modal {
+    display: none;
+  }
+
+  #top-menu-bar .menu-item {
+    padding: 0 5px;
+    font-size: .9em;
+  }
+
+  #top-menu-bar .auth-buttons {
+    display: none;
+  }
+}
+
+#opening-modal-overlay {
+  z-index: 2000;
+  opacity: 1;
+  background-color: #000000d9;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  transition: opacity .5s ease-in-out;
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+#opening-modal-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#opening-modal-content {
+  text-align: center;
+  color: #eee;
+  background-color: #1a1a1a;
+  border-radius: 10px;
+  flex-direction: column;
+  align-items: center;
+  max-width: 80%;
+  max-height: 80%;
+  padding: 30px;
+  display: flex;
+  position: relative;
+  box-shadow: 0 5px 15px #000000b3;
+}
+
+#opening-modal-content h2 {
+  color: #4caf50;
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 2em;
+}
+
+#modal-globe-placeholder {
+  color: #888;
+  background-color: #333;
+  border: 2px solid #4caf50;
+  border-radius: 50%;
+  justify-content: center;
+  align-items: center;
+  width: 300px;
+  height: 300px;
+  margin-bottom: 20px;
+  font-style: italic;
+  display: flex;
+}
+
+#close-opening-modal {
+  color: #aaa;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: auto;
+  margin-bottom: 0;
+  padding: 0;
+  font-size: 2em;
+  line-height: 1;
+  position: absolute;
+  top: 10px;
+  right: 15px;
+}
+
+#close-opening-modal:hover {
+  color: #fff;
+}
+</style>
+</head>
+<body>
+
+    <!-- Top Menu Bar -->
+    <div id="top-menu-bar">
+        <!-- Logo Placeholder -->
+        <div id="logo-placeholder" title="Mundial Units Logo">MU</div>
+        <!-- Menu Items -->
+        <div class="menu-item">File</div>
+        <div class="menu-item">Edit</div>
+        <div class="menu-item">View</div>
+        <div class="menu-item">Tools</div>
+        <div class="menu-item">Examples</div> <!-- Added Examples Menu -->
+        <div class="menu-item">Help</div>
+        <div class="menu-spacer"></div> <!-- Spacer -->
+        <!-- Login/Signup -->
+        <div class="auth-buttons">
+            <button id="login-btn">Log In</button>
+            <button id="signup-btn">Sign Up</button>
+        </div>
+    </div>
+
+
+    <!-- Map Containers -->
+    <div id="map"></div> <!-- OpenLayers Map Container -->
+    <div id="globus"></div> <!-- OpenGlobus Globe Container -->
+    <div id="maplibre-map"></div> <!-- MapLibre Map Container -->
+    <canvas id="babylon-canvas" style="z-index: 990; width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0"></canvas> <!-- Babylon.js Render Target -->
+    <div id="itowns-viewer" style="z-index: 991; width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0"></div> <!-- iTowns View Container -->
+
+    <div id="layer-switcher" class="control-panel">
+        <div class="panel-header">
+             <h4>Views</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <label for="base-layer-select" style="margin-bottom: 3px; font-weight: bold; display: block">Map</label>
+            <select id="base-layer-select">
+                <option value="black_base">Black (Default)</option>
+                <option value="satellite">Satellite</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="topo">Topographic</option>
+                <!-- Add MapLibre Styles Here -->
+                <option value="maplibre-streets" data-map-type="maplibre" data-style-url="https://demotiles.maplibre.org/style.json">MapLibre Streets</option>
+                <option value="maplibre-satellite" data-map-type="maplibre" data-style-url="YOUR_MAPLIBRE_SATELLITE_STYLE_URL">MapLibre Satellite (Needs URL)</option>
+                <option value="add-custom">Add Custom Layer...</option>
+            </select>
+            <div id="custom-layer-inputs" style="margin-top: 10px; display: none">
+                <input type="text" id="custom-layer-name" placeholder="Layer Name" style="width: 100%; margin-bottom: 5px"> <!-- Use 100% width -->
+                <input type="text" id="custom-layer-url" placeholder="XYZ URL Template" style="width: 100%; margin-bottom: 5px"> <!-- Use 100% width -->
+                <button id="add-custom-layer-btn">Add Layer</button>
+            </div>
+
+            <!-- Terrain Section -->
+            <label for="terrain-provider-select" style="margin-top: 15px; margin-bottom: 3px; font-weight: bold; display: block">Terrain</label>
+            <select id="terrain-provider-select">
+                <option value="none">None</option>
+                <option value="ellipsoid">Ellipsoid</option>
+                <!-- Add default terrain providers if any -->
+                <option value="add-custom-terrain">Add Custom Terrain...</option>
+            </select>
+            <div id="custom-terrain-inputs" style="margin-top: 10px; display: none">
+                <input type="text" id="custom-terrain-name" placeholder="Terrain Name" style="width: 100%; margin-bottom: 5px">
+                <input type="text" id="custom-terrain-url" placeholder="Terrain URL Template" style="width: 100%; margin-bottom: 5px">
+                <button id="add-custom-terrain-btn">Add Terrain Source</button>
+            </div>
+             <!-- End Terrain Section -->
+        </div>
+    </div>
+
+    <div id="user-layers-panel" class="control-panel">
+        <div class="panel-header">
+            <h4 style="flex-grow: 0; margin-right: 5px">Sites</h4> <!-- Changed title -->
+            <!-- <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> Removed create layer button -->
+            <div style="flex-grow: 1"></div> <!-- Spacer to push minimize button right -->
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <!-- Site List (MVP Task 2.4) -->
+            <h5>My Sites:</h5>
+             <div id="site-list">
+                <small><i>Loading sites...</i></small>
+                <!-- Site items will be added here by JS -->
+            </div>
+
+            <hr style="margin: 10px 0">
+
+            <!-- Tileset List (Kept for potential future use within a site context) -->
+            <h5>Tilesets in Site:</h5>
+            <div id="tileset-list">
+                <small><i>Select a site above.</i></small>
+                <!-- Tilesets for the selected site will be listed here -->
+            </div>
+
+            <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none">Selected: 0 / 1000</div>
+            <button id="clear-selection-btn" style="display: none">Clear Current Selection</button>
+            <div id="selection-actions" style="display: none">
+                 <input type="text" id="tileset-name-input" placeholder="Enter Site Name" style="margin-bottom: 5px; display: none"> <!-- Changed placeholder -->
+                 <button id="save-selection-btn">Save Selection as Site</button> <!-- Changed button text -->
+            </div>
+            <!-- Old Inline Tileset Color Picker Removed -->
+        </div>
+    </div>
+
+     <div id="app-controls" class="control-panel">
+         <div class="panel-header">
+             <h4>App Controls</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+            <button id="interaction-mode-btn">Mode: Select Tiles</button>
+            <button id="draw-building-btn">Mode: Draw Building</button> <!-- Added Building Draw Button -->
+            <button id="toggle-3d-btn">View: 2D</button>
+            <button id="toggle-globe-btn">Mode: Map</button>
+            <button id="enter-ar-btn" disabled="" title="AR requires HTTPS or localhost">Enter AR</button> <!-- Added AR Button -->
+            <button id="settings-btn" disabled="" title="Settings not yet implemented">Settings</button>
+
+            <!-- DGGS Controls Section -->
+            <div class="app-controls-section">
+                <label for="dggs-system-select">Grid System</label>
+                <select id="dggs-system-select">
+                    <option value="S2">S2</option>
+                    <option value="H3">H3</option>
+                    <option value="WM">WM (Web Mercator)</option>
+                </select>
+                <div class="inline-controls" style="margin-top: 5px">
+                     <label for="dggs-resolution-input">Res:</label>
+                     <input type="number" id="dggs-resolution-input" min="0" max="30" step="1" value="17"> <!-- Default S2 L17 -->
+                </div>
+            </div>
+            <!-- End DGGS Controls Section -->
+
+         </div>
+
+
+    <!-- Cosmicrete (Rete.js) Editor Panel -->
+    <div id="rete-editor-panel" class="control-panel">
+        <div class="panel-header">
+            <h4>Cosmicrete Editor</h4>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <!-- Toolbar for Node Editor -->
+            <div class="rete-toolbar" style="border-bottom: 1px solid #555; align-items: center; margin-bottom: 10px; padding-bottom: 10px; display: flex">
+                <!-- Placeholder for Add Node controls -->
+                <span style="margin-right: 5px">Add:</span>
+                <!-- Duplicated elements removed -->
+                <!-- Node Selection Dropdown -->
+                <select id="cosmicrete-node-select" style="color: #eee; background-color: #444; border: 1px solid #666; border-radius: 3px; flex-grow: 1; width: auto; margin-right: 5px; padding: 4px">
+                    <option value="GetMapCenterNode">Get Map Center</option>
+                    <option value="SetObjectPositionNode">Set Object Position</option>
+                    <option value="GetObjectPositionNode">Get Object Position</option>
+                    <option value="VideoPlaybackNode">Video Player</option>
+                    <option value="DebugLogNode">Debug Log</option>
+                    <option value="InjectNode">Inject</option>
+                    <option value="GetCurrentModeNode">Get Current Mode</option>
+                    <option value="SetCurrentModeNode">Set Current Mode</option>
+                    <!-- Add other nodes here -->
+                </select>
+                <button id="cosmicrete-add-selected-btn" style="width: auto; margin-bottom: 0; margin-left: 5px">Add</button>
+                <button id="cosmicRete-trigger-inject-btn" style="width: auto; margin-bottom: 0; margin-left: 5px" title="Trigger Inject Nodes">Inject</button>
+                <button id="cosmicRete-arrange-btn" style="width: auto; margin-bottom: 0; margin-left: auto">Arrange</button> <!-- Added Arrange button back -->
+                <button id="cosmicrete-arrange-btn" style="width: auto; margin-left: auto">Arrange</button> <!-- Arrange button moved here -->
+            </div>
+            <!-- Rete.js Editor Container -->
+            <div id="rete-container" style="background-color: #1e1e1e; width: 100%; height: 200px"></div>
+        </div>
+    </div>
+    </div>
+
+    <!-- Tileset Details Modal (Styled as Panel) -->
+    <div id="tileset-details-modal" class="modal control-panel"> <!-- Added control-panel class -->
+         <div class="panel-header"> <!-- Added panel header -->
+             <h2>Tileset Details</h2>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+             <span class="close-btn" id="close-tileset-details-modal" title="Close Details">&times;</span>
+         </div>
+        <div class="modal-content panel-content"> <!-- Added panel-content class -->
+            <div class="modal-section">
+                <label for="details-tileset-name">Name:</label>
+                <input type="text" id="details-tileset-name" placeholder="Tileset Name">
+            </div>
+
+            <div class="modal-section">
+                <label>Coordinates:</label>
+                <span id="details-tileset-coords">N/A</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Tile Count:</label>
+                <span id="details-tileset-tile-count">0</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Location Info:</label>
+                <span id="details-location-info">Loading...</span> <!-- Placeholder for reverse geocoding -->
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-image">Image:</label>
+                <img id="details-tileset-image" src="#" alt="Tileset Image" style="max-width: 100%; height: auto; margin-top: 5px; display: none"> <!-- Use # placeholder for src -->
+                <input type="url" id="details-tileset-image-url" placeholder="Image URL (optional)" style="margin-top: 5px">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-link">Hyperlink:</label>
+                <input type="url" id="details-tileset-link" placeholder="Link URL (optional)">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-tags">Tags/Metadata:</label>
+                <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
+            </div>
+
+            <hr>
+
+            <div class="modal-actions">
+                 <label>Color:</label>
+                 <input type="color" id="details-color-picker" style="vertical-align: middle">
+                 <!-- Save/More Settings buttons removed -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Rete.js Node Editor Panel -->
+    <div id="rete-editor-panel" class="control-panel">
+        <div class="panel-header">
+            <h4>Node Editor</h4>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content" style="height: calc(100% - 35px); padding: 0"> <!-- Adjust height and remove padding for canvas -->
+            <!-- Rete Toolbar Placeholder -->
+            <div id="rete-toolbar" style="background-color: #404040; border-bottom: 1px solid #555; align-items: center; height: 30px; padding: 0 5px; display: flex">
+                <button id="rete-add-node-btn" title="Add Node">➕</button> <!-- Added ID -->
+                <button id="rete-arrange-btn" title="Arrange">Arrange</button> <!-- Added ID -->
+                <span style="margin-left: auto; padding-right: 5px">Zoom: 100%</span>
+            </div>
+
+            <div id="rete-editor-container" style="width: 100%; height: 100%"></div> <!-- Rete will render here -->
+        </div>
+    </div>
+
+    <!-- Only include OpenLayers script -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
+    <!-- OpenGlobus JS - Removed, will import in JS -->
+    <!-- <script src="./node_modules/@openglobus/og/lib/og.umd.js"></script> -->
+    <!-- MapLibre GL JS -->
+    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <!-- Turf.js -->
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+
+    <!-- Geospatial Tools Panel -->
+    <div id="geospatial-tools-panel" class="control-panel">
+        <div class="panel-header">
+            <h4>Geospatial Tools</h4>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <h5>Turf.js Operations</h5>
+            <div class="tool-section">
+                <label for="buffer-distance">Buffer Distance (km):</label>
+                <input type="number" id="buffer-distance" value="1" min="0" step="0.1" style="width: 60px; margin-left: 5px">
+                <button id="turf-buffer-btn" title="Buffer selected features">Buffer</button>
+            </div>
+            <div class="tool-section">
+                 <button id="turf-union-btn" title="Union selected features">Union</button>
+                 <button id="turf-intersect-btn" title="Intersect selected features (requires 2+)">Intersect</button>
+            </div>
+            <div class="tool-section">
+                 <button id="turf-centroid-btn" title="Find centroid of selected features">Centroid</button>
+                 <button id="turf-area-btn" title="Calculate area of selected features">Area</button>
+            </div>
+
+            <hr style="margin: 15px 0">
+
+            <h5>GRASS GIS (Placeholder)</h5>
+            <div class="tool-section">
+                <button id="grass-vector-info-btn" disabled="" title="Get vector info (requires backend)">Vector Info</button>
+                <button id="grass-raster-stats-btn" disabled="" title="Get raster stats (requires backend)">Raster Stats</button>
+            </div>
+            <small><i>Note: GRASS operations require backend integration.</i></small>
+        </div>
+    </div>
+    <!-- End Geospatial Tools Panel -->
+
+
+    <script type="module" src="/mundial.36960861.js"></script> <!-- Load main application script -->
+
+
+<!-- Opening Modal -->
+<div id="opening-modal-overlay">
+    <div id="opening-modal-content">
+        <button id="close-opening-modal" title="Close">&times;</button>
+        <h2>Welcome to Mundial</h2>
+        <!-- Glide.js Carousel Structure -->
+        <div class="glide" id="opening-glide">
+            <div class="glide__track" data-glide-el="track">
+                <ul class="glide__slides">
+                    <li class="glide__slide" style="text-align: center; background-color: #2a2a2a; border-radius: 5px; padding: 20px">
+                        <h3>Slide 1: Explore</h3>
+                        <p>Discover the world through sound.</p>
+                        <div id="modal-globe-placeholder" style="margin: 15px auto">
+                            <span>Globe Placeholder</span>
+                        </div>
+                    </li>
+                    <li class="glide__slide" style="text-align: center; background-color: #2a2a2a; border-radius: 5px; padding: 20px">
+                        <h3>Slide 2: Connect</h3>
+                        <p>Tune into global radio stations.</p>
+                        <p style="margin-top: 30px; font-size: 2em">📻</p>
+                    </li>
+                    <li class="glide__slide" style="text-align: center; background-color: #2a2a2a; border-radius: 5px; padding: 20px">
+                        <h3>Slide 3: Create</h3>
+                        <p>Build and share your own sites.</p>
+                        <p style="margin-top: 30px; font-size: 2em">🏗️</p>
+                    </li>
+                </ul>
+            </div>
+            <div class="glide__bullets" data-glide-el="controls[nav]">
+                <button class="glide__bullet" data-glide-dir="=0"></button>
+                <button class="glide__bullet" data-glide-dir="=1"></button>
+                <button class="glide__bullet" data-glide-dir="=2"></button>
+            </div>
+        </div>
+        <!-- End Glide.js Structure -->
+    </div>
+</div>
+<!-- End Opening Modal -->
+
+<!-- Glide.js JS -->
+<script src="https://cdn.jsdelivr.net/npm/@glidejs/glide"></script>
+
+</body>
+</html>

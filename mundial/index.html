@@ -401,6 +401,12 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             </div>
 
             <div class="modal-section">
+                <label for="details-tileset-opacity">Opacity:</label>
+                <input type="range" id="details-tileset-opacity" min="0" max="1" step="0.01" value="1"> <!-- Default 100% opacity -->
+                <span id="details-tileset-opacity-value">1.00</span> <!-- To display current value -->
+            </div>
+
+            <div class="modal-section">
                 <label for="details-tileset-tags">Tags/Metadata:</label>
                 <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
             </div>
@@ -408,8 +414,9 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             <hr>
 
             <div class="modal-actions">
-                 <label>Color:</label>
+                 <label id="color-picker-label">Stroke Color:</label> <!-- Label to indicate what color is being edited -->
                  <input type="color" id="details-color-picker" style="vertical-align: middle;">
+                 <button id="toggle-color-mode-btn" class="settings-btn-small" title="Toggle between editing Stroke and Fill Color">Color</button> <!-- Toggle button -->
                  <!-- Save/More Settings buttons removed -->
             </div>
         </div>

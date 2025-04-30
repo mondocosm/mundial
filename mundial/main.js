@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const map = new ol.Map({
         target: 'map',
         layers: [ ...baseLayers, layer0Layer, gridLayerZ21, selectionLayer, highlightLayer ], // Add highlight layer
-        view: new ol.View({ center: ol.proj.fromLonLat([-74.0060, 40.7128]), zoom: 10, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }),
+        view: new ol.View({ center: ol.proj.fromLonLat([166.523895, -11.261582]), zoom: 13, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }),
         controls: [], // Remove default controls (like zoom buttons)
     });
     const mapElement = document.getElementById('map'); // Get map DOM element
@@ -155,8 +155,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailsTilesetLinkInput = document.getElementById('details-tileset-link');
     const detailsTilesetTagsTextarea = document.getElementById('details-tileset-tags');
     const detailsColorPicker = document.getElementById('details-color-picker');
-    const detailsSaveBtn = document.getElementById('details-save-btn'); // Reference kept for removal check
-    const detailsMoreSettingsBtn = document.getElementById('details-more-settings-btn'); // Reference kept for removal check
+    const detailsOpacityInput = document.getElementById('details-tileset-opacity'); // Added reference for opacity input
+    const detailsOpacityValueSpan = document.getElementById('details-tileset-opacity-value'); // Added reference for opacity value span
+    const toggleColorModeBtn = document.getElementById('toggle-color-mode-btn'); // Added reference for toggle button
+    const colorPickerLabel = document.getElementById('color-picker-label'); // Added reference for color picker label
+
+    // Removed references for old buttons:
+    // const detailsSaveBtn = document.getElementById('details-save-btn');
+    // const detailsMoreSettingsBtn = document.getElementById('details-more-settings-btn');
+
+    // --- State for Color Editing Mode ---
+    let colorEditingMode = 'stroke'; // 'stroke' or 'fill'
+
+    // Function to highlight a specific tileset group in the list (Moved here to be defined before use)
+    function highlightListItem(groupId) {
+        // Remove highlight from all items first
+        tilesetListDiv.querySelectorAll('.tileset-item').forEach(item => {
+            item.classList.remove('highlighted');
+        });
+
+        // Add highlight to the specific item
+        const listItem = tilesetListDiv.querySelector(`.layer-item[data-tileset-group-id="${groupId}"]`);
+        if (listItem) {
+            listItem.classList.add('highlighted');
+            // Optional: scroll into view
+            listItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
 
 
     // --- Tileset Details Modal Logic ---
@@ -186,7 +211,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Populate fields using the first feature's data (assuming consistency within group)
         detailsTilesetNameInput.value = firstFeatureOfGroup.get('tilesetName') || '';
-        detailsColorPicker.value = firstFeatureOfGroup.get('color') || '#008080'; // Default to teal
+        const strokeColor = firstFeatureOfGroup.get('color') || '#008080'; // Default to teal (stroke color)
+        detailsColorPicker.value = strokeColor; // Set color picker to stroke color initially
+        
+        // Populate new Fill Color and Opacity controls
+        // Make default fill color match stroke color if not set
+        const fillColor = firstFeatureOfGroup.get('fillColor') || strokeColor;
+        // Set default opacity to 0.25 if not set
+        const opacity = firstFeatureOfGroup.get('opacity') !== undefined ? firstFeatureOfGroup.get('opacity') : 0.25;
+        
+        const detailsOpacityInput = document.getElementById('details-tileset-opacity');
+        const detailsOpacityValueSpan = document.getElementById('details-tileset-opacity-value');
+
+        // Note: Fill color input is removed from HTML, so no need to set its value here.
+
+        if (detailsOpacityInput) detailsOpacityInput.value = opacity;
+        if (detailsOpacityValueSpan) detailsOpacityValueSpan.textContent = opacity.toFixed(2);
+
+        // Ensure color picker label is correct initially
+        if (colorPickerLabel) colorPickerLabel.textContent = 'Stroke Color:';
+        colorEditingMode = 'stroke'; // Reset mode to stroke when opening modal
+
+
         detailsTilesetImageUrlInput.value = firstFeatureOfGroup.get('imageUrl') || '';
         detailsTilesetLinkInput.value = firstFeatureOfGroup.get('linkUrl') || '';
         detailsTilesetTagsTextarea.value = firstFeatureOfGroup.get('tags') || '';
@@ -326,7 +372,26 @@ document.addEventListener('DOMContentLoaded', () => {
         applyGroupPropertyChange('tags', event.target.value.trim());
     });
 
-    // --- Instant Color Update Logic ---
+    // --- Style Application Function ---
+    function applyTilesetFeatureStyle(feature) {
+        const strokeColor = feature.get('color') || '#008080'; // Default teal stroke
+        // Use stroke color as default fill color if not set
+        const fillColor = feature.get('fillColor') || strokeColor;
+        // Set default opacity to 0.25 if not set
+        const opacity = feature.get('opacity') !== undefined ? feature.get('opacity') : 0.25;
+
+        // Convert fill color to RGBA array and apply opacity
+        const fillColorArray = ol.color.asArray(fillColor);
+        fillColorArray[3] = opacity; // Set the alpha channel
+
+        feature.setStyle(new ol.style.Style({
+            stroke: new ol.style.Stroke({ color: strokeColor, width: 3 }),
+            fill: new ol.style.Fill({ color: ol.color.asString(fillColorArray) })
+        }));
+    }
+
+
+    // --- Instant Color Update Logic (Stroke) ---
     detailsColorPicker.addEventListener('input', (event) => {
         if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) {
             console.warn("Cannot update color: No group or layer context.");
@@ -342,26 +407,90 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const newColor = event.target.value;
+        const propertyToUpdate = colorEditingMode === 'stroke' ? 'color' : 'fillColor';
 
         // Apply color and update style for all features in the group
         groupFeatures.forEach(feature => {
-            feature.set('color', newColor); // Store the color on the feature
+            feature.set(propertyToUpdate, newColor); // Store the color on the feature
 
             // Update style immediately only if the group (and thus the feature) is visible
             if (feature.get('isVisible') !== false) {
-                 // Apply the new style with the chosen color
-                 feature.setStyle(new ol.style.Style({
-                     stroke: new ol.style.Stroke({ color: newColor, width: 3 }),
-                     // Optional: Add fill using the same color but with some transparency
-                     // fill: new ol.style.Fill({ color: ol.color.asString([...ol.color.asArray(newColor).slice(0, 3), 0.2]) })
-                 }));
+                 applyTilesetFeatureStyle(feature); // Re-apply style with updated color
             }
-             // If the feature is hidden, its style should remain null (handled by visibility toggle)
         });
 
-        console.log(`Updated color for group ${currentEditingGroupId} to ${newColor}`);
-        // No need to call populateTilesetList here, styles are updated directly.
+        console.log(`Updated ${colorEditingMode} color for group ${currentEditingGroupId} to ${newColor}`);
     });
+
+
+    // --- Instant Opacity Update Logic ---
+    if (detailsOpacityInput && detailsOpacityValueSpan) {
+        detailsOpacityInput.addEventListener('input', (event) => {
+            if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) {
+                console.warn("Cannot update opacity: No group or layer context.");
+                return;
+            }
+            const layer = userLayers[selectedLayerId].layer;
+            const source = layer.getSource();
+            const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
+
+            if (groupFeatures.length === 0) {
+                console.warn(`Cannot update opacity: No features found for group ${currentEditingGroupId}.`);
+                return;
+            }
+
+            const newOpacity = parseFloat(event.target.value); // Get value as number
+
+            // Update displayed value
+            detailsOpacityValueSpan.textContent = newOpacity.toFixed(2);
+
+            // Apply opacity and update style for all features in the group
+            groupFeatures.forEach(feature => {
+                feature.set('opacity', newOpacity); // Store the opacity on the feature
+
+                // Update style immediately only if the group (and thus the feature) is visible
+                if (feature.get('isVisible') !== false) {
+                     applyTilesetFeatureStyle(feature); // Re-apply style with updated opacity
+                }
+            });
+
+            console.log(`Updated opacity for group ${currentEditingGroupId} to ${newOpacity}`);
+        });
+    }
+
+    // --- Toggle Color Editing Mode Logic ---
+    if (toggleColorModeBtn && colorPickerLabel && detailsColorPicker) {
+        toggleColorModeBtn.addEventListener('click', () => {
+            if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) {
+                console.warn("Cannot toggle color mode: No group or layer context.");
+                return;
+            }
+
+            // Get the first feature to read current colors
+            const layer = userLayers[selectedLayerId].layer;
+            const source = layer.getSource();
+            const firstFeatureOfGroup = source.getFeatures().find(f => f.get('tilesetGroupId') === currentEditingGroupId);
+
+            if (!firstFeatureOfGroup) {
+                 console.warn(`Cannot toggle color mode: No features found for group ${currentEditingGroupId}.`);
+                 return;
+            }
+
+
+            if (colorEditingMode === 'stroke') {
+                colorEditingMode = 'fill';
+                colorPickerLabel.textContent = 'Fill Color:';
+                // Set color picker to current fill color
+                detailsColorPicker.value = firstFeatureOfGroup.get('fillColor') || '#ff0000'; // Default red fill
+            } else {
+                colorEditingMode = 'stroke';
+                colorPickerLabel.textContent = 'Stroke Color:';
+                // Set color picker to current stroke color
+                detailsColorPicker.value = firstFeatureOfGroup.get('color') || '#008080'; // Default teal stroke
+            }
+            console.log(`Color editing mode toggled to: ${colorEditingMode}`);
+        });
+    }
 
 
     // --- Global State ---
@@ -478,62 +607,79 @@ document.addEventListener('DOMContentLoaded', () => {
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
             newFeature.setId(tileId); selectionSource.addFeature(newFeature);
-        }
-    }
-    const clickSelectHandler = function (evt) {
-        if (currentInteractionMode !== 'select' || Math.floor(map.getView().getZoom()) < GRID_VISIBILITY_MIN_ZOOM) return;
-
-        let clickedExistingTilesetGroup = false;
-        // Check if click hit an existing tileset feature on the active layer
-        map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
-            if (clickedExistingTilesetGroup) return; // Process only the first hit group
-
-            const groupId = feature.get('tilesetGroupId');
-            const tilesetName = feature.get('tilesetName');
-
-            // Check if the feature belongs to the currently selected user layer AND is part of a group
-            if (layer && layer.get('title') === selectedLayerId && groupId && tilesetName) {
-                clickedExistingTilesetGroup = true;
-                console.log(`Clicked tile belonging to group: ${tilesetName} (Group ID: ${groupId})`);
-
-                // Find all features belonging to this group
-                const source = layer.getSource();
-                const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
-
-                // Highlight *all* features in the group
-                highlightSource.clear(); // Clear previous highlight
-                const highlightFeatures = groupFeatures.map(f => new ol.Feature(f.getGeometry().clone()));
-                if (highlightFeatures.length > 0) {
-                    highlightSource.addFeatures(highlightFeatures);
-                }
-
-                // Open the details modal using the *first* feature of the group
-                // The modal logic will need to know it's editing a group.
-                // We'll pass the first feature, and the modal logic can retrieve the group ID from it.
-                if (groupFeatures.length > 0) {
-                    openTilesetDetailsModal(groupFeatures[0]); // Pass the first feature
-                    // currentEditingGroupId is set inside openTilesetDetailsModal
-                    highlightListItem(groupId); // Highlight the corresponding list item
-                }
             }
-        }, {
-            layerFilter: (layer) => layer === userLayers[selectedLayerId]?.layer, // Only check the active user layer
-            hitTolerance: 3 // Adjust tolerance as needed
-        });
-
-        // If an existing tileset group was clicked, don't proceed with individual tile selection
-        if (clickedExistingTilesetGroup) {
-             return;
-        }
-
-         // If no existing tileset was clicked, clear highlight, hide picker, and proceed with tile selection/deselection
-         highlightSource.clear();
-         // inlineColorPickerContainer.style.display = 'none'; // No longer needed here, modal handles its own state
-         // currentSettingsFeatureId = null; // No longer needed here, modal handles its own state (currentEditingFeatureId)
-         const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(evt.coordinate, TILE_SELECTION_ZOOM);
-         toggleTileSelection(tileCoord);
-    };
-    map.on('click', clickSelectHandler);
+            }
+            
+                // Function to highlight a specific tileset group in the list
+                function highlightListItem(groupId) {
+                    // Remove highlight from all items first
+                    tilesetListDiv.querySelectorAll('.tileset-item').forEach(item => {
+                        item.classList.remove('highlighted');
+                    });
+            
+                    // Add highlight to the specific item
+                    const listItem = tilesetListDiv.querySelector(`.layer-item[data-tileset-group-id="${groupId}"]`);
+                    if (listItem) {
+                        listItem.classList.add('highlighted');
+                        // Optional: scroll into view
+                        listItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }
+            
+                const clickSelectHandler = function (evt) {
+                    if (currentInteractionMode !== 'select' || Math.floor(map.getView().getZoom()) < GRID_VISIBILITY_MIN_ZOOM) return;
+            
+                let clickedExistingTilesetGroup = false;
+                // Check if click hit an existing tileset feature on the active layer
+                map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
+                    if (clickedExistingTilesetGroup) return; // Process only the first hit group
+            
+                    const groupId = feature.get('tilesetGroupId');
+                    const tilesetName = feature.get('tilesetName');
+            
+                    // Check if the feature belongs to the currently selected user layer AND is part of a group
+                    if (layer && layer.get('title') === selectedLayerId && groupId && tilesetName) {
+                        clickedExistingTilesetGroup = true;
+                        console.log(`Clicked tile belonging to group: ${tilesetName} (Group ID: ${groupId})`);
+            
+                        // Find all features belonging to this group
+                        const source = layer.getSource();
+                        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+            
+                        // Highlight *all* features in the group
+                        highlightSource.clear(); // Clear previous highlight
+                        const highlightFeatures = groupFeatures.map(f => new ol.Feature(f.getGeometry().clone()));
+                        if (highlightFeatures.length > 0) {
+                            highlightSource.addFeatures(highlightFeatures);
+                        }
+            
+                        // Open the details modal using the *first* feature of the group
+                        // The modal logic will need to know it's editing a group.
+                        // We'll pass the first feature, and the modal logic can retrieve the group ID from it.
+                        if (groupFeatures.length > 0) {
+                            openTilesetDetailsModal(groupFeatures[0]); // Pass the first feature
+                            // currentEditingGroupId is set inside openTilesetDetailsModal
+                            // highlightListItem(groupId); // Highlight the corresponding list item (Temporarily commented out to fix ReferenceError)
+                        }
+                    }
+                }, {
+                    layerFilter: (layer) => layer === userLayers[selectedLayerId]?.layer, // Only check the active user layer
+                    hitTolerance: 3 // Adjust tolerance as needed
+                }); // <-- Added missing parenthesis
+            
+                // If an existing tileset group was clicked, don't proceed with individual tile selection
+                if (clickedExistingTilesetGroup) {
+                     return;
+                }
+            
+                 // If no existing tileset was clicked, clear highlight, hide picker, and proceed with tile selection/deselection
+                 highlightSource.clear();
+                 // inlineColorPickerContainer.style.display = 'none'; // No longer needed here, modal handles its own state
+                 // currentSettingsFeatureId = null; // No longer needed here, modal handles its own state (currentEditingFeatureId)
+                 const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(evt.coordinate, TILE_SELECTION_ZOOM);
+                 toggleTileSelection(tileCoord);
+            };
+            map.on('click', clickSelectHandler);
     const dragBoxInteraction = new ol.interaction.DragBox({
         // Style the drag box itself to match the selection fill
         style: new ol.style.Style({
