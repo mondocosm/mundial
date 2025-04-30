@@ -1,0 +1,15 @@
+{
+    "type": "file",
+    "updateStrategy": { "type": 1 },
+    "source": {
+        "url": "https://wxs.ign.fr/geoportail/wmts?",
+        "protocol": "wmts",
+        "version": "1.0.0",
+        "name": "ORTHOIMAGERY.ORTHOPHOTOS",
+        "tileMatrixSet": "WGS84PseudoMercator",
+        "format": "image/jpeg",
+        "requestEncoding": "KVP",
+        "projection": "EPSG:3857",
+        "zoom": { "min": 0, "max": 19 }
+    }
+}

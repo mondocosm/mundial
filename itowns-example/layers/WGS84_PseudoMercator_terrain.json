@@ -1,0 +1,15 @@
+{
+    "type": "file",
+    "updateStrategy": { "type": 1 },
+    "source": {
+        "url": "https://wxs.ign.fr/altimetrie/geoportail/wmts?",
+        "protocol": "wmts",
+        "version": "1.0.0",
+        "name": "ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES",
+        "tileMatrixSet": "WGS84PseudoMercator",
+        "format": "image/x-bil;bits=32",
+        "requestEncoding": "KVP",
+        "projection": "EPSG:3857",
+        "zoom": { "min": 0, "max": 14 }
+    }
+}

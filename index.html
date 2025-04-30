@@ -8,15 +8,27 @@
     <link rel="stylesheet" href="lib/ol.css">
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-        #map { width: 100%; height: 100%; background-color: #cccccc; }
+        #map { width: 100%; height: 100%; background-color: #cccccc; position: absolute; top: 0; left: 0; }
+        #globeDiv { width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: none; }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="globeDiv"></div>
 
-    <!-- Attempting to load local OpenLayers files -->
-    <script src="lib/ol.js"></script>
-    <!-- Use defer -->
-    <script src="main.js" defer></script>
+    <button id="view-toggle-btn" style="position: absolute; top: 10px; right: 10px; z-index: 100;">Switch to Globe View</button>
+    <button id="terrain-toggle-btn" style="position: absolute; top: 40px; right: 10px; z-index: 100; display: none;">Toggle Terrain (3D)</button>
+
+    <div id="tile-info-itowns" style="position: absolute; top: 10px; left: 10px; background: white; padding: 10px; z-index: 100; display: none;">
+        <h2>iTowns Tile Information</h2>
+        <p id="itowns-tile-info-content">Click on the globe to select a tile</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/itowns@2.2.0/dist/itowns.min.js"></script>
+
+      <!-- Attempting to load local OpenLayers files -->
+      <script src="lib/ol.js"></script>
+    
+    <script src="main.js"></script>
 </body>
 </html>
