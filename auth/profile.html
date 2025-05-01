@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <header class="top-toolbar">
+        <div class="toolbar-title">MUNDIAL</div>
+        <div class="toolbar-center">
+            <input type="text" class="toolbar-input" placeholder="Search, command, or prompt...">
+        </div>
+        <nav class="toolbar-nav">
+            <ul>
+                <li class="dropdown">
+                    <a href="#" class="dropbtn">File</a>
+                    <div class="dropdown-content">
+                        <a href="#">New</a>
+                        <a href="#">Open</a>
+                        <a href="#">Save</a>
+                    </div>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropbtn">Edit</a>
+                    <div class="dropdown-content">
+                        <a href="#">Cut</a>
+                        <a href="#">Copy</a>
+                        <a href="#">Paste</a>
+                    </div>
+                </li>
+                 <li class="dropdown">
+                    <a href="#" class="dropbtn">View</a>
+                    <div class="dropdown-content">
+                        <a href="#">Zoom In</a>
+                        <a href="#">Zoom Out</a>
+                    </div>
+                </li>
+                {/* Add more menus as needed */}
+            </ul>
+        </nav>
+        <div class="toolbar-view-buttons">
+            <button class="toolbar-button" id="map-view-btn">Map</button>
+            <button class="toolbar-button" id="globe-view-btn">Globe</button>
+            <button class="toolbar-button" id="xr-view-btn">XR</button>
+            <button class="toolbar-button" id="layers-btn">Layers</button>
+            <button class="toolbar-button" id="profile-btn">Profile</button>
+        </div>
+    </header>
+
+    <div class="profile-container">
+        <h1>User Profile</h1>
+        <div class="profile-info">
+            <p><strong>Username:</strong> <span id="profile-username">Loading...</span></p>
+            <p><strong>Email:</strong> <span id="profile-email">Loading...</span></p>
+            {/* Add more profile fields as needed */}
+        </div>
+        <button id="logout-button">Logout</button>
+    </div>
+
+    <script src="profile.js"></script>
+</body>
+</html>

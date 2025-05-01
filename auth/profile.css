@@ -1,0 +1,212 @@
+body {
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #121212; /* Dark background */
+    color: #e0e0e0; /* Light text */
+}
+
+.profile-container {
+    background-color: #1e1e1e; /* Darker container */
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5); /* Adjusted shadow */
+    width: 400px;
+    text-align: center;
+    border: 1px solid #333; /* Subtle border */
+}
+
+.profile-container h1 {
+    margin-bottom: 20px;
+    color: #ffffff; /* White heading */
+}
+
+.profile-info {
+    text-align: left;
+    margin-bottom: 25px;
+}
+
+.profile-info p {
+    margin-bottom: 10px;
+    color: #bbbbbb; /* Lighter grey text */
+}
+
+.profile-info strong {
+    color: #ffffff; /* White strong text */
+    margin-right: 5px;
+}
+
+#logout-button {
+    padding: 10px 20px;
+    background-color: #dc3545; /* Keep logout button color */
+    color: #ffffff; /* White text on button */
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+#logout-button:hover {
+    background-color: #c82333; /* Darker red on hover */
+}
+/* Toolbar Styles */
+.top-toolbar {
+    background-color: #333; /* Dark grey toolbar background */
+    color: #fff;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: fixed; /* Fix toolbar at the top */
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box; /* Include padding in width */
+    z-index: 1000; /* Ensure toolbar is above other content */
+    height: 50px; /* Fixed height for the toolbar */
+}
+
+.toolbar-title {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.toolbar-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+.toolbar-nav li {
+    position: relative; /* Needed for absolute positioning of dropdown */
+}
+
+.toolbar-nav a.dropbtn {
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.toolbar-nav a:hover, .dropdown:hover .dropbtn {
+    background-color: #555; /* Darker grey on hover */
+}
+
+/* Dropdown Content (Hidden by Default) */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+    left: 0; /* Align dropdown with the menu item */
+    top: 100%; /* Position below the menu item */
+}
+
+/* Links inside the dropdown */
+.dropdown-content a {
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    text-align: left;
+}
+
+/* Change color of dropdown links on hover */
+.dropdown-content a:hover {
+    background-color: #ddd;
+}
+
+/* Show the dropdown menu on hover */
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+/* Adjust body padding to prevent content from hiding behind fixed toolbar */
+body {
+    padding-top: 60px; /* Add padding equal to toolbar height + some margin */
+    /* Keep existing body styles */
+    font-family: sans-serif;
+    display: flex;
+    /* Adjust flex direction for centering content below toolbar */
+    flex-direction: column;
+    align-items: center;
+    min-height: calc(100vh - 60px); /* Adjust min-height calculation */
+    background-color: #121212;
+    color: #e0e0e0;
+    /* Remove justify-content: center; as align-items handles centering */
+}
+
+/* Ensure profile-container is not centered vertically anymore, but horizontally */
+.profile-container {
+     margin-top: 20px; /* Add some space below the toolbar */
+    /* Keep existing styles */
+    background-color: #1e1e1e;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    width: 400px;
+    text-align: center;
+    border: 1px solid #333;
+}
+/* Styles for Toolbar Center Section (Search/Command) */
+.toolbar-center {
+    flex-grow: 1; /* Allow center section to take available space */
+    display: flex;
+    justify-content: center; /* Center items horizontally */
+    align-items: center;
+    padding: 0 20px; /* Add some padding */
+}
+
+.toolbar-input {
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid #555; /* Darker border */
+    background-color: #2c2c2c; /* Dark input background */
+    color: #e0e0e0; /* Light input text */
+    margin: 0 10px; /* Space around input */
+    font-size: 0.9em;
+    width: 40%; /* Make the input wider */
+    min-width: 300px; /* Ensure a minimum width */
+}
+
+.toolbar-input::placeholder {
+    color: #888; /* Lighter placeholder text */
+}
+
+.toolbar-input:focus {
+    outline: none;
+    border-color: #007bff; /* Highlight focus */
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+/* Styles for Toolbar View Buttons */
+.toolbar-view-buttons {
+    display: flex;
+    align-items: center;
+}
+
+.toolbar-button {
+    background-color: #555; /* Slightly lighter grey than toolbar */
+    color: #fff;
+    border: none;
+    padding: 6px 12px; /* Smaller padding than dropdown links */
+    margin-left: 10px; /* Space between buttons and nav/other buttons */
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.toolbar-button:hover {
+    background-color: #777; /* Lighter grey on hover */
+}
+
+.toolbar-button.active { /* Style for the active view button */
+    background-color: #007bff;
+    color: #fff;
+}
