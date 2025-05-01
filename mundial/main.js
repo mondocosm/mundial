@@ -80,10 +80,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const map = new ol.Map({
         target: 'map',
         layers: [ ...baseLayers, layer0Layer, gridLayerZ21, selectionLayer, highlightLayer ],
-        view: new ol.View({ center: ol.proj.fromLonLat([-74.0060, 40.7128]), zoom: 10, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }),
+        view: new ol.View({ center: ol.proj.fromLonLat([-74.0060, 40.7128]), zoom: 17, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }),
         controls: [],
     });
     const mapElementOL = document.getElementById('map'); // OpenLayers container
+
+    // Get the default DragPan interaction
+    let dragPanInteraction = null;
+    map.getInteractions().forEach(interaction => {
+        if (interaction instanceof ol.interaction.DragPan) {
+            dragPanInteraction = interaction;
+        }
+    });
+    if (!dragPanInteraction) {
+        console.warn("Could not find default DragPan interaction.");
+    }
 
     // --- OpenGlobus Initialization ---
     let globus = null;
@@ -360,42 +371,223 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentInteractionMode = 'select';
     function getTileId(tileCoord) { return `${tileCoord[0]}-${tileCoord[1]}-${tileCoord[2]}`; }
     function toggleTileSelection(tileCoord) {
-        const tileId = getTileId(tileCoord); const existingFeature = selectionSource.getFeatureById(tileId);
-        if (existingFeature) { selectionSource.removeFeature(existingFeature); } else {
-            if (selectedLayerId && userLayers[selectedLayerId]) {
-                const targetSource = userLayers[selectedLayerId].layer.getSource();
-                const existingTileFeatures = targetSource.getFeatures();
-                for (const existingFeature of existingTileFeatures) { if (existingFeature.get('tileId') === tileId) { return; } }
-            }
+        const tileId = getTileId(tileCoord);
+        const existingFeature = selectionSource.getFeatureById(tileId);
+
+        // --- Check if this tile is part of ANY saved group in the CURRENT layer ---
+        if (!selectedLayerId || !userLayers[selectedLayerId]) {
+            console.warn("Cannot toggle tile: No layer selected.");
+            return; // Should not happen if click handler logic is correct
+        }
+        const targetSource = userLayers[selectedLayerId].layer.getSource();
+        const existingFeaturesInLayer = targetSource.getFeatures();
+        const isTileSaved = existingFeaturesInLayer.some(f => f.get('tileId') === tileId);
+        // --- End check ---
+
+        if (existingFeature) {
+            // Tile is currently selected individually, remove it
+            selectionSource.removeFeature(existingFeature);
+            console.log(`Deselected individual tile: ${tileId}`);
+        } else if (!isTileSaved) {
+            // Tile is not currently selected AND not part of a saved group, add it
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
-            newFeature.setId(tileId); selectionSource.addFeature(newFeature);
+            newFeature.setId(tileId);
+            // Add a property to distinguish individual selections from group selections if needed later
+            newFeature.set('isIndividualSelection', true);
+            selectionSource.addFeature(newFeature);
+            console.log(`Selected individual tile: ${tileId}`);
+        } else {
+            // Tile is part of a saved group, do nothing (click handler should select the group)
+            console.log(`Tile ${tileId} is part of a saved group, preventing individual selection toggle.`);
         }
+        updateSelectedTileCountDisplay(); // Update count after toggle
     }
+
+    // Function to ONLY add an *unsaved* tile to selection (used by drag-box)
+    function addTileToSelection(tileCoord) {
+        const tileId = getTileId(tileCoord);
+        const existingSelectionFeature = selectionSource.getFeatureById(tileId);
+
+        // Only add if not already selected individually
+        if (!existingSelectionFeature) {
+            // --- Check if this tile is part of ANY saved group in the CURRENT layer ---
+            // This check is duplicated from toggleTileSelection but necessary here too
+            if (!selectedLayerId || !userLayers[selectedLayerId]) {
+                console.warn("Cannot add tile via drag: No layer selected.");
+                return;
+            }
+            const targetSource = userLayers[selectedLayerId].layer.getSource();
+            const existingFeaturesInLayer = targetSource.getFeatures();
+            const isTileSaved = existingFeaturesInLayer.some(f => f.get('tileId') === tileId);
+            // --- End check ---
+
+            if (!isTileSaved) {
+                // Add to the temporary selection layer only if it's not already selected AND not saved
+                const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
+                const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
+                newFeature.setId(tileId);
+                newFeature.set('isIndividualSelection', true); // Mark as individual selection
+                selectionSource.addFeature(newFeature);
+                // console.log(`Added tile via drag: ${tileId}`);
+            } else {
+                 // console.log(`Skipping saved tile during drag: ${tileId}`);
+            }
+        }
+        // else { console.log(`Tile ${tileId} already in current drag selection, skipping.`); }
+        // No need to call updateSelectedTileCountDisplay here, it's called after the loop in boxend handler
+    }
+
     const clickSelectHandler = function (evt) {
-        if (currentInteractionMode !== 'select') return;
+        console.log("clickSelectHandler triggered via singleclick", evt.coordinate); // Add this log
+        // This handler runs on 'singleclick'
+
         const currentZoom = map.getView().getZoom();
-        if (currentZoom < GRID_VISIBILITY_MIN_ZOOM) { console.log("Zoom in further to select tiles."); return; }
+        if (currentZoom < GRID_VISIBILITY_MIN_ZOOM) {
+            console.log("Zoom in further to select tiles.");
+            selectionSource.clear(); // Clear selection if zoomed out too far
+            highlightListItem(null); // Clear list highlight
+            return;
+        }
+
         const coordinate = evt.coordinate;
-        const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(coordinate, TILE_SELECTION_ZOOM);
-        if (tileCoord) { toggleTileSelection(tileCoord); }
+        let clickedSavedFeature = null; // The actual saved feature that was clicked
+        let clickedGroupId = null;
+
+        // 1. Check if the click hit a SAVED feature in the selected layer using map.forEachFeatureAtPixel
+        const pixel = map.getEventPixel(evt.originalEvent);
+        const targetLayer = selectedLayerId ? userLayers[selectedLayerId]?.layer : null;
+
+        if (targetLayer) {
+            map.forEachFeatureAtPixel(pixel, (feature, layer) => {
+                // Check if the feature belongs to the target layer and is part of a saved group
+                if (layer === targetLayer) {
+                    const groupId = feature.get('tilesetGroupId');
+                    if (groupId) {
+                        clickedGroupId = groupId;
+                        clickedSavedFeature = feature; // Store the first saved feature found at this pixel in the target layer
+                        return true; // Stop searching after finding the first match in the target layer
+                    }
+                }
+                return false; // Continue searching if not the target layer or not a saved feature
+            }, {
+                hitTolerance: 3 // Optional: tolerance in pixels to detect features near the click
+                // layerFilter is implicitly handled by checking `layer === targetLayer` inside the callback
+            });
+        }
+
+        // 2. Handle the click based on what was hit
+        if (clickedSavedFeature && clickedGroupId) {
+            // --- Clicked on a SAVED tileset group ---
+            console.log(`Clicked on saved tileset group: ${clickedGroupId}`);
+            // Action: Clear everything currently selected and select this group.
+            selectionSource.clear(); // Clear previous selections (individual or other group)
+            highlightListItem(null); // Clear previous list highlight
+
+            const targetSource = userLayers[selectedLayerId].layer.getSource();
+            const allFeaturesInLayer = targetSource.getFeatures();
+            const groupFeatures = allFeaturesInLayer.filter(f => f.get('tilesetGroupId') === clickedGroupId);
+            const featuresToAdd = groupFeatures.map(f => {
+                const clone = f.clone();
+                const originalTileId = f.get('tileId');
+                clone.setId(`selection-${f.getId() || f.ol_uid}`);
+                if (originalTileId) {
+                    clone.set('originalTileId', originalTileId);
+                    clone.set('isGroupSelection', true); // Mark as group selection
+                } else { console.warn("Original feature missing tileId during group selection clone:", f.getId()); }
+                return clone;
+            });
+
+            if (featuresToAdd.length > 0) {
+                selectionSource.addFeatures(featuresToAdd);
+                highlightListItem(clickedGroupId); // Highlight the new group in the list
+                openTilesetDetailsModal(clickedSavedFeature); // <-- ADDED: Open modal on click
+            } else { console.warn(`No features found for group ${clickedGroupId} during selection mapping.`); }
+
+        } else {
+            // --- Clicked on EMPTY SPACE or an UNSAVED tile ---
+            console.log("Clicked on empty space or potentially unsaved tile.");
+            // Action: Clear any selected group, then toggle the individual tile.
+            highlightListItem(null); // Clear list highlight (in case a group was selected)
+
+            // Check if a group is currently selected in the source. If yes, clear the source.
+            const isGroupCurrentlySelected = selectionSource.getFeatures().some(f => f.get('isGroupSelection'));
+            if (isGroupCurrentlySelected) {
+                console.log("Clearing previously selected group before toggling individual tile.");
+                selectionSource.clear();
+            }
+
+            // Now, toggle the individual tile at the clicked coordinate
+            const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(coordinate, TILE_SELECTION_ZOOM);
+            toggleTileSelection(tileCoord); // This function handles adding/removing unsaved tiles
+        }
+
+        // Update UI after any change
+        updateSelectedTileCountDisplay();
     }
     // Define and add DragBox interaction for area selection
     const dragBoxInteraction = new ol.interaction.DragBox({
-        condition: ol.events.condition.platformModifierKeyOnly // Use platformModifierKeyOnly (Cmd/Ctrl + Drag)
+        // condition: ol.events.condition.platformModifierKeyOnly // Example: Use Ctrl/Cmd key for drag-box
+        // No condition means drag-box is always active when the interaction is active
     });
-    map.addInteraction(dragBoxInteraction); // Add initially
+    map.addInteraction(dragBoxInteraction); // Add DragBox interaction
+    dragBoxInteraction.setActive(false); // Start with DragBox inactive (select mode starts with click/toggle)
 
+    if (dragPanInteraction) {
+        dragPanInteraction.setActive(true); // Start with DragPan active initially (matching initial 'select' mode behavior where click selects)
+    }
+
+    // --- DragBox Selection Logic ---
     dragBoxInteraction.on('boxend', function() {
-        if (currentInteractionMode !== 'select') return;
-        const extent = dragBoxInteraction.getGeometry().getExtent();
-        const currentZoom = map.getView().getZoom();
-        if (currentZoom < GRID_VISIBILITY_MIN_ZOOM) { console.log("Zoom in further to select tiles."); return; }
+        if (currentInteractionMode !== 'select') return; // Only act in select mode
+
+        const boxExtent = dragBoxInteraction.getGeometry().getExtent();
+        console.log("DragBox ended, extent:", boxExtent);
+
+        // --- Make Drag Additive ---
+        // Remove selectionSource.clear(); to make drag additive.
+        // Clear group selection *if* a group was selected before dragging.
+        const isGroupCurrentlySelected = selectionSource.getFeatures().some(f => f.get('isGroupSelection'));
+        if (isGroupCurrentlySelected) {
+            console.log("Clearing previously selected group before additive drag.");
+            selectionSource.clear(); // Clear the group selection
+            highlightListItem(null); // Clear list highlight
+        }
+        // Now, individual selections will persist and new ones will be added.
+        // --- End Additive Logic ---
+
+
+        const targetLayerId = selectedLayerId; // Capture selected layer at start of drag
+        if (!targetLayerId || !userLayers[targetLayerId]) {
+            console.warn("Cannot perform drag-select: No valid layer selected.");
+            return;
+        }
+        const targetSource = userLayers[targetLayerId].layer.getSource();
+        const existingFeaturesInLayer = targetSource.getFeatures();
+        const existingTileIdsInLayer = new Set(existingFeaturesInLayer.map(f => f.get('tileId')).filter(id => id));
+
+        console.time('dragBoxSelect');
         try {
-            selectionTileGrid.forEachTileCoord(extent, TILE_SELECTION_ZOOM, function (tileCoord) { toggleTileSelection(tileCoord); });
-        } catch (error) { console.error("Error during drag-box selection:", error); }
+            selectionTileGrid.forEachTileCoord(boxExtent, TILE_SELECTION_ZOOM, function (tileCoord) {
+                const tileId = getTileId(tileCoord);
+                // Check if this tile ID exists in the *saved* features of the target layer
+                if (!existingTileIdsInLayer.has(tileId)) {
+                    addTileToSelection(tileCoord); // Add unsaved tile to selection
+                } else {
+                    // console.log(`Skipping saved tile during drag: ${tileId}`);
+                }
+            });
+        } catch (error) {
+            console.error("Error during DragBox tile iteration:", error);
+        } finally {
+            console.timeEnd('dragBoxSelect');
+            updateSelectedTileCountDisplay(); // Update count after drag
+        }
     });
-    map.on('click', clickSelectHandler); // Add click handler
+    // --- End DragBox Selection Logic ---
+
+
+    map.on('singleclick', clickSelectHandler); // Use singleclick to avoid conflict with DragBox
 
     // --- Selection Actions Visibility & Count ---
     function updateSelectionActionsVisibility() {
@@ -610,43 +802,153 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Ctrl/Cmd Key Mode Toggle ---
+    let ctrlOrCmdPressed = false;
+
+    document.addEventListener('keydown', (event) => {
+        // Check if Ctrl (Windows/Linux) or Meta (Mac Cmd) key is pressed
+        const isModifier = event.ctrlKey || event.metaKey;
+        if (isModifier && !ctrlOrCmdPressed) {
+            ctrlOrCmdPressed = true;
+            // Only toggle if current mode is 'select'
+            if (currentInteractionMode === 'select') {
+                interactionModeBtn.click(); // Simulate click to switch to Pan
+            }
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        // Check if Ctrl or Meta key is released
+        const wasModifier = event.key === 'Control' || event.key === 'Meta';
+        if (wasModifier && ctrlOrCmdPressed) {
+            ctrlOrCmdPressed = false;
+            // Only toggle back if current mode is 'pan' (meaning we switched using the key)
+            if (currentInteractionMode === 'pan') {
+                 interactionModeBtn.click(); // Simulate click to switch back to Select
+            }
+        }
+        // Handle case where modifier key is released but wasn't the one tracked (e.g., Alt released while Ctrl held)
+        if (!event.ctrlKey && !event.metaKey && ctrlOrCmdPressed) {
+             ctrlOrCmdPressed = false;
+             // If we were in pan mode due to the key, switch back
+             if (currentInteractionMode === 'pan') {
+                  interactionModeBtn.click();
+             }
+        }
+    });
+
     // --- Save Selection Logic ---
     saveSelectionBtn.addEventListener('click', () => {
-        const tilesetName = tilesetNameInput.value.trim(); if (!tilesetName) { alert("Please enter a name for the tileset."); return; }
-        if (!selectedLayerId || !userLayers[selectedLayerId]) { alert("Please select a layer to save to."); return; }
+        let tilesetName = tilesetNameInput.value.trim();
+        if (!selectedLayerId || !userLayers[selectedLayerId]) { alert("Please select a layer to save to."); return; } // Moved layer check earlier
+        if (!tilesetName) {
+            // Generate default name if input is empty
+            const currentLayerTilesetCount = userLayers[selectedLayerId].tilesetCount || 0;
+            tilesetName = `Tileset ${currentLayerTilesetCount + 1}`;
+            console.log(`No name entered, using default: "${tilesetName}"`);
+        }
+        // Original layer check moved up
         const selectedFeatures = selectionSource.getFeatures(); if (selectedFeatures.length === 0) { alert("No tiles selected to save."); return; }
-        const targetSource = userLayers[selectedLayerId].layer.getSource(); const featuresToAdd = []; const addedTileIds = [];
+
+        // Ensure we are saving *individual* tiles, not a selected group
+        const isSavingGroup = selectedFeatures.some(f => f.get('isGroupSelection'));
+        if (isSavingGroup) {
+            alert("Cannot save a selected tileset group. Please clear selection and select individual tiles or use drag-select to create a new tileset.");
+            return;
+        }
+
+        const targetSource = userLayers[selectedLayerId].layer.getSource();
+
+        // --- Check for overlap with existing tilesets in the target layer ---
+        const existingFeaturesInLayer = targetSource.getFeatures();
+        const existingTileIdsInLayer = new Set(existingFeaturesInLayer.map(f => f.get('tileId')).filter(id => id)); // Get all existing tileIds
+
+        let overlapFound = false;
+        for (const selectedFeature of selectedFeatures) {
+            // Individual selections should have their ID as the tileId
+            const tileId = selectedFeature.getId();
+            if (!tileId || !tileId.includes('-')) { // Basic check for tileId format
+                 console.warn("Selected feature missing valid tileId during save check:", selectedFeature.getId());
+                 alert("Error: Cannot verify selection due to missing tile information. Please clear selection and try again.");
+                 return;
+            }
+            if (existingTileIdsInLayer.has(tileId)) {
+                overlapFound = true;
+                break; // Found an overlap, no need to check further
+            }
+        }
+
+        if (overlapFound) {
+            alert("Cannot save: The current selection includes tiles that are already part of another tileset in this layer.");
+            return; // Abort saving
+        }
+        // --- End overlap check ---
+
+        const featuresToAdd = [];
         const tilesetGroupId = `tileset-group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         selectedFeatures.forEach(feature => {
-            const tileId = feature.getId(); const clonedFeature = feature.clone();
-            const featureId = `tileset-tile-${tilesetFeatureCounter++}`; clonedFeature.setId(featureId);
-            clonedFeature.set('tilesetName', tilesetName); clonedFeature.set('tilesetGroupId', tilesetGroupId);
-            clonedFeature.set('tileId', tileId); clonedFeature.set('isVisible', true); clonedFeature.set('color', null);
-            featuresToAdd.push(clonedFeature); addedTileIds.push(tileId);
+            // For individual selections, the feature ID *is* the tileId
+            const tileId = feature.getId();
+             if (!tileId || !tileId.includes('-')) {
+                 console.error("Critical error: Invalid tileId found during feature cloning for save. Skipping feature:", feature.getId());
+                 return; // Skip this feature if ID is invalid
+            }
+            const clonedFeature = feature.clone(); // Clone the selection feature
+            const featureId = `tileset-tile-${tilesetFeatureCounter++}`; clonedFeature.setId(featureId); // New unique ID for the saved feature
+            clonedFeature.set('tilesetName', tilesetName);
+            clonedFeature.set('tilesetGroupId', tilesetGroupId);
+            clonedFeature.set('tileId', tileId); // Set the correct tileId from the original selection feature's ID
+            clonedFeature.set('isVisible', true);
+            clonedFeature.set('color', null); // Reset color or apply default?
+            // Remove temporary properties if they exist
+            clonedFeature.unset('isIndividualSelection'); // Clean up selection marker
+
+            featuresToAdd.push(clonedFeature);
         });
         if (featuresToAdd.length > 0) {
             targetSource.addFeatures(featuresToAdd); userLayers[selectedLayerId].tilesetCount = (userLayers[selectedLayerId].tilesetCount || 0) + 1;
-            selectionSource.clear(); populateTilesetList(selectedLayerId); updateSelectionActionsVisibility(); tilesetNameInput.value = '';
+            selectionSource.clear(); // Clear selection after successful save
+            populateTilesetList(selectedLayerId);
+            updateSelectedTileCountDisplay(); // Update UI (count to 0, hide actions)
+            tilesetNameInput.value = '';
             console.log(`Saved ${featuresToAdd.length} tiles as "${tilesetName}" to layer ${selectedLayerId}`);
         } else { console.warn("No features were added during save operation."); }
     });
 
     // --- Clear Selection Logic ---
     clearSelectionBtn.addEventListener('click', () => {
-        selectionSource.clear(); highlightSource.clear();
-        tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null;
+        selectionSource.clear(); // Clears both individual tiles and selected groups
+        highlightSource.clear(); // Clear any map highlight (though not currently used)
+        highlightListItem(null); // Clear list highlight
+        tilesetDetailsModal.style.display = 'none'; // Close details modal if open
+        currentEditingGroupId = null;
+        console.log("Cleared current selection.");
+        updateSelectedTileCountDisplay(); // Ensure count display updates to 0 and actions hide
     });
 
     // --- Interaction Mode Switching ---
     interactionModeBtn.addEventListener('click', () => {
         if (currentInteractionMode === 'select') {
-            currentInteractionMode = 'pan'; interactionModeBtn.textContent = 'Mode: Pan Map';
-            dragBoxInteraction.setActive(false); map.removeInteraction(dragBoxInteraction);
-            if (mapElementOL) mapElementOL.style.cursor = 'grab'; console.log("Switched to Pan mode");
+            // Switch TO Pan mode
+            currentInteractionMode = 'pan';
+            interactionModeBtn.textContent = 'Mode: Pan Map';
+            dragBoxInteraction.setActive(false); // Deactivate DragBox
+            if (dragPanInteraction) {
+                dragPanInteraction.setActive(true); // Activate DragPan
+            }
+            if (mapElementOL) mapElementOL.style.cursor = 'grab';
+            console.log("Switched to Pan mode");
         } else {
-            currentInteractionMode = 'select'; interactionModeBtn.textContent = 'Mode: Select Tiles';
-            map.addInteraction(dragBoxInteraction); dragBoxInteraction.setActive(true);
-            if (mapElementOL) mapElementOL.style.cursor = 'crosshair'; console.log("Switched to Select mode");
+            // Switch TO Select mode
+            currentInteractionMode = 'select';
+            interactionModeBtn.textContent = 'Mode: Select Tiles'; // Updated text
+             if (dragPanInteraction) {
+                 dragPanInteraction.setActive(false); // Deactivate DragPan
+            }
+            dragBoxInteraction.setActive(true); // Activate DragBox
+            // Use crosshair cursor in select mode to indicate selection capability
+            if (mapElementOL) mapElementOL.style.cursor = 'crosshair';
+            console.log("Switched to Select Tiles mode");
         }
     });
 
@@ -656,7 +958,12 @@ document.addEventListener('DOMContentLoaded', () => {
     populateTilesetList(layer0Id);
     updateSelectionActionsVisibility();
     updateSelectedTileCountDisplay();
-    if (mapElementOL) mapElementOL.style.cursor = 'crosshair';
+    // Initial mode is 'select', but DragPan is active and DragBox is inactive by default.
+    // Click handler works, DragBox needs mode switch.
+    // Let's set the initial cursor based on the initial state (DragPan active).
+    if (mapElementOL) mapElementOL.style.cursor = 'grab'; // Initial cursor matches initial DragPan state
+    interactionModeBtn.textContent = 'Mode: Pan Map'; // Initial button text reflects initial state
+    currentInteractionMode = 'pan'; // Set initial mode state variable correctly
 
     initializeOpenGlobus(); // Initialize Globus early but keep hidden
 
