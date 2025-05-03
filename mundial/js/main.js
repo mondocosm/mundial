@@ -1731,22 +1731,26 @@ if (profileBtn && profilePanel) { // Ensure button and panel exist
     // Ensure variables are defined before adding listeners
     if (mapViewBtn && mapPanel) {
         mapViewBtn.addEventListener('click', () => togglePanelVisibility(mapPanel, mapViewBtn));
-        // Set initial active state based on initial display style
-        if (mapPanel.style.display !== 'none') { setActiveButton(mapViewBtn); }
+        // Force map panel visible initially and set button active
+        mapPanel.style.display = 'block';
+        setActiveButton(mapViewBtn);
     } else {
         console.warn("Map button or panel not found for event listener setup.");
     }
 
     if (globeViewBtn && globePanel) {
         globeViewBtn.addEventListener('click', () => togglePanelVisibility(globePanel, globeViewBtn));
-        if (globePanel.style.display !== 'none') { setActiveButton(globeViewBtn); }
+        // Ensure globe panel is visible initially, but don't activate button (map is default)
+        globePanel.style.display = 'block';
+        // if (globePanel.style.display !== 'none') { setActiveButton(globeViewBtn); } // Keep globe button inactive initially
     } else {
          console.warn("Globe button or panel not found for event listener setup.");
     }
 
     if (socialBtn && socialPanel) {
         socialBtn.addEventListener('click', () => togglePanelVisibility(socialPanel, socialBtn));
-        // No initial active state needed as it starts hidden
+        // Ensure social panel starts hidden
+        socialPanel.style.display = 'none';
     } else {
          console.warn("Social button or panel not found for event listener setup.");
     }
