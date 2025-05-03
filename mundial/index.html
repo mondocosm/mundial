@@ -9,373 +9,34 @@
     <!-- <link href="lib/cesium/Widgets/widgets.css" rel="stylesheet"> -->
     <!-- OpenGlobus CSS -->
     <link rel="stylesheet" href="../packages/openglobus/lib/@openglobus/og.css" type="text/css">
-   <style>
-/* Basic Reset & Body */
-body {
-   margin: 0;
-   padding: 0;
-   font-family: sans-serif;
-   background-color: #222; /* Dark background */
-   color: #eee; /* Light base text */
-}
-
-/* Map/Globe View Panels */
-.view-panel {
-    position: absolute;
-    top: 60px; /* Position below layer switcher */
-    bottom: 10px;
-    width: calc(50% - 15px); /* Adjusted map width */
-    background: rgba(50, 50, 50, 0.9);
-    border: 1px solid #555;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-    box-sizing: border-box;
-    overflow: hidden; /* Hide overflow initially */
-    resize: both; /* Allow resizing */
-    min-width: 50px; /* Allow smaller minimize */
-    min-height: 50px; /* Allow smaller minimize */
-    z-index: 990; /* Below control panels */
-}
-#map-panel {
-    left: 10px;
-}
-#globe-panel {
-    right: 10px; /* Position on the right */
-    width: calc(50% - 15px); /* Adjusted globe width */
-}
-
-/* Inner Map/Globe Containers */
-#map, #globusContainer {
-   position: absolute; /* Position relative to panel */
-   top: 30px; /* Below panel header */
-   left: 0;
-   bottom: 0;
-   right: 0;
-   width: 100%; /* Fill panel content area */
-   height: calc(100% - 30px); /* Fill panel content area */
-   overflow: hidden;
-   /* Remove background color if panel has one */
-}
-
-/* Adjust panel header style slightly for view panels */
-.view-panel .panel-header {
-    height: 30px; /* Fixed header height */
-    padding: 0 10px; /* Adjust padding */
-    line-height: 30px; /* Center text vertically */
-}
-.view-panel .panel-header h4 {
-     font-size: 0.9em; /* Slightly smaller title */
-}
-
-/* Control Panels */
-.control-panel {
-   position: absolute;
-   width: 220px;
-   min-width: 180px; /* Prevent getting too narrow */
-   min-height: 40px; /* Minimum height for header */
-   background: rgba(50, 50, 50, 0.9); /* Dark background */
-   color: #eee;
-   /* padding: 10px; Moved to panel-content */
-   border-radius: 5px;
-   border: 1px solid #555; /* Lighter border */
-   box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-   font-size: 14px; /* Base font size */
-   box-sizing: border-box;
-   overflow: auto; /* Changed from hidden to allow resize */
-   resize: vertical; /* Allow vertical resizing */
-}
-
-#layer-switcher { top: 10px; left: 10px; z-index: 1000; }
-
-#user-layers-panel { top: 10px; right: 10px; z-index: 999; }
-#app-controls { bottom: 10px; right: 10px; z-index: 998; }
-
-/* Panel Headers */
-.panel-header {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   /* margin-bottom: 5px; Removed, padding handles spacing */
-   padding: 5px 10px; /* Add padding to header */
-   background-color: rgba(60, 60, 60, 0.95); /* Slightly different header background */
-   border-bottom: 1px solid #555; /* Separator */
-   cursor: move; /* Indicate draggable */
-}
-.panel-header h4, .panel-header h5, .panel-header h2 { /* Target h2, h4, h5 */
-   margin: 0;
-   color: #eee;
-   font-weight: bold;
-   flex-grow: 1; /* Allow title to take space */
-   font-size: 1em; /* Consistent header font size relative to panel base */
-   line-height: 1.2; /* Adjust line height for headers */
-}
-
-/* Panel Content */
-.panel-content {
-    padding: 10px; /* Original panel padding */
-    display: block; /* Default state */
-}
-.minimized .panel-content {
-    display: none; /* Hide content when minimized */
-}
-/* Ensure minimized view panels shrink and hide content */
-.view-panel.minimized {
-    height: 30px !important; /* Force height to header height */
-    min-height: 30px; /* Override min-height */
-    width: 220px !important; /* Set a fixed minimized width like control panels */
-    min-width: 180px; /* Override min-width */
-    resize: none; /* Disable resize when minimized */
-    overflow: hidden;
-}
-.view-panel.minimized #map,
-.view-panel.minimized #globusContainer {
-    display: none; /* Hide map/globe content */
-}
-
-/* Maximized Panel Style */
-.view-panel.maximized {
-    top: 10px !important; /* Override top */
-    left: 10px !important; /* Override left */
-    right: 10px !important; /* Override right */
-    bottom: 10px !important; /* Override bottom */
-    width: calc(100% - 20px) !important; /* Full width */
-    height: calc(100% - 20px) !important; /* Full height */
-    z-index: 1010 !important; /* Bring to front */
-    resize: none; /* Disable resize when maximized */
-}
-
-
-/* Buttons */
-button {
-   padding: 5px 8px;
-   cursor: pointer;
-   background-color: #555;
-   color: #eee;
-   border: 1px solid #777;
-   border-radius: 3px;
-   line-height: 1; /* Ensure consistent button height */
-}
-button:hover { background-color: #666; }
-button:disabled { background-color: #444; color: #888; cursor: not-allowed; border-color: #666; }
-
-.add-btn {
-   font-size: 16px;
-   font-weight: bold;
-   padding: 0 6px;
-   /* Inherits dark button styles */
-}
-
-.settings-btn-small {
-   font-size: 12px;
-   padding: 1px 4px;
-   vertical-align: middle;
-   /* Inherits dark button styles */
-   /* margin-left is handled dynamically in JS */
-}
-
-.minimize-btn {
-    font-size: 14px;
-    font-weight: bold;
-    padding: 0 6px;
-    margin-left: 5px; /* Space from title */
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.maximize-btn { /* Style similar to minimize */
-    font-size: 14px;
-    font-weight: bold;
-    padding: 0 6px;
-    margin-left: 5px; /* Space from title or other buttons */
-    flex-shrink: 0;
-}
-
-/* Inputs & Selects */
-select, input[type="text"], input[type="url"], textarea {
-   padding: 4px;
-   margin-bottom: 5px;
-   width: 100%;
-   box-sizing: border-box;
-   background-color: #444;
-   color: #eee;
-   border: 1px solid #666;
-   border-radius: 3px;
-}
-input[type="color"] {
-   padding: 0;
-   border: 1px solid #666;
-   height: 25px;
-   width: 40px; /* Keep specific size */
-   vertical-align: middle;
-   cursor: pointer;
-   background-color: #444; /* Match other inputs */
-}
-input::placeholder, textarea::placeholder { color: #aaa; }
-
-/* User Layer List */
-#user-layer-list {
-   margin-bottom: 10px;
-   max-height: 150px;
-   overflow-y: auto;
-   border: 1px solid #555;
-   padding: 5px;
-   background: #444; /* Match tileset list */
-}
-#user-layer-list .layer-item {
-   padding: 4px 6px;
-   margin-bottom: 2px;
-   cursor: pointer;
-   display: flex;
-   align-items: center;
-   /* justify-content: space-between; Removed for left alignment */
-}
-#user-layer-list .layer-item:hover { background-color: #555; }
-#user-layer-list .layer-item.selected {
-   background-color: #5a5a5a; /* Darker highlight */
-   font-weight: bold;
-}
-#user-layer-list .layer-item input[type="checkbox"] {
-   width: auto;
-   cursor: pointer;
-   margin-right: 5px; /* Consistent spacing */
-}
-#user-layer-list .layer-item span {
-   flex-grow: 1; /* Allow name to take space */
-}
-
-/* Tileset List */
-#tileset-list {
-   height: 100px;
-   overflow-y: auto;
-   border: 1px solid #555;
-   margin-bottom: 10px;
-   padding: 5px;
-   background: #444;
-}
-#tileset-list div { /* Style for each tileset item */
-   padding: 2px 4px;
-   margin-bottom: 2px;
-   color: #eee;
-   display: flex;
-   align-items: center;
-   cursor: default; /* Default cursor for the row */
-}
-#tileset-list div:hover { background-color: #555; }
-#tileset-list div input[type="checkbox"] { /* Target checkbox specifically */
-     width: auto;
-     cursor: pointer;
-     margin-right: 5px; /* Add margin after checkbox */
-     /* margin-left: 5px; Removed */
-}
-#tileset-list div span { /* Target name span specifically */
-   flex-grow: 1; /* Allow name to take up space */
-   cursor: pointer; /* Make name clickable for zoom */
-}
-#tileset-list div .button-container { /* Container for buttons */
-   margin-left: 5px;
-}
-.tileset-item.highlighted { /* Style for highlighted list item */
-   background-color: #6a6a6a; /* Slightly lighter highlight than layer selection */
-   font-weight: bold;
-}
-
-
-/* Modal Styles */
-/* Modal Styles (Now used for Tileset Details Side Panel) */
-.modal { /* Keep general modal class for show/hide */
-   display: none; /* Initially hidden */
-   /* Base positioning moved to ID selector below */
-}
-
-/* Position the specific details modal */
-#tileset-details-modal {
-    position: absolute;
-    z-index: 1001; /* Above layer switcher */
-    width: 220px; /* Match other control panels */
-    bottom: 90px; /* Position above app-controls */
-    right: 10px;  /* Align with app-controls */
-    /* Inherits .control-panel styles for background, border etc. */
-}
-.modal-content {
-   /* Style the content box */
-   /* background: rgba(50, 50, 50, 0.9); Moved to .control-panel */
-   /* color: #eee; Moved to .control-panel */
-   padding: 10px; /* Content padding */
-   /* border: 1px solid #555; Moved to .control-panel */
-   /* border-radius: 5px; Moved to .control-panel */
-   /* box-shadow: 0 2px 5px rgba(0,0,0,0.5); Moved to .control-panel */
-   box-sizing: border-box;
-   /* Width and positioning are now handled by #tileset-details-modal */
-   /* Add specific styles if needed, different from panel-content */
-}
-.modal-content label { /* Keep specific label style if needed */
-    font-weight: bold;
-    margin-right: 5px;
-    color: #eee;
-}
-/* .modal-content h2 styling removed - now handled by .panel-header h2 */
-.close-btn { /* Style close button like minimize */
-   color: #eee;
-   /* float: right; Handled by flexbox */
-   font-size: 14px;
-   font-weight: bold;
-   line-height: 1;
-   /* margin-top: -5px; */
-   padding: 0 6px;
-   margin-left: 5px;
-   background: none;
-   border: none;
-   cursor: pointer;
-}
-.close-btn:hover {
-   color: #fff;
-   background: none;
-}
-
-/* Specific Modal Elements */
-#settings-color-picker {
-    vertical-align: middle;
-    margin-left: 5px;
-    /* Inherits dark input styles */
-}
-.modal-content small { /* Style small text in modal */
-   color: #bbb;
-}
-.modal-content hr { /* Style horizontal rules in modal */
-   border: 0;
-   border-top: 1px solid #555;
-   margin: 15px 0;
-}
-
-
-/* Tileset Details Modal Specifics */
-.modal-section {
-   margin-bottom: 15px; /* Space between sections */
-}
-.modal-section label {
-   display: block; /* Label on its own line */
-   margin-bottom: 3px;
-   font-weight: bold;
-}
-.modal-section span { /* For displaying data like coords */
-    display: inline-block;
-    margin-left: 5px;
-    color: #ccc; /* Lighter color for displayed data */
-}
-.modal-actions {
-    margin-top: 20px;
-    text-align: left; /* Align label/color picker left */
-}
-.modal-actions label {
-    display: inline-block; /* Keep label inline */
-    margin-right: 5px;
-}
-   </style>
+    <link rel="stylesheet" href="css/style.css"> <!-- Link to external CSS -->
 </head>
 <body>
+<header class="top-toolbar">
+        <div class="toolbar-left"> <!-- Group title and search -->
+            <div class="toolbar-title">MUNDIAL</div>
+            <div class="toolbar-center"> <!-- Keep class for styling, but it's not centered globally now -->
+                <input type="text" class="toolbar-input" placeholder="Search or enter command...">
+            </div>
+        </div>
+        <!-- Removed nav class="toolbar-nav" -->
+        <div class="toolbar-spacer"></div> <!-- Spacer to push buttons right -->
+        <div class="toolbar-view-buttons"> <!-- Buttons on the far right -->
+            <button class="toolbar-button" id="social-btn">Social</button>
+            <button class="toolbar-button" id="map-view-btn">Map</button>
+            <button class="toolbar-button active" id="globe-view-btn">Globe</button> <!-- Start active -->
+            <button class="toolbar-button" id="xr-view-btn">XR</button>
+            <button class="toolbar-button" id="layers-btn">Layers</button>
+            <button class="toolbar-button" id="profile-btn">Profile</button>
+            <button class="toolbar-button" id="settings-btn">Settings</button> <!-- Added Settings Button -->
+<button class="toolbar-button" id="signin-btn">Sign In</button>
+            <!-- Sign In button will be added next -->
+        </div>
+    </header>
 
 
     <!-- Map View Panel -->
-    <div id="map-panel" class="view-panel">
+    <div id="map-panel" class="view-panel" style="display: none;"> <!-- Start hidden -->
         <div class="panel-header">
             <h4>2D Map View</h4>
             <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
@@ -386,19 +47,57 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     </div>
 
     <!-- Globe View Panel -->
-    <div id="globe-panel" class="view-panel">
+    <div id="globe-panel" class="view-panel" style="display: block;"> <!-- Start visible -->
          <div class="panel-header">
+<!-- Misplaced button removed -->
             <h4>3D Globe View</h4>
             <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
             <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
         <div id="globusContainer"></div> <!-- OpenGlobus target -->
     </div>
+<!-- Social Panel (Initially Hidden) -->
+    <div id="social-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Social Feed</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <!-- Gun.js Chat Interface -->
+             <div id="chat-messages" style="height: 200px; overflow-y: scroll; border: 1px solid #555; margin-bottom: 10px; padding: 5px; background: #333;">
+                 <!-- Messages will appear here -->
+             </div>
+             <input type="text" id="chat-input" placeholder="Type message..." style="width: calc(100% - 70px); margin-right: 5px;">
+             <button id="send-message-btn" style="width: 60px;">Send</button>
+             <!-- User Authentication (Simplified) -->
+             <div id="auth-section" style="margin-top: 15px;">
+                 <input type="text" id="username-input" placeholder="Username" style="width: calc(50% - 5px); margin-right: 5px;">
+                 <input type="password" id="password-input" placeholder="Password" style="width: calc(50% - 5px);">
+                 <button id="signup-btn" style="width: calc(50% - 5px); margin-top: 5px; margin-right: 5px;">Sign Up</button>
+                 <button id="login-btn" style="width: calc(50% - 5px); margin-top: 5px;">Log In</button>
+                 <button id="logout-btn" style="width: 100%; margin-top: 5px; display: none;">Log Out</button>
+                 <div id="auth-status" style="margin-top: 5px;">Status: Not logged in</div>
+             </div>
+         </div>
+    </div>
 
     <div id="layer-switcher" class="control-panel">
         <div class="panel-header">
              <h4>Maps</h4>
              <button class="minimize-btn" title="Minimize/Expand">-</button>
+<!-- Profile Panel (Placeholder - Initially Hidden) -->
+    <div id="profile-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Profile</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <p>User profile information will go here.</p>
+             <!-- Placeholder for profile details, settings, etc. -->
+         </div>
+    </div>
         </div>
         <div class="panel-content">
             <select id="base-layer-select">
@@ -424,7 +123,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             <div style="flex-grow: 1;"></div> <!-- Spacer to push minimize button right -->
             <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
-        <div class="panel-content">
+        <div class="panel-content" style="display: none;"> <!-- Start minimized -->
             <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #555; padding: 5px; background: #444;"> <!-- Adjusted styles -->
                 <!-- Layer items will be added here by JS -->
                 <!-- Removed static Layer0 item -->
@@ -458,6 +157,39 @@ input::placeholder, textarea::placeholder { color: #aaa; }
             <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
             <button id="settings-btn" style="width: 100%;" disabled title="Settings not yet implemented">Settings</button>
          </div>
+    </div>
+<!-- Settings Panel -->
+    <div id="settings-panel" class="control-panel" style="display: none;"> <!-- Start hidden -->
+        <div class="panel-header">
+            <h4>Settings</h4>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <h5>Start Location</h5>
+            <div>
+                <label for="setting-start-lon">Lon:</label>
+                <input type="number" id="setting-start-lon" step="any">
+            </div>
+            <div>
+                <label for="setting-start-lat">Lat:</label>
+                <input type="number" id="setting-start-lat" step="any">
+            </div>
+            <div>
+                <label for="setting-start-zoom">Zoom:</label>
+                <input type="number" id="setting-start-zoom" min="0" max="22" step="1">
+            </div>
+            <button id="setting-set-start-location-btn" style="margin-top: 5px;">Set Current View as Start</button>
+            <hr>
+            <h5>Grid Settings</h5>
+            <div>
+                <label for="setting-grid-visible">Grid Visible (ZL >= 16):</label>
+                <input type="checkbox" id="setting-grid-visible" checked>
+            </div>
+            <div>
+                <label for="setting-grid-weight">Grid Line Weight:</label>
+                <input type="number" id="setting-grid-weight" min="0.1" max="5" step="0.1" value="0.5">
+            </div>
+        </div>
     </div>
 
     <!-- Tileset Details Modal (Styled as Panel) -->
@@ -504,6 +236,9 @@ input::placeholder, textarea::placeholder { color: #aaa; }
                 <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
             </div>
 
+<!-- Gun.js and SEA -->
+    <script src="../packages/gun/gun.js"></script>
+    <script src="../packages/gun/sea.js"></script>
             <hr>
 
             <div class="modal-actions">
@@ -524,7 +259,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     <!-- OpenGlobus JS (UMD build) -->
     <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
     <!-- Main Application Logic -->
-    <script type="module" src="main.js"></script>
+    <script src="js/main.js"></script> <!-- Removed type="module" for testing -->
 
 </body>
 </html>
