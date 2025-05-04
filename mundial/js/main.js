@@ -56,7 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const GRID_VISIBILITY_MIN_ZOOM = 16;
     const selectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(200, 200, 200, 0.5)' }) });
     const selectionSource = new ol.source.Vector();
-    const selectionLayer = new ol.layer.Vector({ source: selectionSource, style: selectionStyle, title: 'selection', zIndex: 3 });
+    const groupSelectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(0, 255, 255, 0.5)' }) }); // Cyan fill for selected groups
+    const selectionLayer = new ol.layer.Vector({
+        source: selectionSource,
+        style: function(feature) {
+            // Use cyan for selected groups, grey for individual selections
+            return feature.get('isGroupSelection') ? groupSelectionStyle : selectionStyle;
+        },
+        title: 'selection',
+        zIndex: 3
+    });
     const highlightStyle = new ol.style.Style({
         stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 0, 0.8)', width: 4 }),
         fill: new ol.style.Fill({ color: 'rgba(255, 255, 0, 0.2)' }), zIndex: 4
@@ -72,7 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const layer0Id = 'layer-0';
     const layer0Name = 'Layer 0';
     const layer0Source = new ol.source.Vector();
-    const tilesetFeatureStyle = new ol.style.Style({ stroke: new ol.style.Stroke({ color: 'rgba(0, 128, 128, 0.9)', width: 3 }) });
+    const tilesetFeatureStyle = new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: 'rgba(0, 128, 128, 0.9)', width: 3 }),
+        fill: new ol.style.Fill({ color: 'rgba(0, 0, 0, 0.0)' }) // Add transparent fill for hit detection
+    });
     const layer0Layer = new ol.layer.Vector({ source: layer0Source, style: tilesetFeatureStyle, title: layer0Id, zIndex: 2, visible: true });
     layer0Layer.set('userLayerName', layer0Name);
     const userLayers = { [layer0Id]: { name: layer0Name, layer: layer0Layer, tilesetCount: 0 } };
@@ -869,6 +881,72 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 newFeature.setId(tileId);
                 newFeature.set('isIndividualSelection', true); // Mark as individual selection
                 selectionSource.addFeature(newFeature);
+// --- Tileset Details Modal Function ---
+    function openTilesetDetailsModal(feature) {
+        if (!feature) {
+            console.error("openTilesetDetailsModal called with invalid feature.");
+            return;
+        }
+        const groupId = feature.get('tilesetGroupId');
+        const name = feature.get('tilesetName') || 'Unnamed Tileset';
+        const color = feature.get('color') || '#008080'; // Default color if none saved
+        const imageUrl = feature.get('imageUrl') || '';
+        const linkUrl = feature.get('linkUrl') || '';
+        const tags = feature.get('tags') || '';
+
+        if (!groupId) {
+            console.error("Cannot open details modal: Feature is missing tilesetGroupId.", feature);
+            return;
+        }
+
+        console.log(`DEBUG: Opening details modal for GroupID: ${groupId}, Name: ${name}`); // DEBUG LOG
+
+        currentEditingGroupId = groupId; // Set the global editing context
+
+        // Populate modal fields
+        detailsTilesetNameInput.value = name;
+        detailsColorPicker.value = color; // Set color picker value
+        detailsTilesetImageUrlInput.value = imageUrl;
+        detailsTilesetLinkInput.value = linkUrl;
+        detailsTilesetTagsTextarea.value = tags;
+
+        // Display image if URL exists
+        if (imageUrl) {
+            detailsTilesetImage.src = imageUrl;
+            detailsTilesetImage.style.display = 'block';
+        } else {
+            detailsTilesetImage.style.display = 'none';
+            detailsTilesetImage.src = '';
+        }
+
+        // --- Calculate and display other info (Placeholder) ---
+        // Get all features for this group to calculate coords/count
+        const layer = userLayers[selectedLayerId]?.layer;
+        let tileCount = 0;
+        let coordsStr = 'N/A';
+        if (layer) {
+            const groupFeatures = layer.getSource().getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+            tileCount = groupFeatures.length;
+            if (tileCount > 0) {
+                 // Example: Get coords of the first tile in the group
+                 const firstTileId = groupFeatures[0].get('tileId');
+                 if (firstTileId) {
+                     const tileCoord = firstTileId.split('-').map(Number);
+                     const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
+                     const center = ol.extent.getCenter(tileExtent);
+                     const centerLonLat = ol.proj.toLonLat(center);
+                     coordsStr = `~ ${centerLonLat[1].toFixed(4)}, ${centerLonLat[0].toFixed(4)}`; // Lat, Lon
+                 }
+            }
+        }
+        detailsTilesetCoordsSpan.textContent = coordsStr;
+        detailsLocationInfoSpan.textContent = 'Loading...'; // Placeholder for reverse geocoding
+        // TODO: Implement reverse geocoding if needed
+
+        // Display the modal
+        tilesetDetailsModal.style.display = 'block';
+    }
+    // --- End Tileset Details Modal Function ---
                 // console.log(`Added tile via drag: ${tileId}`);
             } else {
                  // console.log(`Skipping saved tile during drag: ${tileId}`);
@@ -919,6 +997,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         // 2. Handle the click based on what was hit
         if (clickedSavedFeature && clickedGroupId) {
             // --- Clicked on a SAVED tileset group ---
+console.log(`DEBUG: Click detected on saved feature. GroupID: ${clickedGroupId}, Feature:`, clickedSavedFeature); // DEBUG LOG
             console.log(`Clicked on saved tileset group: ${clickedGroupId}`);
             // Action: Clear everything currently selected and select this group.
             selectionSource.clear(); // Clear previous selections (individual or other group)
@@ -941,6 +1020,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
             if (featuresToAdd.length > 0) {
                 selectionSource.addFeatures(featuresToAdd);
                 highlightListItem(clickedGroupId); // Highlight the new group in the list
+console.log(`DEBUG: Calling openTilesetDetailsModal for feature:`, clickedSavedFeature); // DEBUG LOG
                 openTilesetDetailsModal(clickedSavedFeature); // <-- ADDED: Open modal on click
             } else { console.warn(`No features found for group ${clickedGroupId} during selection mapping.`); }
 
@@ -1049,6 +1129,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     // let selectedLayerId = layer0Id; // Moved declaration earlier
     let tilesetFeatureCounter = 0;
     function populateTilesetList(layerId) {
+console.log(`DEBUG: populateTilesetList called for layer ${layerId}`); // DEBUG LOG
         tilesetListDiv.innerHTML = '';
         const layerInfo = userLayers[layerId];
         if (!layerInfo || !layerInfo.layer) { tilesetListDiv.innerHTML = '<small><i>Invalid layer selected.</i></small>'; return; }
@@ -1065,6 +1146,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 if (!groupedTilesets[groupId].color) groupedTilesets[groupId].color = feature.get('color');
             } else { console.warn("Feature found without a tilesetGroupId:", feature.getId()); }
         });
+console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
         if (Object.keys(groupedTilesets).length === 0) { tilesetListDiv.innerHTML = '<small><i>No tilesets saved in this layer.</i></small>'; return; }
         Object.entries(groupedTilesets).forEach(([groupId, groupData]) => {
             const itemDiv = document.createElement('div');
@@ -1404,6 +1486,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                  console.error("Critical error: Invalid tileId found during feature cloning for save. Skipping feature:", feature.getId());
                  return; // Skip this feature if ID is invalid
             }
+console.log(`DEBUG: Saving selection. Assigning Name: ${tilesetName}, GroupID: ${tilesetGroupId}`); // DEBUG LOG
             const clonedFeature = feature.clone(); // Clone the selection feature
             const featureId = `tileset-tile-${tilesetFeatureCounter++}`; clonedFeature.setId(featureId); // New unique ID for the saved feature
             clonedFeature.set('tilesetName', tilesetName);
@@ -1451,8 +1534,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                         altitude: 0 // Explicitly set altitude for the entity
                     });
                     // Add to a temporary array for bulk addition later
-                    if (!window.ogEntitiesToAdd) window.ogEntitiesToAdd = []; // Ensure array exists (temporary fix)
-                    window.ogEntitiesToAdd.push(ogEntity);
+                    // No need for temporary array, redraw will handle it
                 } catch (error) {
                     console.error(`Error creating OG entity for tile ${tileId}:`, error);
                 }
@@ -1462,19 +1544,25 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
 
         // Add features to OpenLayers layer
         if (featuresToAdd.length > 0) {
+console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Features:`, featuresToAdd); // DEBUG LOG
             targetSource.addFeatures(featuresToAdd);
 
-            // Add entities to OpenGlobus layer (using the temporary window array)
-            if (ogSavedTilesetsLayer && window.ogEntitiesToAdd && window.ogEntitiesToAdd.length > 0) {
-                ogSavedTilesetsLayer.addEntities(window.ogEntitiesToAdd);
-                console.log(`Added ${window.ogEntitiesToAdd.length} polyline entities to ogSavedTilesetsLayer.`);
-                if (globus.renderer) globus.renderer.draw(); // Redraw globe
-                window.ogEntitiesToAdd = []; // Clear the temporary array
+            // Trigger redraw of the OpenGlobus saved layer
+            if (ogSavedTilesetsLayer && ogSavedTilesetsLayer.redraw) {
+                 console.log("DEBUG: Calling ogSavedTilesetsLayer.redraw()"); // DEBUG LOG
+                 ogSavedTilesetsLayer.redraw();
+            } else if (globus && globus.renderer) {
+                 console.log("DEBUG: Calling globus.renderer.draw() as fallback redraw."); // DEBUG LOG
+                 globus.renderer.draw(); // Fallback redraw
             }
 
             userLayers[selectedLayerId].tilesetCount = (userLayers[selectedLayerId].tilesetCount || 0) + 1;
             selectionSource.clear(); // Clear selection after successful save
-            populateTilesetList(selectedLayerId);
+            // Add a small delay before populating list to allow source update
+            setTimeout(() => {
+                 console.log("DEBUG: Calling populateTilesetList after delay."); // DEBUG LOG
+                 populateTilesetList(selectedLayerId);
+            }, 100); // 100ms delay
             updateSelectedTileCountDisplay(); // Update UI (count to 0, hide actions)
             tilesetNameInput.value = '';
             console.log(`Saved ${featuresToAdd.length} tiles as "${tilesetName}" to layer ${selectedLayerId}`);
@@ -2057,8 +2145,6 @@ if (profileBtn && profilePanel) { // Ensure button and panel exist
 // Removed duplicate/misplaced Gun.js logic blocks.
 // The correct block will be inserted inside DOMContentLoaded.
 
-}); // End DOMContentLoaded
-
 // --- Settings Panel Logic ---
     function loadSettings() {
         // Load Start Location
@@ -2171,3 +2257,5 @@ if (profileBtn && profilePanel) { // Ensure button and panel exist
     // For now, let's assume it's done and call it (might need adjustment)
     // TODO: Move this call to the correct place after map/globe init
     // applyStartLocationSettings();
+// --- End Settings Panel Logic ---
+}); // End DOMContentLoaded
