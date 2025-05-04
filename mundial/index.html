@@ -40,7 +40,6 @@
         <div class="panel-header">
             <h4>2D Map View</h4>
             <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
-            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
             <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
         <div id="map"></div> <!-- OpenLayers target -->
@@ -116,12 +115,13 @@
         </div>
     </div>
 
-    <div id="user-layers-panel" class="control-panel minimized"> <!-- Start minimized using class -->
+    <!-- MOVED: Layers Panel -->
+    <div id="user-layers-panel" class="control-panel"> <!-- Removed 'minimized' class -->
         <div class="panel-header">
             <h4 style="flex-grow: 0; margin-right: 5px;">Layers</h4> <!-- Allow h4 to shrink, add margin -->
             <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
-            <div style="flex-grow: 1;"></div> <!-- Spacer to push minimize button right -->
-            <button class="minimize-btn" title="Minimize/Expand">+</button> <!-- Start with '+' icon -->
+            <div style="flex-grow: 1;"></div> <!-- Spacer -->
+            <!-- Removed minimize button -->
         </div>
         <div class="panel-content"> <!-- Removed inline style -->
             <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #555; padding: 5px; background: #444;"> <!-- Adjusted styles -->
@@ -147,6 +147,8 @@
             <!-- Old Inline Tileset Color Picker Removed -->
         </div>
     </div>
+    <!-- END MOVED: Layers Panel -->
+
 
      <div id="app-controls" class="control-panel">
          <div class="panel-header">
@@ -155,7 +157,6 @@
          </div>
          <div class="panel-content">
             <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
-            <button id="settings-btn" style="width: 100%;" disabled title="Settings not yet implemented">Settings</button>
          </div>
     </div>
 <!-- Settings Panel -->

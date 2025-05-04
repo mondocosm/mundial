@@ -187,7 +187,6 @@ button:disabled { background-color: #444; color: #888; cursor: not-allowed; bord
     margin-left: 5px; /* Space from title or other buttons */
     flex-shrink: 0;
 }
-
 /* Inputs & Selects */
 select, input[type="text"], input[type="url"], textarea {
    padding: 4px;
@@ -498,3 +497,7 @@ body {
 /* .control-panel {
     top: 60px;
 } */
+/* Hide dynamically added buttons in Maps panel header, except minimize */
+#layer-switcher > .panel-header > button:not(.minimize-btn) {
+    display: none !important;
+}
