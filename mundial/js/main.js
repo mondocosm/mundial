@@ -3,6 +3,16 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: DOMContentLoaded event fired."); // DEBUG LINE
 
+    // --- Settings Panel DOM Elements ---
+    const settingStartLonInput = document.getElementById('setting-start-lon'); // Added
+    const settingStartLatInput = document.getElementById('setting-start-lat'); // Added
+    const settingStartZoomInput = document.getElementById('setting-start-zoom'); // Added
+    const settingSetStartLocationBtn = document.getElementById('setting-set-start-location-btn'); // Added
+    const settingGridVisibleCheckbox = document.getElementById('setting-grid-visible'); // Added
+    const settingGridWeightInput = document.getElementById('setting-grid-weight'); // Added
+    // --- End Settings Panel DOM Elements ---
+
+
     // --- Draggable Panels ---
     function makeDraggable(elmnt) {
       let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
@@ -424,12 +434,6 @@ console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
     const detailsColorPicker = document.getElementById('details-color-picker');
     const settingsBtn = document.getElementById('settings-btn');
 const settingsPanel = document.getElementById('settings-panel'); // Added
-    const settingStartLonInput = document.getElementById('setting-start-lon'); // Added
-    const settingStartLatInput = document.getElementById('setting-start-lat'); // Added
-    const settingStartZoomInput = document.getElementById('setting-start-zoom'); // Added
-    const settingSetStartLocationBtn = document.getElementById('setting-set-start-location-btn'); // Added
-    const settingGridVisibleCheckbox = document.getElementById('setting-grid-visible'); // Added
-    const settingGridWeightInput = document.getElementById('setting-grid-weight'); // Added
 
     // Toolbar Buttons & Panels for View Toggling
     const socialBtn = document.getElementById('social-btn');
@@ -451,6 +455,72 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
 
     // const toolbarButtons = [mapViewBtn, globeViewBtn, socialBtn, layersBtn, profileBtn]; // Removed duplicate definition
     console.log("DEBUG: Finished UI Element References section."); // DEBUG LINE
+// --- Tileset Details Modal Function ---
+    function openTilesetDetailsModal(feature) {
+        if (!feature) {
+            console.error("openTilesetDetailsModal called with invalid feature.");
+            return;
+        }
+        const groupId = feature.get('tilesetGroupId');
+        const name = feature.get('tilesetName') || 'Unnamed Tileset';
+        const color = feature.get('color') || '#008080'; // Default color if none saved
+        const imageUrl = feature.get('imageUrl') || '';
+        const linkUrl = feature.get('linkUrl') || '';
+        const tags = feature.get('tags') || '';
+
+        if (!groupId) {
+            console.error("Cannot open details modal: Feature is missing tilesetGroupId.", feature);
+            return;
+        }
+
+        console.log(`DEBUG: Opening details modal for GroupID: ${groupId}, Name: ${name}`); // DEBUG LOG
+
+        currentEditingGroupId = groupId; // Set the global editing context
+
+        // Populate modal fields
+        detailsTilesetNameInput.value = name;
+        detailsColorPicker.value = color; // Set color picker value
+        detailsTilesetImageUrlInput.value = imageUrl;
+        detailsTilesetLinkInput.value = linkUrl;
+        detailsTilesetTagsTextarea.value = tags;
+
+        // Display image if URL exists
+        if (imageUrl) {
+            detailsTilesetImage.src = imageUrl;
+            detailsTilesetImage.style.display = 'block';
+        } else {
+            detailsTilesetImage.style.display = 'none';
+            detailsTilesetImage.src = '';
+        }
+
+        // --- Calculate and display other info (Placeholder) ---
+        // Get all features for this group to calculate coords/count
+        const layer = userLayers[selectedLayerId]?.layer;
+        let tileCount = 0;
+        let coordsStr = 'N/A';
+        if (layer) {
+            const groupFeatures = layer.getSource().getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+            tileCount = groupFeatures.length;
+            if (tileCount > 0) {
+                 // Example: Get coords of the first tile in the group
+                 const firstTileId = groupFeatures[0].get('tileId');
+                 if (firstTileId) {
+                     const tileCoord = firstTileId.split('-').map(Number);
+                     const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
+                     const center = ol.extent.getCenter(tileExtent);
+                     const centerLonLat = ol.proj.toLonLat(center);
+                     coordsStr = `~ ${centerLonLat[1].toFixed(4)}, ${centerLonLat[0].toFixed(4)}`; // Lat, Lon
+                 }
+            }
+        }
+        detailsTilesetCoordsSpan.textContent = coordsStr;
+        detailsLocationInfoSpan.textContent = 'Loading...'; // Placeholder for reverse geocoding
+        // TODO: Implement reverse geocoding if needed
+
+        // Display the modal
+        tilesetDetailsModal.style.setProperty('display', 'block', 'important');
+    }
+    // --- End Tileset Details Modal Function ---
 
     // --- Initialize Globe ---
     initializeOpenGlobus(); // Call the initialization function
@@ -881,72 +951,6 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 newFeature.setId(tileId);
                 newFeature.set('isIndividualSelection', true); // Mark as individual selection
                 selectionSource.addFeature(newFeature);
-// --- Tileset Details Modal Function ---
-    function openTilesetDetailsModal(feature) {
-        if (!feature) {
-            console.error("openTilesetDetailsModal called with invalid feature.");
-            return;
-        }
-        const groupId = feature.get('tilesetGroupId');
-        const name = feature.get('tilesetName') || 'Unnamed Tileset';
-        const color = feature.get('color') || '#008080'; // Default color if none saved
-        const imageUrl = feature.get('imageUrl') || '';
-        const linkUrl = feature.get('linkUrl') || '';
-        const tags = feature.get('tags') || '';
-
-        if (!groupId) {
-            console.error("Cannot open details modal: Feature is missing tilesetGroupId.", feature);
-            return;
-        }
-
-        console.log(`DEBUG: Opening details modal for GroupID: ${groupId}, Name: ${name}`); // DEBUG LOG
-
-        currentEditingGroupId = groupId; // Set the global editing context
-
-        // Populate modal fields
-        detailsTilesetNameInput.value = name;
-        detailsColorPicker.value = color; // Set color picker value
-        detailsTilesetImageUrlInput.value = imageUrl;
-        detailsTilesetLinkInput.value = linkUrl;
-        detailsTilesetTagsTextarea.value = tags;
-
-        // Display image if URL exists
-        if (imageUrl) {
-            detailsTilesetImage.src = imageUrl;
-            detailsTilesetImage.style.display = 'block';
-        } else {
-            detailsTilesetImage.style.display = 'none';
-            detailsTilesetImage.src = '';
-        }
-
-        // --- Calculate and display other info (Placeholder) ---
-        // Get all features for this group to calculate coords/count
-        const layer = userLayers[selectedLayerId]?.layer;
-        let tileCount = 0;
-        let coordsStr = 'N/A';
-        if (layer) {
-            const groupFeatures = layer.getSource().getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
-            tileCount = groupFeatures.length;
-            if (tileCount > 0) {
-                 // Example: Get coords of the first tile in the group
-                 const firstTileId = groupFeatures[0].get('tileId');
-                 if (firstTileId) {
-                     const tileCoord = firstTileId.split('-').map(Number);
-                     const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
-                     const center = ol.extent.getCenter(tileExtent);
-                     const centerLonLat = ol.proj.toLonLat(center);
-                     coordsStr = `~ ${centerLonLat[1].toFixed(4)}, ${centerLonLat[0].toFixed(4)}`; // Lat, Lon
-                 }
-            }
-        }
-        detailsTilesetCoordsSpan.textContent = coordsStr;
-        detailsLocationInfoSpan.textContent = 'Loading...'; // Placeholder for reverse geocoding
-        // TODO: Implement reverse geocoding if needed
-
-        // Display the modal
-        tilesetDetailsModal.style.display = 'block';
-    }
-    // --- End Tileset Details Modal Function ---
                 // console.log(`Added tile via drag: ${tileId}`);
             } else {
                  // console.log(`Skipping saved tile during drag: ${tileId}`);
@@ -1228,7 +1232,20 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
     tilesetListDiv.addEventListener('click', (event) => {
         const target = event.target; const itemDiv = target.closest('.tileset-item'); if (!itemDiv) return;
         const groupId = itemDiv.dataset.tilesetGroupId; if (!groupId) return;
-        if (target.tagName === 'SPAN') { zoomToTilesetGroup(groupId); }
+        if (target.tagName === 'SPAN') {
+            zoomToTilesetGroup(groupId); // Keep zoom functionality
+            // Also open the details modal
+            const layer = userLayers[selectedLayerId]?.layer;
+            if (layer) {
+                const firstFeature = layer.getSource().getFeatures().find(f => f.get('tilesetGroupId') === groupId);
+                if (firstFeature) {
+                    console.log(`DEBUG: Opening details modal from list click for GroupID: ${groupId}`); // DEBUG LOG
+                    openTilesetDetailsModal(firstFeature);
+                } else {
+                    console.warn("Could not find feature to open details modal from list click for group:", groupId);
+                }
+            }
+        }
         else if (target.innerHTML === '✏️') {
              const layer = userLayers[selectedLayerId]?.layer;
              if (layer) {
@@ -2132,6 +2149,119 @@ if (profileBtn && profilePanel) { // Ensure button and panel exist
          updateAuthUI(); // Call once on load to set the correct initial state
 
     } catch (error) {
+// --- Settings Panel Logic ---
+    function loadSettings() {
+        // Load Start Location
+        const startLon = localStorage.getItem('setting_startLon');
+        const startLat = localStorage.getItem('setting_startLat');
+        const startZoom = localStorage.getItem('setting_startZoom');
+        if (startLon !== null) settingStartLonInput.value = startLon;
+        if (startLat !== null) settingStartLatInput.value = startLat;
+        if (startZoom !== null) settingStartZoomInput.value = startZoom;
+        // Apply loaded start location (needs map/globe to be initialized)
+        // We'll call applyStartLocationSettings() after map/globe init
+
+        // Load Grid Settings
+        const gridVisible = localStorage.getItem('setting_gridVisible');
+        const gridWeight = localStorage.getItem('setting_gridWeight');
+        if (gridVisible !== null) settingGridVisibleCheckbox.checked = (gridVisible === 'true');
+        if (gridWeight !== null) settingGridWeightInput.value = gridWeight;
+        applyGridSettings(); // Apply loaded grid settings
+    }
+
+    function applyStartLocationSettings() {
+        const lon = parseFloat(settingStartLonInput.value);
+        const lat = parseFloat(settingStartLatInput.value);
+        const zoom = parseInt(settingStartZoomInput.value, 10);
+
+        if (!isNaN(lon) && !isNaN(lat) && !isNaN(zoom)) {
+            console.log(`Applying start location: Lon=${lon}, Lat=${lat}, Zoom=${zoom}`);
+            if (map && map.getView()) {
+                map.getView().setCenter(ol.proj.fromLonLat([lon, lat]));
+                map.getView().setZoom(zoom);
+            }
+            if (globus && globus.planet) {
+                 // Calculate rough altitude from zoom (needs refinement)
+                 const altitude = 5000000 / Math.pow(2, zoom - 1);
+                 globus.planet.viewLonLat(new og.LonLat(lon, lat, altitude));
+            }
+        } else {
+            console.warn("Cannot apply start location: Invalid input values.");
+        }
+    }
+
+     function applyGridSettings() {
+        const isVisible = settingGridVisibleCheckbox.checked;
+        const weight = parseFloat(settingGridWeightInput.value);
+
+        console.log(`Applying grid settings: Visible=${isVisible}, Weight=${weight}`);
+
+        // Apply visibility (assuming gridLayerZ21 and gridLayerOG exist)
+        if (gridLayerZ21) gridLayerZ21.setVisible(isVisible && map.getView().getZoom() >= GRID_VISIBILITY_MIN_ZOOM);
+        if (gridLayerOG) gridLayerOG.setVisibility(isVisible); // OG layer visibility might be simpler
+
+        // Apply line weight (requires modifying the drawTile function or layer style)
+        // For CanvasTiles, we need to update the drawTile function logic
+        if (gridLayerOG && !isNaN(weight)) {
+            // Need to modify the drawTile function itself or store weight globally
+            // For now, just log it. Re-drawing requires layer refresh.
+            console.log("Grid weight change requires layer refresh/redraw logic (TODO)");
+             // Example: Store globally (simple approach)
+             window.gridLineWeight = weight;
+             // Force redraw (might not update style immediately for CanvasTiles)
+             if (gridLayerOG.clear) gridLayerOG.clear(); // Clear existing tiles
+             if (globus && globus.renderer) globus.renderer.draw();
+        }
+         if (gridLayerZ21 && !isNaN(weight)) {
+             // For OL Vector layer, update the style
+             const newStyle = new ol.style.Style({
+                 stroke: new ol.style.Stroke({ color: 'rgba(0,0,0,0.4)', width: weight })
+             });
+             gridLayerZ21.setStyle(newStyle);
+             console.log("Updated OL grid style weight.");
+         }
+    }
+
+    // --- Settings Event Listeners ---
+    if (settingSetStartLocationBtn) {
+        settingSetStartLocationBtn.addEventListener('click', () => {
+            if (map && map.getView()) {
+                const currentCenterLonLat = ol.proj.toLonLat(map.getView().getCenter());
+                const currentZoom = map.getView().getZoom();
+                settingStartLonInput.value = currentCenterLonLat[0].toFixed(6);
+                settingStartLatInput.value = currentCenterLonLat[1].toFixed(6);
+                settingStartZoomInput.value = Math.round(currentZoom);
+                localStorage.setItem('setting_startLon', settingStartLonInput.value);
+                localStorage.setItem('setting_startLat', settingStartLatInput.value);
+                localStorage.setItem('setting_startZoom', settingStartZoomInput.value);
+                alert("Current view set as start location.");
+            }
+        });
+    }
+
+    if (settingGridVisibleCheckbox) {
+        settingGridVisibleCheckbox.addEventListener('change', () => {
+            localStorage.setItem('setting_gridVisible', settingGridVisibleCheckbox.checked);
+            applyGridSettings();
+        });
+    }
+
+     if (settingGridWeightInput) {
+        settingGridWeightInput.addEventListener('input', () => { // Use 'input' for live updates
+            localStorage.setItem('setting_gridWeight', settingGridWeightInput.value);
+            applyGridSettings(); // Apply immediately (redraw logic needed for OG)
+        });
+    }
+
+    // Load settings when the script runs (after DOM is ready)
+    loadSettings();
+
+    // Apply start location after map/globe are initialized
+    // Need to find the end of the initialization block
+    // For now, let's assume it's done and call it (might need adjustment)
+    // TODO: Move this call to the correct place after map/globe init
+    // applyStartLocationSettings();
+// --- End Settings Panel Logic ---
         console.error("Error initializing Gun.js or its components:", error);
         // Display a user-friendly message in the social panel
         const socialPanelContent = document.querySelector('#social-panel .panel-content');
