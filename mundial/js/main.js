@@ -241,6 +241,14 @@ console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
                         canvas.width = size;
                         canvas.height = size;
                         const ctx = canvas.getContext('2d');
+                        // --- Add null check for material.segment ---
+                        if (!material.segment) {
+                            console.warn("drawTile called with null material.segment for ZL21 Grid");
+                            applyTexture(canvas); // Apply empty canvas
+                            return;
+                        }
+                        // --- End null check ---
+
                         const currentTileZoom = material.segment.tileZoom;
                         const targetGridZoom = TILE_SELECTION_ZOOM; // 21
 
@@ -442,7 +450,8 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     const layersBtn = document.getElementById('layers-btn'); // Added Layers button
     const signInBtn = document.getElementById('signin-btn'); // Added Sign In button
     // const xrBtn = document.getElementById('xr-view-btn'); // XR button reference if needed later
-    // const profileBtn = document.getElementById('profile-btn'); // Profile button reference if needed later
+    const profileBtn = document.getElementById('profile-btn'); // Added Profile button reference
+    const xrViewBtn = document.getElementById('xr-view-btn'); // Added XR button reference
 
     const socialPanel = document.getElementById('social-panel');
     // const mapPanel = document.getElementById('map-panel'); // Redeclared - Removed
@@ -450,11 +459,15 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     // const layerSwitcherPanel = document.getElementById('layer-switcher'); // Redeclared - Removed
     const mapPanel = document.getElementById('map-panel'); // Added semicolon and fixed indent
     const layerSwitcherPanel = document.getElementById('layer-switcher'); // Added semicolon
+    const profilePanel = document.getElementById('profile-panel'); // Added Profile panel reference
+    const xrPanel = document.getElementById('xr-panel'); // Added XR panel reference
     // userLayersPanel is already defined above (line 196)
     // appControlsPanel is already defined above (line 204)
 
-    // const toolbarButtons = [mapViewBtn, globeViewBtn, socialBtn, layersBtn, profileBtn]; // Removed duplicate definition
+    const toolbarButtons = [mapViewBtn, globeViewBtn, socialBtn, layersBtn, signInBtn, profileBtn, xrViewBtn]; // Define toolbar buttons array including profileBtn and xrViewBtn
     console.log("DEBUG: Finished UI Element References section."); // DEBUG LINE
+
+    // This entire block (lines 470-564) is being removed from here
 // --- Tileset Details Modal Function ---
     function openTilesetDetailsModal(feature) {
         if (!feature) {
@@ -565,25 +578,9 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                     }
                     return; // Don't proceed further for saved tiles
                 }
+// Removed redundant check for saved tiles on ogSavedTilesetsLayer (CanvasTiles doesn't have getEntities)
+// The 'isTileSaved' check earlier (line ~563) using the OL source is sufficient.
 
-                // --- Check if this tile is already part of a saved tileset on the globe ---
-                let isTileSavedOnGlobe = false;
-                if (ogSavedTilesetsLayer) {
-                    isTileSavedOnGlobe = ogSavedTilesetsLayer.getEntities().some(e => e.properties?.tileId === tileId);
-                }
-
-                if (isTileSavedOnGlobe) {
-                    console.log(`Globe click on saved tile ${tileId} (found in ogSavedTilesetsLayer), cube placement prevented.`);
-                    // If an indicator cube is currently shown, remove it
-                    if (selectedTileCubeEntity) {
-                        tileCubeLayer.remove(selectedTileCubeEntity);
-                        selectedTileCubeEntity = null;
-                        console.log("Removed existing indicator cube because clicked tile is saved on globe.");
-                        if (globus.renderer) globus.renderer.draw();
-                    }
-                    return; // Don't proceed further for saved tiles
-                }
-                // --- End saved tile check ---
 
                 // Calculate tile center for cube placement
                 const tileExtentEPSG3857 = selectionTileGrid.getTileCoordExtent(tileCoord);
@@ -1783,93 +1780,6 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                         // Update OL map size after a short delay for CSS transition
                         setTimeout(() => map.updateSize(), 50);
                         console.log("Map panel expanded, updated OL size.");
-// --- Toolbar View Button Logic (Moved Here) ---
-    // Note: mapPanel, globePanel, socialPanel, mapViewBtn, globeViewBtn, socialBtn, toolbarButtons should be defined earlier
-    function setActiveButton(clickedButton) {
-        toolbarButtons.forEach(button => {
-            if (button) { button.classList.remove('active'); }
-        });
-        if (clickedButton) { clickedButton.classList.add('active'); }
-    // Variable definitions removed from here - they should be defined earlier in the UI Element References section
-    }
-
-    function togglePanelVisibility(panel, button) {
-        if (!panel) {
-             console.warn("Attempted to toggle visibility for a non-existent panel.");
-             return;
-        }
-        const isVisible = panel.style.display !== 'none';
-        panel.style.display = isVisible ? 'none' : 'block';
-
-        if (!isVisible) {
-            setActiveButton(button);
-            // Special handling for OpenGlobus resize
-            if (panel === globePanel && globus && globus.planet && globus.planet.renderer) {
-                 setTimeout(() => { globus.planet.renderer.resize(); console.log("Resized OpenGlobus after panel toggle."); }, 50);
-            }
-            // Special handling for OpenLayers map resize
-            if (panel === mapPanel && map) { // mapPanel is defined here
-                 setTimeout(() => { map.updateSize(); console.log("Updated OpenLayers map size after panel toggle."); }, 50);
-            }
-        } else {
-             // If hiding the panel, remove its active state
-             if (button) button.classList.remove('active');
-             // Optional: Set a default active button if none are active?
-             // const anyActive = toolbarButtons.some(btn => btn && btn.classList.contains('active'));
-             // if (!anyActive && mapViewBtn) setActiveButton(mapViewBtn); // Example: Default to map view active
-        }
-    }
-
-if (layersBtn && userLayersPanel) { // Ensure button and panel exist
-        layersBtn.addEventListener('click', () => togglePanelVisibility(userLayersPanel, layersBtn));
-        // Set initial active state if layers panel is visible by default
-        if (userLayersPanel.style.display !== 'none') { setActiveButton(layersBtn); }
-    } else {
-         console.warn("Layers button or panel not found for event listener setup.");
-if (profileBtn && profilePanel) { // Ensure button and panel exist
-        profileBtn.addEventListener('click', () => togglePanelVisibility(profilePanel, profileBtn));
-        // No initial active state needed as it starts hidden
-    } else {
-         console.warn("Profile button or panel not found for event listener setup.");
-    }
-    }
-    // Ensure variables are defined before adding listeners
-    if (mapViewBtn && mapPanel) {
-        mapViewBtn.addEventListener('click', () => togglePanelVisibility(mapPanel, mapViewBtn));
-        // Force map panel visible initially and set button active
-        mapPanel.style.display = 'block';
-        setActiveButton(mapViewBtn);
-    } else {
-        console.warn("Map button or panel not found for event listener setup.");
-    }
-
-    if (globeViewBtn && globePanel) {
-        globeViewBtn.addEventListener('click', () => togglePanelVisibility(globePanel, globeViewBtn));
-        // Ensure globe panel is visible initially, but don't activate button (map is default)
-        globePanel.style.display = 'block';
-        // if (globePanel.style.display !== 'none') { setActiveButton(globeViewBtn); } // Keep globe button inactive initially
-    } else {
-         console.warn("Globe button or panel not found for event listener setup.");
-    }
-
-    if (socialBtn && socialPanel) {
-        socialBtn.addEventListener('click', () => togglePanelVisibility(socialPanel, socialBtn));
-        // Ensure social panel starts hidden
-        socialPanel.style.display = 'none';
-    } else {
-         console.warn("Social button or panel not found for event listener setup.");
-    }
-// --- Sign In Button Logic ---
-    if (signInBtn) {
-        signInBtn.addEventListener('click', () => {
-            // Redirect to the auth page
-            window.location.href = '../auth/auth.html'; // Adjust path if necessary
-        });
-    } else {
-        console.warn("Sign In button not found.");
-    }
-    // --- End Sign In Button Logic ---
-    // --- End Toolbar View Button Logic ---
                     } else if (panel.id === 'globe-panel') {
                         // Trigger OG resize after a short delay
                         setTimeout(() => {

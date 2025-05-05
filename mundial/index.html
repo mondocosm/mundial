@@ -29,6 +29,7 @@
             <button class="toolbar-button" id="layers-btn">Layers</button>
             <button class="toolbar-button" id="profile-btn">Profile</button>
             <button class="toolbar-button" id="settings-btn">Settings</button> <!-- Added Settings Button -->
+            <button class="toolbar-button" id="assets-btn">Assets</button> <!-- Added Assets Button -->
 <button class="toolbar-button" id="signin-btn">Sign In</button>
             <!-- Sign In button will be added next -->
         </div>
@@ -92,9 +93,27 @@
              <button class="maximize-btn" title="Maximize/Restore">□</button>
              <button class="minimize-btn" title="Minimize/Expand">-</button>
          </div>
-         <div class="panel-content">
-             <p>User profile information will go here.</p>
-             <!-- Placeholder for profile details, settings, etc. -->
+         <div class="panel-content profile-content">
+             <div class="profile-header">
+                 <div class="profile-picture-container">
+                     <img id="profile-picture" alt="Profile Picture" class="profile-picture"> <!-- Removed src="placeholder.png" -->
+                     <!-- Add button/link to change picture later -->
+                 </div>
+                 <h5 id="profile-name" class="profile-name">User Name</h5>
+                 <!-- Add button/link to edit name later -->
+             </div>
+             <hr>
+             <div class="profile-details">
+                 <h6>Details</h6>
+                 <dl>
+                     <dt>Email:</dt>
+                     <dd id="profile-email">user@example.com</dd>
+                     <dt>Joined:</dt>
+                     <dd id="profile-joined">Jan 1, 2024</dd>
+                     <!-- Add more fields as needed -->
+                 </dl>
+                 <!-- Add sections for bio, settings, etc. later -->
+             </div>
          </div>
     </div>
         </div>
@@ -248,6 +267,22 @@
                  <!-- Save/More Settings buttons removed -->
             </div>
         </div>
+    </div>
+
+    <!-- Assets Panel (Initially Hidden) -->
+    <div id="assets-panel" class="control-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Assets</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <button id="my-assets-btn" style="width: 100%; margin-bottom: 5px;">My Assets</button>
+             <button id="asset-market-btn" style="width: 100%;">Asset Market</button>
+             <!-- Content for My Assets / Market will go here -->
+             <div id="assets-content-area" style="margin-top: 10px;">
+                 <p>Select an option above.</p>
+             </div>
+         </div>
     </div>
 
     <!-- Only include OpenLayers script -->

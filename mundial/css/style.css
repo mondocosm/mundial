@@ -501,3 +501,94 @@ body {
 #layer-switcher > .panel-header > button:not(.minimize-btn) {
     display: none !important;
 }
+/* --- Profile Panel Specific Styles --- */
+.profile-content {
+    /* Inherits padding from .panel-content */
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px; /* Space below header */
+}
+
+.profile-picture-container {
+    width: 80px; /* Adjust size as needed */
+    height: 80px;
+    border-radius: 50%; /* Circular picture */
+    overflow: hidden; /* Clip image to circle */
+    margin-right: 15px;
+    flex-shrink: 0; /* Prevent shrinking */
+    background-color: #555; /* Placeholder background */
+    border: 2px solid #777;
+}
+
+.profile-picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Scale image nicely */
+}
+
+.profile-name {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin: 0; /* Remove default margin */
+    color: #eee;
+}
+
+.profile-details {
+    margin-top: 15px;
+}
+
+.profile-details h6 {
+    margin-bottom: 5px;
+    color: #ccc;
+    font-size: 0.9em;
+    text-transform: uppercase;
+}
+
+.profile-details dl {
+    margin: 0;
+    padding: 0;
+}
+
+.profile-details dt {
+    font-weight: bold;
+    color: #bbb;
+    width: 60px; /* Adjust label width */
+    float: left;
+    clear: left;
+    margin-bottom: 5px;
+}
+
+.profile-details dd {
+    margin-left: 70px; /* Space after label */
+    margin-bottom: 5px;
+    color: #eee;
+}
+#profile-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as layer switcher */
+    width: 220px; /* Match other control panels */
+    top: 60px;  /* Below toolbar */
+    right: 10px; /* Align right */
+    /* Override view-panel styles */
+    bottom: auto; /* Remove bottom constraint */
+    left: auto; /* Remove left constraint */
+    /* Add max-height and overflow if needed */
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+    /* It still uses .view-panel for background, border, etc. */
+}
+#settings-panel {
+    /* Ensure settings panel is positioned and layered correctly */
+    position: absolute; /* Already applied by .control-panel, but explicit */
+    z-index: 1002; /* Higher than profile, modal, layer switcher, etc. */
+    /* Add positioning if needed, e.g., */
+    /* top: 60px; */
+    /* right: 10px; */
+    /* bottom: auto; */
+    /* left: auto; */
+    /* width: 220px; */ /* Already applied by .control-panel */
+}
