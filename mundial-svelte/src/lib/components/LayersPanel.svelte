@@ -1,36 +1,52 @@
 <!-- mundial-svelte/src/lib/components/LayersPanel.svelte -->
 <script lang="ts">
-  import { draggable } from '$lib/actions/draggable'; // Import the draggable action
-  import { writable } from 'svelte/store'; // Import writable for store if needed, or use local state
+  import { draggable } from '$lib/actions/draggable';
+  import { createEventDispatcher } from 'svelte';
 
-  export let id = "layers-panel"; // New ID for the actual layers panel
-  export let visible = true; // Start visible as per screenshot
-
-  // --- Layer State ---
+  // --- Local Interfaces (matching layout) ---
+  // (Alternatively, create a shared types file)
+  interface Tileset {
+    groupId: string;
+    name: string;
+  }
   interface UserLayer {
-    layerId: string; // Unique ID for the layer
+    layerId: string;
     name: string;
     isVisible: boolean;
-    isPrivate: boolean; // Example property
-    tilesets: any[]; // Placeholder for tileset data
+    isPrivate: boolean;
+    tilesets: Tileset[];
+    // olSource is managed by parent, not needed here
   }
 
-  let userLayers: UserLayer[] = []; // Local state for layers
-  let nextLayerId = 0; // Simple counter for unique IDs
+  // --- Props ---
+  export let id = "layers-panel";
+  export let visible = true;
+  export let layers: UserLayer[] = []; // Receive layers as prop
+  export let selectedLayerId: string | null = null; // Receive selected ID as prop
 
-  // --- Function to create a new layer ---
-  function createNewLayer() {
-    const newLayer: UserLayer = {
-      layerId: `layer-${nextLayerId++}`,
-      name: `Layer ${nextLayerId - 1}`,
-      isVisible: true,
-      isPrivate: false, // Default to public
-      tilesets: []
-    };
-    userLayers = [...userLayers, newLayer]; // Add to the array reactively
+  // --- Event Dispatcher ---
+  const dispatch = createEventDispatcher();
+
+  // --- Derived State ---
+  // Find the full selected layer object based on the ID prop
+  $: selectedLayer = layers.find(layer => layer.layerId === selectedLayerId) || null;
+
+  // --- Event Handlers ---
+  function handleAddLayerClick() {
+    dispatch('addlayer'); // Dispatch simple event, parent handles creation
   }
 
-  // TODO: Add functions for deleting, renaming, toggling visibility/privacy
+  function handleLayerClick(layerId: string) {
+    dispatch('selectlayer', { layerId }); // Dispatch ID in detail
+  }
+
+  // Add type MouseEvent
+  function handleZoomClick(event: MouseEvent, groupId: string) {
+      event.stopPropagation(); // Prevent layer selection when clicking button
+      dispatch('zoomtotileset', { groupId }); // Dispatch group ID in detail
+  }
+
+  // TODO: Dispatch events for rename, privacy, delete, visibility toggle
 </script>
 
 {#if visible}
@@ -38,34 +54,60 @@
 <div {id} class="control-panel layers-panel" use:draggable={{ handle: '.panel-header' }}> <!-- Add specific class -->
   <!-- Draggable action handles header interaction -->
   <div class="panel-header">
-    <h4 style="flex-grow: 0; margin-right: 5px;">Layers</h4> <!-- Allow h4 to shrink -->
-    <button on:click={createNewLayer} class="add-btn" title="Create New Layer">+</button> <!-- Add layer button -->
+    <h4 style="flex-grow: 0; margin-right: 5px;">Layers</h4>
+    <button on:click={handleAddLayerClick} class="add-btn" title="Create New Layer">+</button> <!-- Dispatch addlayer event -->
     <div style="flex-grow: 1;"></div> <!-- Spacer -->
-    <button class="minimize-btn" title="Minimize/Expand">-</button>
+    <button class="minimize-btn" title="Minimize/Expand">-</button> <!-- TODO: Implement minimize -->
   </div>
   <div class="panel-content">
-    <!-- List of User Layers -->
+    <!-- List of User Layers (Uses props) -->
     <div class="user-layer-list">
-      {#if userLayers.length === 0}
-        <small><i>No layers created yet. Click '+' to add one.</i></small>
+      {#if layers.length === 0}
+        <small><i>No layers available.</i></small>
       {:else}
-        {#each userLayers as layer (layer.layerId)}
-          <div class="layer-item">
-              <input type="checkbox" bind:checked={layer.isVisible} title="Toggle Visibility">
+        {#each layers as layer (layer.layerId)}
+          <!-- Add selected class based on prop -->
+          <div
+            class="layer-item"
+            class:selected={selectedLayerId === layer.layerId}
+            on:click={() => handleLayerClick(layer.layerId)}
+            role="button"
+            tabindex="0"
+            on:keydown={(e: KeyboardEvent) => e.key === 'Enter' && handleLayerClick(layer.layerId)}
+          >
+              <!-- TODO: Dispatch event for visibility toggle -->
+              <input type="checkbox" checked={layer.isVisible} title="Toggle Visibility" on:click|stopPropagation>
               <span class="layer-name">{layer.name}</span>
               <div class="layer-controls">
-                  <button title="Edit Name">✏️</button> <!-- TODO: Implement rename -->
-                  <button title="Toggle Privacy">{layer.isPrivate ? '🔓' : '🔒'}</button> <!-- TODO: Implement privacy toggle -->
-                  <button title="Delete Layer">🗑️</button> <!-- TODO: Implement delete -->
+                   <!-- TODO: Dispatch events for controls -->
+                  <button title="Edit Name" on:click|stopPropagation>✏️</button>
+                  <button title="Toggle Privacy" on:click|stopPropagation>{layer.isPrivate ? '🔓' : '🔒'}</button>
+                  <button title="Delete Layer" on:click|stopPropagation>🗑️</button>
               </div>
           </div>
         {/each}
       {/if}
     </div>
     <hr>
-    <h5>Tilesets in Layer:</h5> <!-- TODO: Show tilesets for SELECTED layer -->
+    <!-- Display name of the selected layer -->
+    <h5>Tilesets in: {selectedLayer ? selectedLayer.name : 'No Layer Selected'}</h5>
     <div class="tileset-list">
-        Select a layer above. <!-- Updated placeholder -->
+       {#if selectedLayer && selectedLayer.tilesets.length > 0}
+         {#each selectedLayer.tilesets as tileset (tileset.groupId)}
+           <div class="tileset-item">
+             <span>{tileset.name}</span>
+             <div class="tileset-controls">
+                <!-- Dispatch zoom event -->
+                <button title="Zoom to Tileset" on:click={(e: MouseEvent) => handleZoomClick(e, tileset.groupId)}>🔍</button>
+                <button title="Delete Tileset" on:click|stopPropagation>🗑️</button> <!-- TODO: Dispatch delete event -->
+             </div>
+           </div>
+         {/each}
+       {:else if selectedLayer}
+         <small><i>No tilesets saved in this layer yet.</i></small>
+       {:else}
+         <small><i>Select a layer above to view its tilesets.</i></small>
+       {/if}
     </div>
      <!-- Add controls for selected tilesets later -->
   </div>
@@ -130,11 +172,20 @@
       align-items: center;
       margin-bottom: 8px;
       padding: 4px;
-      background-color: rgba(70,70,70,0.5); /* Slight background for item */
+      background-color: rgba(70,70,70,0.5);
       border-radius: 3px;
+      cursor: pointer; /* Indicate clickable */
+      transition: background-color 0.2s ease;
   }
-   .layer-item input[type="checkbox"] { margin-right: 8px; }
-   .layer-name { flex-grow: 1; margin-right: 10px; }
+   .layer-item:hover {
+       background-color: rgba(80,80,80,0.7);
+   }
+   .layer-item.selected {
+       background-color: rgba(0, 100, 150, 0.6); /* Highlight selected layer */
+       border: 1px solid rgba(0, 150, 200, 0.8);
+   }
+   .layer-item input[type="checkbox"] { margin-right: 8px; cursor: pointer; }
+   .layer-name { flex-grow: 1; margin-right: 10px; pointer-events: none; }
    .layer-controls button {
        background: none; border: none; color: #ccc; cursor: pointer;
        padding: 2px 4px; font-size: 0.9em; margin-left: 3px;
@@ -144,12 +195,32 @@
    hr { border: none; border-top: 1px solid #444; margin: 10px 0; }
 
    .tileset-list {
-       font-style: italic;
-       color: #aaa;
+       /* Keep existing styles */
+       font-style: normal; /* Change from italic if needed */
+       color: #ccc; /* Adjust color if needed */
        padding: 10px;
        background-color: rgba(0,0,0,0.2);
        border-radius: 3px;
-       min-height: 50px; /* Example min height */
+       min-height: 50px;
+       max-height: 200px; /* Limit height */
+       overflow-y: auto;
    }
+   /* Keep existing .tileset-item styles */
+   .tileset-item {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       padding: 3px 5px;
+       margin-bottom: 3px;
+       background-color: rgba(80, 80, 80, 0.4);
+       border-radius: 2px;
+       font-size: 0.9em;
+   }
+   /* Keep existing .tileset-controls button styles */
+   .tileset-controls button {
+       background: none; border: none; color: #ccc; cursor: pointer;
+       padding: 1px 3px; font-size: 0.8em; margin-left: 2px;
+   }
+    .tileset-controls button:hover { color: #fff; background-color: #666; }
 
 </style>
