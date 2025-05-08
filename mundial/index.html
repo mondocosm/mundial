@@ -37,7 +37,7 @@
 
 
     <!-- Map View Panel -->
-    <div id="map-panel" class="view-panel"> <!-- Start visible -->
+    <div id="map-panel" class="view-panel" style="display: block;"> <!-- Start visible -->
         <div class="panel-header">
             <h4>2D Map View</h4>
             <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
@@ -82,11 +82,7 @@
          </div>
     </div>
 
-    <div id="layer-switcher" class="control-panel">
-        <div class="panel-header">
-             <h4>Maps</h4>
-             <button class="minimize-btn" title="Minimize/Expand">-</button>
-<!-- Profile Panel (Placeholder - Initially Hidden) -->
+    <!-- Profile Panel (Placeholder - Initially Hidden) -->
     <div id="profile-panel" class="view-panel" style="display: none;">
          <div class="panel-header">
              <h4>Profile</h4>
@@ -116,6 +112,24 @@
              </div>
          </div>
     </div>
+  
+    <!-- XR Panel (Standalone) -->
+    <div id="xr-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>XR View</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <p>XR view content will go here.</p>
+             <!-- Placeholder for XR content -->
+         </div>
+    </div>
+
+    <div id="layer-switcher" class="control-panel">
+        <div class="panel-header">
+             <h4>Maps</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
         </div>
         <div class="panel-content">
             <select id="base-layer-select">

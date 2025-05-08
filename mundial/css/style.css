@@ -10,9 +10,6 @@ body {
 /* Map/Globe View Panels */
 .view-panel {
     position: absolute;
-    top: 60px; /* Position below layer switcher */
-    bottom: 10px;
-    width: calc(50% - 15px); /* Adjusted map width */
     background: rgba(50, 50, 50, 0.9);
     border: 1px solid #555;
     border-radius: 5px;
@@ -22,26 +19,69 @@ body {
     resize: both; /* Allow resizing */
     min-width: 50px; /* Allow smaller minimize */
     min-height: 50px; /* Allow smaller minimize */
-    z-index: 990; /* Below control panels */
-}
-#social-panel { /* New: Position social panel on the left */
-    left: 10px;
-    width: 250px; /* Fixed width for social panel */
-    display: block; /* Make it visible by default */
-    /* It inherits .view-panel styles like top, bottom, background etc. */
-    /* Ensure it's resizable if needed, inherited from .view-panel */
+    z-index: 990; /* Default z-index below visible panels */
+    /* Add draggable cursor */
+    cursor: move;
 }
 
+.view-panel.visible-panel {
+    display: block !important; /* Ensure it's visible when class is applied */
+    z-index: 1005 !important; /* Ensure it's on top when visible */
+}
+
+/* Specific positioning for panels */
+#social-panel {
+    bottom: 10px;
+    right: 10px;
+    top: auto;
+    left: auto;
+    width: 250px;
+    height: auto;
+    max-height: 250px;
+    z-index: 1001;
+}
+
+/* Specific positioning for profile panel */
+#profile-panel {
+    top: 60px; /* Position below toolbar */
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    width: 250px; /* Give it a default width */
+    height: auto; /* Allow height to adjust */
+    max-height: 350px; /* Limit max height */
+    z-index: 1001;
+}
+
+/* Specific positioning for XR panel */
+#xr-panel {
+    top: calc(50% - 150px); /* Center vertically */
+    left: calc(50% - 150px); /* Center horizontally */
+    width: 300px;
+    height: 300px;
+    z-index: 1002; /* Above other panels */
+}
+
+/* Specific positioning for map panel when visible */
 #map-panel {
-    left: 270px; /* Position next to social panel (10px left + 250px width + 10px gap) */
-    right: calc(40% + 20px); /* Position left of globe panel (40% width + 10px gap + 10px right offset) */
-    width: auto; /* Let width be determined by left/right */
+    left: 10px;
+    width: calc(50% - 15px); /* Take up left half with small margin */
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
+    right: auto;
 }
+
+/* Specific positioning for globe panel when visible */
 #globe-panel {
-    right: 10px; /* Position on the far right */
-    width: 40%; /* Give globe panel 40% width */
-    left: auto; /* Ensure left is not set */
+    right: 10px; /* Position on the right */
+    width: calc(50% - 15px); /* Take up right half with small margin */
+    left: auto;
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
 }
+
 
 /* Inner Map/Globe Containers */
 #map, #globusContainer {
@@ -53,6 +93,7 @@ body {
    width: 100%; /* Fill panel content area */
    height: calc(100% - 30px); /* Fill panel content area */
    overflow: hidden;
+   z-index: 1; /* Ensure map is below embedded controls */
    /* Remove background color if panel has one */
 }
 
@@ -61,9 +102,6 @@ body {
     height: 30px; /* Fixed header height */
     padding: 0 10px; /* Adjust padding */
     line-height: 30px; /* Center text vertically */
-}
-.view-panel .panel-header h4 {
-     font-size: 0.9em; /* Slightly smaller title */
 }
 
 /* Control Panels */
@@ -89,6 +127,16 @@ body {
 #user-layers-panel { top: 160px; /* Position below layer-switcher (adjust as needed) */ left: 10px; z-index: 999; } /* Changed right to left */
 #app-controls { bottom: 10px; left: 10px; z-index: 998; } /* Changed right to left */
 
+/* Remove !important from minimized styles as they might interfere */
+.view-panel.minimized {
+    height: 30px; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+
 /* Panel Headers */
 .panel-header {
    display: flex;
@@ -99,6 +147,8 @@ body {
    background-color: rgba(60, 60, 60, 0.95); /* Slightly different header background */
    border-bottom: 1px solid #555; /* Separator */
    cursor: move; /* Indicate draggable */
+   z-index: 1010; /* Ensure headers are on top for dragging */
+   position: relative; /* Needed for z-index to work */
 }
 .panel-header h4, .panel-header h5, .panel-header h2 { /* Target h2, h4, h5 */
    margin: 0;
@@ -133,13 +183,13 @@ body {
 
 /* Maximized Panel Style */
 .view-panel.maximized {
-    top: 10px !important; /* Override top */
-    left: 10px !important; /* Override left */
-    right: 10px !important; /* Override right */
-    bottom: 10px !important; /* Override bottom */
-    width: calc(100% - 20px) !important; /* Full width */
-    height: calc(100% - 20px) !important; /* Full height */
-    z-index: 1010 !important; /* Bring to front */
+    top: 10px; /* Override top */
+    left: 10px; /* Override left */
+    right: 10px; /* Override right */
+    bottom: 10px; /* Override bottom */
+    width: calc(100% - 20px); /* Full width */
+    height: calc(100% - 20px); /* Full height */
+    z-index: 1010; /* Bring to front */
     resize: none; /* Disable resize when maximized */
 }
 
@@ -312,6 +362,32 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     bottom: 90px; /* Position above app-controls */
     right: 10px;  /* Align with app-controls */
     /* Inherits .control-panel styles for background, border etc. */
+}
+
+/* Assets Panel Positioning */
+#assets-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as layer switcher */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px); /* Position to the right of layer-switcher */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+}
+
+/* Settings Panel Positioning */
+#settings-panel {
+    position: absolute;
+    z-index: 1002; /* Higher than profile, modal, layer switcher, etc. */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px + 220px + 10px); /* Position to the right of assets-panel */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
 }
 .modal-content {
    /* Style the content box */

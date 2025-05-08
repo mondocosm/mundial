@@ -15,22 +15,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Draggable Panels ---
     function makeDraggable(elmnt) {
+      console.log(`Attempting to make element draggable: ${elmnt.id || elmnt.tagName}`); // Log when function is called
       let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
       const dragHandle = elmnt.querySelector('.panel-header') || elmnt.querySelector('h2') || elmnt;
       if (dragHandle) {
         dragHandle.style.cursor = 'move';
         dragHandle.onmousedown = dragMouseDown;
+        console.log(`Attached mousedown to drag handle for ${elmnt.id || elmnt.tagName}`); // Log when listener is attached
       } else {
         elmnt.style.cursor = 'move';
         elmnt.onmousedown = dragMouseDown;
+        console.log(`Attached mousedown directly to element ${elmnt.id || elmnt.tagName}`); // Log when listener is attached
       }
       function dragMouseDown(e) {
+        console.log(`dragMouseDown triggered for ${elmnt.id || elmnt.tagName}`); // Log when mousedown occurs
         e = e || window.event; e.preventDefault();
         pos3 = e.clientX; pos4 = e.clientY;
         document.onmouseup = closeDragElement;
         document.onmousemove = elementDrag;
+        console.log(`Attached mouseup and mousemove for ${elmnt.id || elmnt.tagName}`); // Log when move/up listeners are attached
       }
       function elementDrag(e) {
+        // console.log(`elementDrag triggered for ${elmnt.id || elmnt.tagName}`); // Log when dragging occurs (can be noisy)
         e = e || window.event; e.preventDefault();
         pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
         pos3 = e.clientX; pos4 = e.clientY;
@@ -40,7 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
         elmnt.style.bottom = ''; elmnt.style.right = '';
       }
       function closeDragElement() {
+        console.log(`closeDragElement triggered for ${elmnt.id || elmnt.tagName}`); // Log when mouseup occurs
         document.onmouseup = null; document.onmousemove = null;
+        console.log(`Removed mouseup and mousemove for ${elmnt.id || elmnt.tagName}`); // Log when move/up listeners are removed
       }
     }
 
@@ -461,11 +469,32 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     const layerSwitcherPanel = document.getElementById('layer-switcher'); // Added semicolon
     const profilePanel = document.getElementById('profile-panel'); // Added Profile panel reference
     const xrPanel = document.getElementById('xr-panel'); // Added XR panel reference
-    // userLayersPanel is already defined above (line 196)
-    // appControlsPanel is already defined above (line 204)
+    if (xrPanel) { // Ensure element exists before making it draggable
+        makeDraggable(xrPanel);
+        console.log("DEBUG: XR panel made draggable."); // DEBUG
+    } else {
+        console.warn("XR panel not found, cannot make draggable."); // DEBUG
+    }
+    // userLayersPanel is already defined above
+    // appControlsPanel is already defined above
 
     const toolbarButtons = [mapViewBtn, globeViewBtn, socialBtn, layersBtn, signInBtn, profileBtn, xrViewBtn]; // Define toolbar buttons array including profileBtn and xrViewBtn
     console.log("DEBUG: Finished UI Element References section."); // DEBUG LINE
+    
+    // Make all panels draggable
+    function applyDraggableToAllPanels() {
+        const allPanels = document.querySelectorAll('.view-panel, .control-panel');
+        allPanels.forEach(panel => {
+            makeDraggable(panel);
+            console.log(`Made panel draggable: ${panel.id}`);
+        });
+    }
+    
+    // Apply immediately
+    applyDraggableToAllPanels();
+    
+    // Also apply after a short delay to ensure elements created dynamically are also draggable
+    setTimeout(applyDraggableToAllPanels, 500);
 
     // This entire block (lines 470-564) is being removed from here
 // --- Tileset Details Modal Function ---
@@ -657,8 +686,35 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     function simpleToggle(panel, button) {
         if (!panel || !button) return; // Ensure elements exist
         const isActive = panel.style.display !== 'none';
-        panel.style.display = isActive ? 'none' : 'block';
-        button.classList.toggle('active', !isActive);
+        
+        if (isActive) {
+            // Hide the panel
+            panel.style.display = 'none';
+            button.classList.remove('active');
+            console.log(`Panel hidden: ${panel.id || panel.tagName}`);
+        } else {
+            // Show the panel
+            panel.style.display = 'block';
+            button.classList.add('active');
+            console.log(`Panel shown: ${panel.id || panel.tagName}`);
+
+            // Re-apply draggable after showing the panel
+            makeDraggable(panel);
+
+            // Bring the shown panel to front
+            const allVisiblePanels = document.querySelectorAll('.view-panel[style*="display: block"], .control-panel[style*="display: block"]');
+            allVisiblePanels.forEach(p => {
+                if (p !== panel) {
+                    // Lower the z-index of other visible panels
+                    const currentZIndex = parseInt(getComputedStyle(p).zIndex) || 990;
+                    if (currentZIndex === 1005) { // Only lower if it was previously brought to front
+                         p.style.zIndex = 1000; // Set to a standard visible z-index
+                    }
+                }
+            });
+            panel.style.zIndex = 1005; // Bring the clicked panel to front
+            console.log(`Brought panel to front: ${panel.id || panel.tagName}`);
+        }
     }
 
     // Social Button
@@ -736,6 +792,28 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
          if (userLayersPanel.style.display !== 'none') {
              layersBtn.classList.add('active');
          }
+    }
+
+    // Profile Button
+    console.log("Checking Profile Button elements:", profileBtn, profilePanel); // DEBUG
+    if (profileBtn && profilePanel) {
+        console.log("Attaching listener to Profile Button"); // DEBUG
+        profileBtn.addEventListener('click', () => {
+            console.log("Profile Button clicked!"); // DEBUG
+            simpleToggle(profilePanel, profileBtn);
+        });
+        // Initial state: hidden, button inactive
+    }
+    
+    // XR Button
+    console.log("Checking XR Button elements:", xrViewBtn, xrPanel); // DEBUG
+    if (xrViewBtn && xrPanel) {
+        console.log("Attaching listener to XR Button"); // DEBUG
+        xrViewBtn.addEventListener('click', () => {
+            console.log("XR Button clicked!"); // DEBUG
+            simpleToggle(xrPanel, xrViewBtn);
+        });
+        // Initial state: hidden, button inactive
     }
 
     // Sign In Button
@@ -1723,10 +1801,11 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
 
     function togglePanelVisibility(panel, button) {
         if (!panel) return;
-        const isVisible = panel.style.display !== 'none';
-        panel.style.display = isVisible ? 'none' : 'block';
+        const isVisible = panel.classList.contains('visible-panel');
 
         if (!isVisible) {
+            // Show the panel by adding the visible-panel class
+            panel.classList.add('visible-panel');
             setActiveButton(button);
             // Special handling for OpenGlobus resize
             if (panel === globePanel && globus && globus.planet && globus.planet.renderer) {
@@ -1736,9 +1815,34 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
             if (panel === mapPanel && map) { // mapPanel is defined here
                  setTimeout(() => { map.updateSize(); console.log("Updated OpenLayers map size after panel toggle."); }, 50);
             }
-        } else {
-             if (button) button.classList.remove('active');
-        }
+            } else if (panel.id === 'xr-panel') {
+                 // Position in center, large size
+                 panel.style.top = '50% !important';
+                 panel.style.left = '50% !important';
+                 panel.style.transform = 'translate(-50%, -50%) !important'; // Center the panel
+                 panel.style.width = '80% !important'; // Large width
+                 panel.style.height = '80% !important'; // Large height
+                 panel.style.bottom = 'auto !important'; // Unset bottom positioning
+                 panel.style.right = 'auto !important'; // Unset right positioning
+                 panel.style.maxHeight = 'auto !important'; // Remove max height limit
+            } else if (panel.id === 'xr-panel') {
+                 // Position in center, large size
+                 panel.style.top = '50% !important';
+                 panel.style.left = '50% !important';
+                 panel.style.transform = 'translate(-50%, -50%) !important'; // Center the panel
+                 panel.style.width = '80% !important'; // Large width
+                 panel.style.height = '80% !important'; // Large height
+                 panel.style.bottom = 'auto !important'; // Unset bottom positioning
+                 panel.style.right = 'auto !important'; // Unset right positioning
+                 panel.style.maxHeight = 'auto !important'; // Remove max height limit
+            }
+            else {
+                 // Hide the panel by setting display to none
+                 panel.style.display = 'none';
+                 // Optionally reset z-index when hidden if needed
+                 // panel.style.zIndex = '';
+                 if (button) button.classList.remove('active');
+            }
     }
 
     // Toolbar Button Logic moved to after UI element definitions
@@ -2298,4 +2402,20 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     // TODO: Move this call to the correct place after map/globe init
     // applyStartLocationSettings();
 // --- End Settings Panel Logic ---
+    // Handle clicks for XR button in delegated listener
+    // Handle clicks for XR button in delegated listener
+    // Handle clicks for XR button in delegated listener
+    // Handle clicks for XR button in delegated listener
+    document.body.addEventListener('click', function(event) {
+        const clickedButton = event.target.closest('.toolbar-button');
+        if (clickedButton && clickedButton.id === 'xr-view-btn') {
+            console.log("DEBUG: XR button clicked (delegated listener)."); // DEBUG
+            const xrPanel = document.getElementById('xr-panel');
+            if (xrPanel) {
+                togglePanelVisibility(xrPanel, clickedButton);
+            } else {
+                console.warn("XR panel element not found for delegated listener.");
+            }
+        }
+    });
 }); // End DOMContentLoaded
