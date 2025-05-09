@@ -1,3 +1,6 @@
+window.globus = null; // Declare globus in global scope and attach to window
+console.log("Roo Debug: main.js version check 1"); // Unique log to check script version
+
 // mundial/main.js - Reconstructed FINAL for Side-by-Side View
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -53,28 +56,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- OpenLayers Setup ---
-    const osmLayer = new ol.layer.Tile({ source: new ol.source.OSM(), visible: false, title: 'osm' });
+    const osmLayer = new ol.layer.Tile({ source: new ol.source.OSM(), visible: false, title: 'osm' }); 
     const satelliteLayer = new ol.layer.Tile({
         source: new ol.source.XYZ({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attributions: 'Tiles © ArcGIS', maxZoom: 19 }),
         visible: true, title: 'satellite'
-    });
+    }); 
     const topoLayer = new ol.layer.Tile({
         source: new ol.source.XYZ({ url: 'https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png', attributions: 'Map data © OSM contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)', maxZoom: 17 }),
         visible: false, title: 'topo'
-    });
+    }); 
     const mapzenTerrariumLayer = new ol.layer.Tile({
         source: new ol.source.XYZ({ url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', attributions: 'Mapzen, SRTM, GMTED2010, ETOPO1', maxZoom: 15 }),
         visible: false, title: 'terrarium'
-    });
+    }); 
     let baseLayers = [osmLayer, satelliteLayer, topoLayer, mapzenTerrariumLayer];
     let previouslySelectedLayerValue = 'satellite';
 
     // --- Grid and Selection Setup ---
     const TILE_SELECTION_ZOOM = 21;
     const GRID_VISIBILITY_MIN_ZOOM = 16;
-    const selectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(200, 200, 200, 0.5)' }) });
+    const selectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(200, 200, 200, 0.5)' }) }); 
     const selectionSource = new ol.source.Vector();
-    const groupSelectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(0, 255, 255, 0.5)' }) }); // Cyan fill for selected groups
+    const groupSelectionStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(0, 255, 255, 0.5)' }) });  // Cyan fill for selected groups
     const selectionLayer = new ol.layer.Vector({
         source: selectionSource,
         style: function(feature) {
@@ -83,17 +86,17 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         title: 'selection',
         zIndex: 3
-    });
+    }); 
     const highlightStyle = new ol.style.Style({
         stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 0, 0.8)', width: 4 }),
         fill: new ol.style.Fill({ color: 'rgba(255, 255, 0, 0.2)' }), zIndex: 4
-    });
+    }); 
     const highlightSource = new ol.source.Vector();
-    const highlightLayer = new ol.layer.Vector({ source: highlightSource, style: highlightStyle, title: 'highlight' });
-    const gridStyleZ21 = new ol.style.Style({ stroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 1 }) });
+    const highlightLayer = new ol.layer.Vector({ source: highlightSource, style: highlightStyle, title: 'highlight' }); 
+    const gridStyleZ21 = new ol.style.Style({ stroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 1 }) }); 
     const gridSourceZ21 = new ol.source.Vector();
-    const gridLayerZ21 = new ol.layer.Vector({ source: gridSourceZ21, style: gridStyleZ21, title: 'grid-z21', visible: false, zIndex: 1 });
-    const selectionTileGrid = ol.tilegrid.createXYZ({ maxZoom: TILE_SELECTION_ZOOM });
+    const gridLayerZ21 = new ol.layer.Vector({ source: gridSourceZ21, style: gridStyleZ21, title: 'grid-z21', visible: false, zIndex: 1 }); 
+    const selectionTileGrid = ol.tilegrid.createXYZ({ maxZoom: TILE_SELECTION_ZOOM }); 
 
     // --- User Layers Setup ---
     const layer0Id = 'layer-0';
@@ -102,8 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const tilesetFeatureStyle = new ol.style.Style({
         stroke: new ol.style.Stroke({ color: 'rgba(0, 128, 128, 0.9)', width: 3 }),
         fill: new ol.style.Fill({ color: 'rgba(0, 0, 0, 0.0)' }) // Add transparent fill for hit detection
-    });
-    const layer0Layer = new ol.layer.Vector({ source: layer0Source, style: tilesetFeatureStyle, title: layer0Id, zIndex: 2, visible: true });
+    }); 
+    const layer0Layer = new ol.layer.Vector({ source: layer0Source, style: tilesetFeatureStyle, title: layer0Id, zIndex: 2, visible: true }); 
     layer0Layer.set('userLayerName', layer0Name);
     const userLayers = { [layer0Id]: { name: layer0Name, layer: layer0Layer, tilesetCount: 0 } };
     let selectedLayerId = layer0Id; // Initialize the selected layer ID
@@ -114,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         layers: [ ...baseLayers, layer0Layer, gridLayerZ21, selectionLayer, highlightLayer ],
         view: new ol.View({ center: ol.proj.fromLonLat([-74.0445, 40.6892]), zoom: 18, maxZoom: TILE_SELECTION_ZOOM + 1, minZoom: 0 }), // Centered on Statue of Liberty, Zoom 18
         controls: [],
-    });
+    }); 
     const mapElementOL = document.getElementById('map'); // OpenLayers container
 
     // Get the default DragPan interaction
@@ -123,13 +126,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (interaction instanceof ol.interaction.DragPan) {
             dragPanInteraction = interaction;
         }
-    });
+    }); 
     if (!dragPanInteraction) {
         console.warn("Could not find default DragPan interaction.");
     }
 
     // --- OpenGlobus Initialization ---
-    let globus = null;
     let ogBaseLayers = {};
     let gridLayerOG = null;
     // let ogSelectionLayer = null; // Removed - Layer wasn't rendering
@@ -147,43 +149,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Create OG base layers
                 ogBaseLayers = {};
-                const initialOgLayers = [];
-                baseLayers.forEach(olLayer => {
-                    const title = olLayer.get('title');
-                    const source = olLayer.getSource();
-                    let url = '';
-                    if (source instanceof ol.source.OSM) { url = "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"; }
-                    else if (source instanceof ol.source.XYZ) { url = source.getUrls()[0].replace(/\{[abc]\}/, '{s}'); }
-                    if (title && url) {
-                        const isVisible = (title === previouslySelectedLayerValue);
-                        const ogLayer = new og.layer.XYZ(title, {
-                            isBaseLayer: true, url: url, visibility: isVisible,
-                            attribution: source.getAttributions() ? source.getAttributions()({}) : '',
-                            maxZoom: source.getTileGrid() ? source.getTileGrid().getMaxZoom() : 21
-                        });
-                        ogBaseLayers[title] = ogLayer; initialOgLayers.push(ogLayer);
-                        console.log(`Created OG layer: ${title}, Visible: ${isVisible}`);
-                    } else { console.warn(`Could not create OG layer for OL layer with title: ${title}`); }
+                const osmOgLayer = new og.layer.XYZ("OpenStreetMap", {
+                    isBaseLayer: true,
+                    url: "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    visibility: false, // Set OSM to hidden
+                    attribution: '© OpenStreetMap contributors'
+                });
+                 const satelliteOgLayer = new og.layer.XYZ("Satellite", {
+                    isBaseLayer: true,
+                    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    visibility: true, // Set Satellite to visible
+                    attribution: 'Tiles © ArcGIS'
+                });
+                const initialOgLayers = [osmOgLayer, satelliteOgLayer]; // Include both layers
+                ogBaseLayers['osm'] = osmOgLayer;
+                ogBaseLayers['satellite'] = satelliteOgLayer; // Add satellite to baseLayers map
+
+                // Initialize Globe with layers and camera position
+                console.log("Initializing OpenGlobus with layers and camera position.");
+
+                globus = new og.Globe({
+                    target: "globusContainer",
+                    name: "OpenGlobus View",
+                    layers: initialOgLayers, // Use the array with both layers
+                    // terrain: new og.terrain.GlobusRgbTerrain({...}), // Removed from constructor
+                    lon: -106.817, // Rocky Mountains
+                    lat: 39.113,   // Rocky Mountains
+                    alt: 1000,    // Lower altitude for terrain visibility
+                    resourcesSrc: "/packages/openglobus/res",
+                    fontsSrc: "/packages/openglobus/res/fonts"
                 });
 
-                // Initialize Globe
-                globus = new og.Globe({
-                    target: "globusContainer", name: "OpenGlobus View",
-                    layers: initialOgLayers,
-                    terrain: new og.terrain.GlobusRgbTerrain(), // Use GlobusRgbTerrain
-                    // viewExtent: [ -180, -90, 180, 90 ], // Removed viewExtent
-                    lon: -74.0445, // Initial longitude (Statue of Liberty)
-                    lat: 40.6892,  // Initial latitude (Statue of Liberty)
-                    alt: 300,      // Initial altitude (closer to ZL18)
-                    resourcesSrc: "/packages/openglobus/res", // Corrected path relative to server root
-                    fontsSrc: "/packages/openglobus/res/fonts" // Corrected path relative to server root
+                // Create terrain instance separately
+                const terrariumTerrain = new og.terrain.GlobusRgbTerrain({
+                    url: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+                    heightFactor: 1.0 // Use height factor 1.0 as requested
                 });
+                // Removed redundant globus.planet.addLayer(osmOgLayer);
+
+                console.log("OpenGlobus initialized with Satellite as default.");
 // --- Initialize Tile Cube Layer ---
                 tileCubeLayer = new og.layer.Vector("Tile Cube Indicator", {
                     // No clamping initially, let the cube float slightly
                     // No entities added at initialization
                     'pickingEnabled': false // Not interactive itself
-                });
+                }); 
                 globus.planet.addLayer(tileCubeLayer);
                 console.log("Created and added tileCubeLayer.");
 // --- Initialize Saved Tilesets Layer (Using CanvasTiles) ---
@@ -232,7 +242,7 @@ ogSavedTilesetsLayer = new og.layer.CanvasTiles("Saved Tilesets", {
 
         applyTexture(canvas);
     }
-});
+}); 
 globus.planet.addLayer(ogSavedTilesetsLayer);
 console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
 
@@ -296,7 +306,7 @@ console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
 
                         applyTexture(canvas);
                     }
-                });
+                }); 
                 globus.planet.addLayer(gridLayerOG);
 
                 // Add controls
@@ -311,94 +321,28 @@ console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
                     if (globus && globus.planet && globus.planet.renderer) {
                          // Use the renderer's resize method
                          globus.planet.renderer.resize();
+                         globus.planet.setTerrain(terrariumTerrain); // Set terrain after resize
 // --- OpenGlobus Selection Layer Setup ---
                 // Removed ogSelectionStyle constant, will apply directly
 // Explicitly set initial camera position after layers are added
-                globus.planet.viewLonLat(new og.LonLat(-74.0445, 40.6892, 300)); // Set altitude closer to ZL18
+                globus.planet.viewLonLat(new og.LonLat(-74.0445, 40.6892, 1000)); // Set altitude to 1000
                 const ogSelectionLayer = new og.layer.Vector("OG Selection", {
                     'pickingEnabled': false, // Don't need to pick these features directly
                     'zIndex': 10 // Ensure it draws on top
-                });
+                }); 
                 globus.planet.addLayer(ogSelectionLayer);
 // --- Globe Click Handler for Tile Selection ---
                 // Removed click listener from inside initializeOpenGlobus
                          console.log("Triggered initial OpenGlobus resize.");
                     }
-                }, 100);
+                }, 500); // Increased delay to 500ms
 
     } catch (error) { console.error("Error initializing OpenGlobus:", error); alert("Failed to initialize 3D view."); }
     }
 } // End function initializeOpenGlobus
     // }
 
-    // --- Globe Click Handler (Moved outside initializeOpenGlobus) ---
-    function handleGlobeClick(mouse, eventName) {
-        console.log(`Globe ${eventName} event fired`, mouse); // Log which event fired
-        if (!globus || !globus.planet) return; // Ensure globe is ready
-
-        const now = Date.now();
-        // Basic debounce/throttle to avoid issues if multiple events fire for one click
-        if (globus._lastClickTime && (now - globus._lastClickTime < 300)) {
-            console.log(`Globe ${eventName} ignored (too soon after previous event)`);
-            return;
-        }
-        globus._lastClickTime = now;
-
-        const coords = globus.planet.getLonLatFromPixelTerrain(mouse);
-        if (coords) {
-            console.log(`Globe clicked at Lon: ${coords.lon}, Lat: ${coords.lat}`);
-            try {
-                const mapCoords = ol.proj.fromLonLat([coords.lon, coords.lat]);
-                const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(mapCoords, TILE_SELECTION_ZOOM);
-                const tileId = getTileId(tileCoord);
-                console.log(`Corresponding ZL${TILE_SELECTION_ZOOM} Tile: z=${tileCoord[0]}, x=${tileCoord[1]}, y=${tileCoord[2]}, ID=${tileId}`);
-
-                const targetLayer = selectedLayerId ? userLayers[selectedLayerId]?.layer : null;
-                let isTileSaved = false;
-                if (targetLayer) {
-                    const targetSource = targetLayer.getSource();
-                    isTileSaved = targetSource.getFeatures().some(f => f.get('tileId') === tileId);
-                }
-
-                let existingOgShape = null;
-                const currentShapes = ogSelectionLayer.getShapes();
-                for (let i = 0; i < currentShapes.length; i++) {
-                    if (currentShapes[i].tileId === tileId) {
-                        existingOgShape = currentShapes[i];
-                        break;
-                    }
-                }
-
-                if (isTileSaved) {
-                    console.log(`Globe click on saved tile ${tileId}, selection prevented.`);
-                } else if (existingOgShape) {
-                    console.log(`OG Selection Layer: Shapes before remove: ${ogSelectionLayer.getShapes().length}`);
-                    ogSelectionLayer.removeShape(existingOgShape);
-                    console.log(`Removed OG selection shape for tile: ${tileId}`);
-                    console.log(`OG Selection Layer: Shapes after remove: ${ogSelectionLayer.getShapes().length}`);
-                    globus.planet.requestRenderFrame();
-                } else {
-                    const tileExtentEPSG3857 = selectionTileGrid.getTileCoordExtent(tileCoord);
-                    const tileExtentLonLat = ol.proj.transformExtent(tileExtentEPSG3857, 'EPSG:3857', 'EPSG:4326');
-                    const polygonCoords = [
-                        [tileExtentLonLat[0], tileExtentLonLat[1]], [tileExtentLonLat[2], tileExtentLonLat[1]],
-                        [tileExtentLonLat[2], tileExtentLonLat[3]], [tileExtentLonLat[0], tileExtentLonLat[3]]
-                    ];
-                    const tileShape = new og.shape.Polygon({
-                        coordinates: [polygonCoords], style: { fillColor: "rgba(255, 0, 0, 0.5)", lineColor: "rgba(255, 0, 0, 1)", lineWidth: 1 },
-                        altitude: 0, altitudeMode: 'clampToGround',
-                        visibility: true // Explicitly set shape visibility
-                    });
-                    tileShape.tileId = tileId; tileShape.isIndividualSelection = true;
-                    console.log(`OG Selection Layer: Shapes before add: ${ogSelectionLayer.getShapes().length}`);
-                    ogSelectionLayer.addShape(tileShape);
-                    console.log(`Added OG selection shape for tile: ${tileId}`);
-                    console.log(`OG Selection Layer: Shapes after add: ${ogSelectionLayer.getShapes().length}`);
-                    globus.planet.requestRenderFrame();
-                }
-            } catch (error) { console.error("Error processing globe click:", error); }
-        } else { console.log("Globe click detected, but no terrain intersection found."); }
-    }
+    // --- Globe Click Handler now defined at line ~550 ---
 
     // Removed attempt to attach listeners via globus.planet.events
 
@@ -414,7 +358,7 @@ console.log("Created and added ogSavedTilesetsLayer as CanvasTiles.");
                 const y = event.clientY - rect.top;
                 const mouse = { x: x, y: y, event: event };
                 handleGlobeClick(mouse, "Canvas DOM click"); // Pass event type
-            });
+            }); 
             console.log("Attached DOM click listener directly to OpenGlobus canvas.");
         } else {
             console.error("Could not find OpenGlobus canvas to attach click listener after delay.");
@@ -487,7 +431,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         allPanels.forEach(panel => {
             makeDraggable(panel);
             console.log(`Made panel draggable: ${panel.id}`);
-        });
+        }); 
     }
     
     // Apply immediately
@@ -643,7 +587,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                         properties: {
                             tileId: tileId
                         }
-                    });
+                    }); 
                     tileCubeLayer.add(selectedTileCubeEntity);
                 }
 
@@ -711,7 +655,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                          p.style.zIndex = 1000; // Set to a standard visible z-index
                     }
                 }
-            });
+            }); 
             panel.style.zIndex = 1005; // Bring the clicked panel to front
             console.log(`Brought panel to front: ${panel.id || panel.tagName}`);
         }
@@ -724,7 +668,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         socialBtn.addEventListener('click', () => {
             console.log("Social Button clicked!"); // DEBUG
             simpleToggle(socialPanel, socialBtn);
-        });
+        }); 
         // Initial state: hidden (CSS), button inactive
     } else { console.error("Social button or panel not found for listener."); } // DEBUG
 
@@ -748,7 +692,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 map.updateSize();
                 console.log("Map panel shown, updated OL map size.");
             }
-        });
+        }); 
         // Initial state: map panel visible (assuming default), button active
         if (mapPanel.style.display !== 'none') {
              mapViewBtn.classList.add('active');
@@ -776,7 +720,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                      console.log("Globe panel shown, triggered OpenGlobus resize.");
                  }, 50);
              }
-        });
+        }); 
         // Initial state: hidden (CSS), button inactive
     }
 
@@ -787,7 +731,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         layersBtn.addEventListener('click', () => {
              console.log("Layers Button clicked!"); // DEBUG
              simpleToggle(userLayersPanel, layersBtn);
-        });
+        }); 
         // Initial state: visible (assuming default), button active? Check CSS/HTML default
          if (userLayersPanel.style.display !== 'none') {
              layersBtn.classList.add('active');
@@ -801,7 +745,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         profileBtn.addEventListener('click', () => {
             console.log("Profile Button clicked!"); // DEBUG
             simpleToggle(profilePanel, profileBtn);
-        });
+        }); 
         // Initial state: hidden, button inactive
     }
     
@@ -812,7 +756,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         xrViewBtn.addEventListener('click', () => {
             console.log("XR Button clicked!"); // DEBUG
             simpleToggle(xrPanel, xrViewBtn);
-        });
+        }); 
         // Initial state: hidden, button inactive
     }
 
@@ -823,7 +767,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         signInBtn.addEventListener('click', () => {
             console.log("Sign In Button clicked!"); // DEBUG
             window.location.href = 'auth/auth.html'; // Navigate to sign-in page
-        });
+        }); 
     } else { console.error("Sign In button not found for listener."); } // DEBUG
 // Settings Button
     console.log("Checking Settings Button elements:", settingsBtn, settingsPanel); // DEBUG
@@ -832,20 +776,20 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         settingsBtn.addEventListener('click', () => {
              console.log("Settings Button clicked!"); // DEBUG
              simpleToggle(settingsPanel, settingsBtn);
-        });
+        }); 
         // Initial state: hidden (HTML style), button inactive
     } else { console.error("Settings button or panel not found for listener."); } // DEBUG
 
     // --- End New Toolbar Button Logic ---
     // Removed misplaced code block (lines 343-352) that likely belonged in openTilesetDetailsModal
-    closeTilesetDetailsModalBtn.addEventListener('click', () => { tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null; });
-    window.addEventListener('click', (event) => { if (event.target === tilesetDetailsModal) { tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null; } });
+    closeTilesetDetailsModalBtn.addEventListener('click', () => { tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null; }); 
+    window.addEventListener('click', (event) => { if (event.target === tilesetDetailsModal) { tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null; } }); 
     function applyGroupPropertyChange(propertyName, value) {
         if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) { console.warn(`Cannot update ${propertyName}: No group or layer context.`); return false; }
         const layer = userLayers[selectedLayerId].layer; const source = layer.getSource();
         const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
         if (groupFeatures.length === 0) { console.warn(`Cannot update ${propertyName}: No features found for group ${currentEditingGroupId}.`); return false; }
-        groupFeatures.forEach(feature => { feature.set(propertyName, value); });
+        groupFeatures.forEach(feature => { feature.set(propertyName, value); }); 
         console.log(`Updated ${propertyName} for group ${currentEditingGroupId} to "${value}"`); return true;
     }
     detailsTilesetNameInput.addEventListener('change', (event) => {
@@ -857,20 +801,20 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 listItem.querySelectorAll('button').forEach(btn => {
                      if (btn.title.includes('Edit name')) btn.title = `Edit name for "${newName}"`;
                      if (btn.title.includes('Delete tileset')) btn.title = `Delete tileset "${newName}"`;
-                });
+                }); 
                  const checkbox = listItem.querySelector('input[type="checkbox"]'); if (checkbox) checkbox.title = `Toggle visibility of "${newName}"`;
             }
         }
-    });
+    }); 
     detailsTilesetImageUrlInput.addEventListener('change', (event) => {
         const url = event.target.value.trim();
         if (applyGroupPropertyChange('imageUrl', url)) {
             if (url) { detailsTilesetImage.src = url; detailsTilesetImage.style.display = 'block'; }
             else { detailsTilesetImage.style.display = 'none'; detailsTilesetImage.src = ''; }
         }
-    });
-    detailsTilesetLinkInput.addEventListener('change', (event) => { applyGroupPropertyChange('linkUrl', event.target.value.trim()); });
-    detailsTilesetTagsTextarea.addEventListener('change', (event) => { applyGroupPropertyChange('tags', event.target.value.trim()); });
+    }); 
+    detailsTilesetLinkInput.addEventListener('change', (event) => { applyGroupPropertyChange('linkUrl', event.target.value.trim()); }); 
+    detailsTilesetTagsTextarea.addEventListener('change', (event) => { applyGroupPropertyChange('tags', event.target.value.trim()); }); 
     detailsColorPicker.addEventListener('input', (event) => {
         if (!currentEditingGroupId || !selectedLayerId || !userLayers[selectedLayerId]) { console.warn("Cannot update color: No group or layer context."); return; }
         const layer = userLayers[selectedLayerId].layer; const source = layer.getSource();
@@ -882,9 +826,9 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
             if (feature.get('isVisible') !== false) {
                  feature.setStyle(new ol.style.Style({ stroke: new ol.style.Stroke({ color: newColor, width: 3 }) }));
             }
-        });
+        }); 
         console.log(`Updated color for group ${currentEditingGroupId} to ${newColor}`);
-    });
+    }); 
 
     // --- Base Layer Switcher Logic (Syncs OL and OG) ---
     function switchBaseLayer(selectedValue) {
@@ -900,7 +844,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         const selectedValue = this.value;
         if (selectedValue === 'add-custom') { customLayerInputsDiv.style.display = 'block'; this.value = previouslySelectedLayerValue; }
         else { customLayerInputsDiv.style.display = 'none'; switchBaseLayer(selectedValue); previouslySelectedLayerValue = selectedValue; }
-    });
+    }); 
     baseLayerSelect.value = 'satellite';
 
     // --- Add Custom Base Layer Logic ---
@@ -912,10 +856,10 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         const reservedTitles = ['add-custom', 'selection', 'grid-z21'];
         if (reservedTitles.includes(title) || allLayerTitles.includes(title) || (ogBaseLayers && ogBaseLayers[title])) { alert(`Title "${title}" reserved or exists.`); return; }
         console.log(`Adding custom base layer: Name="${name}", Title="${title}"`);
-        const newOlLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url: url, attributions: `Custom: ${name}` }), visible: false, title: title });
+        const newOlLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url: url, attributions: `Custom: ${name}` }), visible: false, title: title }); 
         map.getLayers().insertAt(baseLayers.length, newOlLayer); baseLayers.push(newOlLayer);
         if (globus) {
-             const newOgLayer = new og.layer.XYZ(title, { isBaseLayer: true, url: url.replace(/\{[abc]\}/, '{s}'), visibility: false, attribution: `Custom: ${name}`, maxZoom: 21 });
+             const newOgLayer = new og.layer.XYZ(title, { isBaseLayer: true, url: url.replace(/\{[abc]\}/, '{s}'), visibility: false, attribution: `Custom: ${name}`, maxZoom: 21 }); 
              ogBaseLayers[title] = newOgLayer; globus.planet.addLayer(newOgLayer); console.log(`Added custom layer "${title}" to OpenGlobus.`);
         }
         const addCustomOption = baseLayerSelect.querySelector('option[value="add-custom"]');
@@ -923,7 +867,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         baseLayerSelect.insertBefore(newOption, addCustomOption);
         customLayerNameInput.value = ''; customLayerUrlInput.value = ''; customLayerInputsDiv.style.display = 'none';
         baseLayerSelect.value = title; switchBaseLayer(title); previouslySelectedLayerValue = title;
-    });
+    }); 
 
     // --- Z21 Grid Update Logic ---
     let gridUpdateTimeout;
@@ -938,7 +882,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
                 selectionTileGrid.forEachTileCoord(extent, TILE_SELECTION_ZOOM, function (tileCoord) {
                     const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
                     features.push(new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) }));
-                });
+                }); 
                 gridSourceZ21.addFeatures(features);
             } catch (error) { console.error("Error Z21 grid:", error); } finally { console.timeEnd('updateZ21Grid'); }
         }, 150);
@@ -948,7 +892,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
     function updateUserLayerVisibility() {
         const currentZoom = Math.floor(map.getView().getZoom());
         const showUserLayers = currentZoom >= GRID_VISIBILITY_MIN_ZOOM;
-        Object.values(userLayers).forEach(layerInfo => { if (layerInfo && layerInfo.layer) { layerInfo.layer.setVisible(showUserLayers); } });
+        Object.values(userLayers).forEach(layerInfo => { if (layerInfo && layerInfo.layer) { layerInfo.layer.setVisible(showUserLayers); } }); 
     }
 
     // --- Map Move End Logic ---
@@ -960,7 +904,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         updateUserLayerVisibility();
         if (showGridAndSelection) { updateZ21Grid(); }
         else { gridSourceZ21.clear(); selectionSource.clear(); }
-    });
+    }); 
     updateZ21Grid(); updateUserLayerVisibility();
     selectionLayer.setVisible(Math.floor(map.getView().getZoom()) >= GRID_VISIBILITY_MIN_ZOOM);
 
@@ -988,7 +932,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
         } else if (!isTileSaved) {
             // Tile is not currently selected AND not part of a saved group, add it
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
-            const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
+            const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) }); 
             newFeature.setId(tileId);
             // Add a property to distinguish individual selections from group selections if needed later
             newFeature.set('isIndividualSelection', true);
@@ -1022,7 +966,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
             if (!isTileSaved) {
                 // Add to the temporary selection layer only if it's not already selected AND not saved
                 const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
-                const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
+                const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) }); 
                 newFeature.setId(tileId);
                 newFeature.set('isIndividualSelection', true); // Mark as individual selection
                 selectionSource.addFeature(newFeature);
@@ -1070,7 +1014,7 @@ const settingsPanel = document.getElementById('settings-panel'); // Added
             }, {
                 hitTolerance: 3 // Optional: tolerance in pixels to detect features near the click
                 // layerFilter is implicitly handled by checking `layer === targetLayer` inside the callback
-            });
+            }); 
         }
 
         // 2. Handle the click based on what was hit
@@ -1094,7 +1038,7 @@ console.log(`DEBUG: Click detected on saved feature. GroupID: ${clickedGroupId},
                     clone.set('isGroupSelection', true); // Mark as group selection
                 } else { console.warn("Original feature missing tileId during group selection clone:", f.getId()); }
                 return clone;
-            });
+            }); 
 
             if (featuresToAdd.length > 0) {
                 selectionSource.addFeatures(featuresToAdd);
@@ -1128,7 +1072,7 @@ console.log(`DEBUG: Calling openTilesetDetailsModal for feature:`, clickedSavedF
     const dragBoxInteraction = new ol.interaction.DragBox({
         // condition: ol.events.condition.platformModifierKeyOnly // Example: Use Ctrl/Cmd key for drag-box
         // No condition means drag-box is always active when the interaction is active
-    });
+    }); 
     map.addInteraction(dragBoxInteraction); // Add DragBox interaction
     dragBoxInteraction.setActive(false); // Start with DragBox inactive (select mode starts with click/toggle)
 
@@ -1175,14 +1119,14 @@ console.log(`DEBUG: Calling openTilesetDetailsModal for feature:`, clickedSavedF
                 } else {
                     // console.log(`Skipping saved tile during drag: ${tileId}`);
                 }
-            });
+            }); 
         } catch (error) {
             console.error("Error during DragBox tile iteration:", error);
         } finally {
             console.timeEnd('dragBoxSelect');
             updateSelectedTileCountDisplay(); // Update count after drag
         }
-    });
+    }); 
     // --- End DragBox Selection Logic ---
 
 
@@ -1224,7 +1168,7 @@ console.log(`DEBUG: populateTilesetList called for layer ${layerId}`); // DEBUG 
                 if (feature.get('isVisible') !== false) groupedTilesets[groupId].isVisible = true;
                 if (!groupedTilesets[groupId].color) groupedTilesets[groupId].color = feature.get('color');
             } else { console.warn("Feature found without a tilesetGroupId:", feature.getId()); }
-        });
+        }); 
 console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
         if (Object.keys(groupedTilesets).length === 0) { tilesetListDiv.innerHTML = '<small><i>No tilesets saved in this layer.</i></small>'; return; }
         Object.entries(groupedTilesets).forEach(([groupId, groupData]) => {
@@ -1243,7 +1187,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
             buttonContainer.appendChild(editBtn); buttonContainer.appendChild(deleteBtn);
             itemDiv.appendChild(checkbox); itemDiv.appendChild(nameSpan); itemDiv.appendChild(buttonContainer);
             tilesetListDiv.appendChild(itemDiv);
-        });
+        }); 
     }
     function editTilesetGroupName(groupId, nameSpanElement) { console.log("Edit name for group:", groupId); } // Placeholder
     function deleteTilesetGroup(groupId) {
@@ -1282,7 +1226,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
                 const color = feature.get('color') || '#008080';
                 feature.setStyle(new ol.style.Style({ stroke: new ol.style.Stroke({ color: color, width: 3 }) }));
             } else { feature.setStyle(null); }
-        });
+        }); 
         console.log(`Set visibility for group ${groupId} to ${isVisible}`);
     }
     function zoomToTilesetGroup(groupId) {
@@ -1293,7 +1237,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
             const groupExtent = ol.extent.createEmpty();
             groupFeatures.forEach(f => ol.extent.extend(groupExtent, f.getGeometry().getExtent()));
             if (!ol.extent.isEmpty(groupExtent)) {
-                map.getView().fit(groupExtent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: TILE_SELECTION_ZOOM });
+                map.getView().fit(groupExtent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: TILE_SELECTION_ZOOM }); 
                 highlightListItem(groupId);
             }
         }
@@ -1330,13 +1274,13 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
              }
         }
         else if (target.innerHTML === '🗑️') { deleteTilesetGroup(groupId); }
-    });
+    }); 
     tilesetListDiv.addEventListener('change', (event) => {
         if (event.target.type === 'checkbox') {
             const itemDiv = event.target.closest('.tileset-item');
             if (itemDiv) { const groupId = itemDiv.dataset.tilesetGroupId; if (groupId) { toggleTilesetGroupVisibility(groupId, event.target.checked); } }
         }
-    });
+    }); 
 
     // --- User Layer List Population & Interaction ---
     let layerCounter = 1;
@@ -1416,7 +1360,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
                     if (btn.title.includes('Edit name')) btn.title = `Edit name for "${trimmedName}"`;
                     if (btn.title.includes('Toggle privacy')) btn.title = btn.title.replace(/"(.*?)"/, `"${trimmedName}"`);
                     if (btn.title.includes('Delete layer')) btn.title = `Delete layer "${trimmedName}"`;
-                });
+                }); 
                  // Update visibility button title
                  const visibilityBtn = listItem.querySelector('.visibility-btn'); if (visibilityBtn) visibilityBtn.title = `Toggle visibility of "${trimmedName}"`;
                  nameSpanElement.title = `Select layer "${trimmedName}"`;
@@ -1472,7 +1416,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
             deleteLayer(layerId);
         }
         // Note: No need for the separate 'change' event listener anymore
-    });
+    }); 
     // Removed the 'change' event listener as visibility is handled by button click now
 
     createLayerBtn.addEventListener('click', () => {
@@ -1480,12 +1424,12 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
         if (newLayerName && newLayerName.trim() !== '') {
             const trimmedName = newLayerName.trim(); const newLayerId = `layer-${layerCounter++}`;
             const newSource = new ol.source.Vector();
-            const newLayer = new ol.layer.Vector({ source: newSource, style: tilesetFeatureStyle, title: newLayerId, zIndex: 2, visible: true });
+            const newLayer = new ol.layer.Vector({ source: newSource, style: tilesetFeatureStyle, title: newLayerId, zIndex: 2, visible: true }); 
             newLayer.set('userLayerName', trimmedName); userLayers[newLayerId] = { name: trimmedName, layer: newLayer, tilesetCount: 0 };
             map.addLayer(newLayer); addLayerToList(newLayerId, trimmedName, true); selectLayerInList(newLayerId);
             console.log(`Created new layer: ${newLayerId} ("${trimmedName}")`);
         }
-    });
+    }); 
 
     // --- Ctrl/Cmd Key Mode Toggle ---
     let ctrlOrCmdPressed = false;
@@ -1500,7 +1444,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
                 interactionModeBtn.click(); // Simulate click to switch to Pan
             }
         }
-    });
+    }); 
 
     document.addEventListener('keyup', (event) => {
         // Check if Ctrl or Meta key is released
@@ -1520,7 +1464,7 @@ console.log('DEBUG: Grouped tilesets:', groupedTilesets); // DEBUG LOG
                   interactionModeBtn.click();
              }
         }
-    });
+    }); 
 
     // --- Save Selection Logic ---
     saveSelectionBtn.addEventListener('click', () => {
@@ -1624,7 +1568,7 @@ console.log(`DEBUG: Saving selection. Assigning Name: ${tilesetName}, GroupID: $
                             groupId: tilesetGroupId // Link to the map feature group
                         },
                         altitude: 0 // Explicitly set altitude for the entity
-                    });
+                    }); 
                     // Add to a temporary array for bulk addition later
                     // No need for temporary array, redraw will handle it
                 } catch (error) {
@@ -1632,7 +1576,7 @@ console.log(`DEBUG: Saving selection. Assigning Name: ${tilesetName}, GroupID: $
                 }
             }
             // --- End OG entity creation ---
-        });
+        }); 
 
         // Add features to OpenLayers layer
         if (featuresToAdd.length > 0) {
@@ -1659,7 +1603,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
             tilesetNameInput.value = '';
             console.log(`Saved ${featuresToAdd.length} tiles as "${tilesetName}" to layer ${selectedLayerId}`);
         } else { console.warn("No features were added during save operation."); }
-    });
+    }); 
 
     // --- Clear Selection Logic ---
     clearSelectionBtn.addEventListener('click', () => {
@@ -1670,7 +1614,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
         currentEditingGroupId = null;
         console.log("Cleared current selection.");
         updateSelectedTileCountDisplay(); // Ensure count display updates to 0 and actions hide
-    });
+    }); 
 
     // --- Interaction Mode Switching ---
     interactionModeBtn.addEventListener('click', () => {
@@ -1696,7 +1640,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
             if (mapElementOL) mapElementOL.style.cursor = 'crosshair';
             console.log("Switched to Select Tiles mode");
         }
-    });
+    }); 
 
     // --- Initial UI Setup ---
     // addLayerToList(layer0Id, layer0Name, true); // Removed duplicate call, already added earlier (around line 366)
@@ -1783,7 +1727,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     if (mapPanel) {
         const resizeObserver = new ResizeObserver(() => {
             map.updateSize(); console.log("Map panel resized, updated OL map size.");
-        });
+        }); 
         resizeObserver.observe(mapPanel);
     } else { console.error("Could not find map panel for resize observer."); }
 
@@ -1795,7 +1739,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     function setActiveButton(clickedButton) {
         toolbarButtons.forEach(button => {
             if (button) { button.classList.remove('active'); }
-        });
+        }); 
         if (clickedButton) { clickedButton.classList.add('active'); }
     }
 
@@ -1897,7 +1841,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                 }
             }
         }
-    });
+    }); 
 
     // --- Maximize/Restore View Panel Logic ---
     document.body.addEventListener('click', function(event) {
@@ -1963,14 +1907,14 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     //                 gun.get('chat').set(messageData);
     //                 messageInput.value = ''; // Clear input field
     //             }
-    //         });
+    //         }); 
 
     //         // Allow sending with Enter key
     //         messageInput.addEventListener('keypress', (e) => {
     //             if (e.key === 'Enter') {
     //                 sendButton.click(); // Trigger button click
     //             }
-    //         });
+    //         }); 
     //     } else {
     //          console.warn("Chat input or send button not found.");
     //     }
@@ -1983,7 +1927,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     //             // though Gun's .on() usually handles this reasonably well for simple cases.
     //             displayMessage(messageData);
     //         }
-    //     });
+    //     }); 
     //     console.log("Gun.js chat logic initialized.");
 
     // } catch (error) {
@@ -1994,7 +1938,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                 }, 50); // Delay slightly for CSS transition
             }
         }
-    });
+    }); 
 
 // --- Initial Layer List Population ---
     // Removed redundant addLayerToList call for Layer 0
@@ -2004,7 +1948,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
         // Connect to a local relay peer if running one, or default peers
         // Ensure the peer URL is correct for your setup.
         // If running the basic `node examples/relay.js` from gun repo, it's usually http://localhost:8765/gun
-        const gun = Gun({ peers: ['http://localhost:8765/gun'] });
+        const gun = Gun({ peers: ['http://localhost:8765/gun'] }); 
         const user = gun.user(); // Gun User Authentication (SEA)
 
         // --- UI Element References ---
@@ -2038,10 +1982,10 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                     text: messageText,
                     sender: user.is.alias, // Use alias of logged-in user
                     timestamp: Gun.state() // Use Gun's server timestamp for consistency
-                });
+                }); 
                 messageInput.value = ''; // Clear input
             }
-        });
+        }); 
 
          // Allow sending with Enter key in message input
          messageInput.addEventListener('keypress', (e) => {
@@ -2049,14 +1993,14 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                  e.preventDefault(); // Prevent default newline insertion
                  sendBtn.click(); // Trigger button click
              }
-         });
+         }); 
 
         // Display messages
         gun.get('mundial/chat').map().once((message, id) => { // Use once initially to load history faster if desired
              if (isValidMessage(message)) {
                  displayMessage(message);
              }
-        });
+        }); 
          gun.get('mundial/chat').map().on((message, id) => { // Use on for real-time updates
              if (isValidMessage(message)) {
                  // Check if already displayed by 'once' or previous 'on'
@@ -2065,7 +2009,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                     displayMessage(message, id);
                  }
              }
-         });
+         }); 
 
 
         function isValidMessage(message) {
@@ -2077,7 +2021,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
             messageElement.classList.add('chat-message-item'); // Add a class for styling
             messageElement.setAttribute('data-key', id); // Use Gun's message ID as a key
 
-            const date = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const date = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); 
             // Sanitize sender and text before displaying to prevent XSS
             const safeSender = document.createTextNode(message.sender).textContent;
             const safeText = document.createTextNode(message.text).textContent;
@@ -2101,11 +2045,11 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                         usernameInput.value = '';
                         passwordInput.value = '';
                     }
-                });
+                }); 
             } else {
                 alert('Please enter both username and password.');
             }
-        });
+        }); 
 
         loginBtn.addEventListener('click', () => {
             const username = usernameInput.value.trim();
@@ -2118,22 +2062,22 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                         console.log('Logged in as:', ack.put.alias);
                         // UI update is handled by gun.on('auth') listener below
                     }
-                });
+                }); 
             } else {
                 alert('Please enter both username and password.');
             }
-        });
+        }); 
 
         logoutBtn.addEventListener('click', () => {
             user.leave();
             // UI update is handled by gun.on('auth') listener below
-        });
+        }); 
 
         // Update UI based on auth state changes
         gun.on('auth', () => { // No need for ack here, just check user.is
             console.log('Auth state changed. Current user:', user.is);
             updateAuthUI();
-        });
+        }); 
 
         function updateAuthUI() {
              if (user.is) { // User is logged in
@@ -2163,6 +2107,8 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
          updateAuthUI(); // Call once on load to set the correct initial state
 
     } catch (error) {
+        console.error("Error in Gun.js Chat & Auth Logic:", error);
+    }
 // --- Settings Panel Logic ---
     function loadSettings() {
         // Load Start Location
@@ -2230,7 +2176,7 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
              // For OL Vector layer, update the style
              const newStyle = new ol.style.Style({
                  stroke: new ol.style.Stroke({ color: 'rgba(0,0,0,0.4)', width: weight })
-             });
+             }); 
              gridLayerZ21.setStyle(newStyle);
              console.log("Updated OL grid style weight.");
          }
@@ -2250,21 +2196,21 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
                 localStorage.setItem('setting_startZoom', settingStartZoomInput.value);
                 alert("Current view set as start location.");
             }
-        });
+        }); 
     }
 
     if (settingGridVisibleCheckbox) {
         settingGridVisibleCheckbox.addEventListener('change', () => {
             localStorage.setItem('setting_gridVisible', settingGridVisibleCheckbox.checked);
             applyGridSettings();
-        });
+        }); 
     }
 
      if (settingGridWeightInput) {
         settingGridWeightInput.addEventListener('input', () => { // Use 'input' for live updates
             localStorage.setItem('setting_gridWeight', settingGridWeightInput.value);
             applyGridSettings(); // Apply immediately (redraw logic needed for OG)
-        });
+        }); 
     }
 
     // Load settings when the script runs (after DOM is ready)
@@ -2276,146 +2222,4 @@ console.log(`DEBUG: Added ${featuresToAdd.length} features to targetSource. Feat
     // TODO: Move this call to the correct place after map/globe init
     // applyStartLocationSettings();
 // --- End Settings Panel Logic ---
-        console.error("Error initializing Gun.js or its components:", error);
-        // Display a user-friendly message in the social panel
-        const socialPanelContent = document.querySelector('#social-panel .panel-content');
-        if (socialPanelContent) {
-            // Clear existing content and add error message
-            socialPanelContent.innerHTML = '<p style="color: red; padding: 10px;">Error loading social features. Please ensure Gun.js is included and a relay peer is accessible.</p>';
-        }
-    }
-    // --- End Gun.js Logic ---
-
-// Removed duplicate/misplaced Gun.js logic blocks.
-// The correct block will be inserted inside DOMContentLoaded.
-
-// --- Settings Panel Logic ---
-    function loadSettings() {
-        // Load Start Location
-        const startLon = localStorage.getItem('setting_startLon');
-        const startLat = localStorage.getItem('setting_startLat');
-        const startZoom = localStorage.getItem('setting_startZoom');
-        if (startLon !== null) settingStartLonInput.value = startLon;
-        if (startLat !== null) settingStartLatInput.value = startLat;
-        if (startZoom !== null) settingStartZoomInput.value = startZoom;
-        // Apply loaded start location (needs map/globe to be initialized)
-        // We'll call applyStartLocationSettings() after map/globe init
-
-        // Load Grid Settings
-        const gridVisible = localStorage.getItem('setting_gridVisible');
-        const gridWeight = localStorage.getItem('setting_gridWeight');
-        if (gridVisible !== null) settingGridVisibleCheckbox.checked = (gridVisible === 'true');
-        if (gridWeight !== null) settingGridWeightInput.value = gridWeight;
-        applyGridSettings(); // Apply loaded grid settings
-    }
-
-    function applyStartLocationSettings() {
-        const lon = parseFloat(settingStartLonInput.value);
-        const lat = parseFloat(settingStartLatInput.value);
-        const zoom = parseInt(settingStartZoomInput.value, 10);
-
-        if (!isNaN(lon) && !isNaN(lat) && !isNaN(zoom)) {
-            console.log(`Applying start location: Lon=${lon}, Lat=${lat}, Zoom=${zoom}`);
-            if (map && map.getView()) {
-                map.getView().setCenter(ol.proj.fromLonLat([lon, lat]));
-                map.getView().setZoom(zoom);
-            }
-            if (globus && globus.planet) {
-                 // Calculate rough altitude from zoom (needs refinement)
-                 const altitude = 5000000 / Math.pow(2, zoom - 1);
-                 globus.planet.viewLonLat(new og.LonLat(lon, lat, altitude));
-            }
-        } else {
-            console.warn("Cannot apply start location: Invalid input values.");
-        }
-    }
-
-     function applyGridSettings() {
-        const isVisible = settingGridVisibleCheckbox.checked;
-        const weight = parseFloat(settingGridWeightInput.value);
-
-        console.log(`Applying grid settings: Visible=${isVisible}, Weight=${weight}`);
-
-        // Apply visibility (assuming gridLayerZ21 and gridLayerOG exist)
-        if (gridLayerZ21) gridLayerZ21.setVisible(isVisible && map.getView().getZoom() >= GRID_VISIBILITY_MIN_ZOOM);
-        if (gridLayerOG) gridLayerOG.setVisibility(isVisible); // OG layer visibility might be simpler
-
-        // Apply line weight (requires modifying the drawTile function or layer style)
-        // For CanvasTiles, we need to update the drawTile function logic
-        if (gridLayerOG && !isNaN(weight)) {
-            // Need to modify the drawTile function itself or store weight globally
-            // For now, just log it. Re-drawing requires layer refresh.
-            console.log("Grid weight change requires layer refresh/redraw logic (TODO)");
-             // Example: Store globally (simple approach)
-             window.gridLineWeight = weight;
-             // Force redraw (might not update style immediately for CanvasTiles)
-             if (gridLayerOG.clear) gridLayerOG.clear(); // Clear existing tiles
-             if (globus && globus.renderer) globus.renderer.draw();
-        }
-         if (gridLayerZ21 && !isNaN(weight)) {
-             // For OL Vector layer, update the style
-             const newStyle = new ol.style.Style({
-                 stroke: new ol.style.Stroke({ color: 'rgba(0,0,0,0.4)', width: weight })
-             });
-             gridLayerZ21.setStyle(newStyle);
-             console.log("Updated OL grid style weight.");
-         }
-    }
-
-    // --- Settings Event Listeners ---
-    if (settingSetStartLocationBtn) {
-        settingSetStartLocationBtn.addEventListener('click', () => {
-            if (map && map.getView()) {
-                const currentCenterLonLat = ol.proj.toLonLat(map.getView().getCenter());
-                const currentZoom = map.getView().getZoom();
-                settingStartLonInput.value = currentCenterLonLat[0].toFixed(6);
-                settingStartLatInput.value = currentCenterLonLat[1].toFixed(6);
-                settingStartZoomInput.value = Math.round(currentZoom);
-                localStorage.setItem('setting_startLon', settingStartLonInput.value);
-                localStorage.setItem('setting_startLat', settingStartLatInput.value);
-                localStorage.setItem('setting_startZoom', settingStartZoomInput.value);
-                alert("Current view set as start location.");
-            }
-        });
-    }
-
-    if (settingGridVisibleCheckbox) {
-        settingGridVisibleCheckbox.addEventListener('change', () => {
-            localStorage.setItem('setting_gridVisible', settingGridVisibleCheckbox.checked);
-            applyGridSettings();
-        });
-    }
-
-     if (settingGridWeightInput) {
-        settingGridWeightInput.addEventListener('input', () => { // Use 'input' for live updates
-            localStorage.setItem('setting_gridWeight', settingGridWeightInput.value);
-            applyGridSettings(); // Apply immediately (redraw logic needed for OG)
-        });
-    }
-
-    // Load settings when the script runs (after DOM is ready)
-    loadSettings();
-
-    // Apply start location after map/globe are initialized
-    // Need to find the end of the initialization block
-    // For now, let's assume it's done and call it (might need adjustment)
-    // TODO: Move this call to the correct place after map/globe init
-    // applyStartLocationSettings();
-// --- End Settings Panel Logic ---
-    // Handle clicks for XR button in delegated listener
-    // Handle clicks for XR button in delegated listener
-    // Handle clicks for XR button in delegated listener
-    // Handle clicks for XR button in delegated listener
-    document.body.addEventListener('click', function(event) {
-        const clickedButton = event.target.closest('.toolbar-button');
-        if (clickedButton && clickedButton.id === 'xr-view-btn') {
-            console.log("DEBUG: XR button clicked (delegated listener)."); // DEBUG
-            const xrPanel = document.getElementById('xr-panel');
-            if (xrPanel) {
-                togglePanelVisibility(xrPanel, clickedButton);
-            } else {
-                console.warn("XR panel element not found for delegated listener.");
-            }
-        }
-    });
-}); // End DOMContentLoaded
+}); // Close the main DOMContentLoaded event listener from line 3
