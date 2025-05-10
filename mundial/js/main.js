@@ -176,8 +176,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     lon: -106.817, // Rocky Mountains
                     lat: 39.113,   // Rocky Mountains
                     alt: 1000,    // Lower altitude for terrain visibility
-                    resourcesSrc: "/packages/openglobus/res",
-                    fontsSrc: "/packages/openglobus/res/fonts"
+                    resourcesSrc: "../packages/openglobus/res",
+                    fontsSrc: "../packages/openglobus/res/fonts"
                 });
 
                 // Create terrain instance separately
