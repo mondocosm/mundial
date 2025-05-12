@@ -1611,9 +1611,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('tileset-details-modal'),
         document.getElementById('assets-panel')
     ];
-    const mainViewPanels = [ 
+    // Main view panels (map and globe) should always stay visible
+    const mainViewPanels = [
         document.getElementById('map-panel'),
-        document.getElementById('globe-panel'),
+        document.getElementById('globe-panel')
+    ];
+    
+    // These panels should toggle independently without hiding map/globe
+    const overlayPanels = [
         document.getElementById('social-panel'),
         document.getElementById('profile-panel'),
         document.getElementById('xr-panel')
@@ -1636,9 +1641,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const panel = viewToggleButtons[btnId];
         if (button && panel) {
             button.addEventListener('click', function() {
-                // ... (panel toggling logic as before) ...
                 const isActive = this.classList.contains('active');
+                
                 if (mainViewPanels.includes(panel)) {
+                    // Handle main view panels (map and globe) - they replace each other
                     mainViewPanels.forEach(p => {
                         if (p !== panel) {
                             p.style.display = 'none';
@@ -1646,14 +1652,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById(bId)?.classList.remove('active');
                         }
                     });
-                    if (isActive && mainViewPanels.filter(p => p.style.display === 'block').length > 1 && panel.style.display === 'block') {
+                    
+                    // Toggle this panel
+                    if (isActive && panel.style.display === 'block') {
                         this.classList.remove('active');
                         panel.style.display = 'none';
                     } else {
                         this.classList.add('active');
                         panel.style.display = 'block';
                     }
-                } else { 
+                } else if (overlayPanels.includes(panel)) {
+                    // Handle overlay panels (social, profile, xr) - they toggle independently
+                    // without affecting map/globe visibility
+                    this.classList.toggle('active');
+                    panel.style.display = this.classList.contains('active') ? 'block' : 'none';
+                    
+                    console.log(`Toggled ${panel.id}: ${panel.style.display}`);
+                } else {
+                    // Handle other control panels
                     this.classList.toggle('active');
                     panel.style.display = this.classList.contains('active') ? 'block' : 'none';
                 }
