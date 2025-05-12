@@ -1010,17 +1010,24 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSelectedTileCountDisplay();   // Initial state
 
     // Set initial interaction mode button text and cursor
-    if (interactionModeBtn) {
-        // Initial mode is set based on OpenLayers interactions further down
-        // interactionModeBtn.textContent = 'Mode: Select Tiles';
-    }
-    const mapElementOLRef = document.getElementById('map'); // Re-fetch for safety
-    if (mapElementOLRef) {
-        mapElementOLRef.style.cursor = 'crosshair'; // Default to select cursor
-    }
-    currentInteractionMode = 'select'; // Ensure mode variable matches
-    if (dragPanInteraction) dragPanInteraction.setActive(false); // Start with pan off
-    if (dragBoxInteraction) dragBoxInteraction.setActive(true); // Start with drag box on
+    // The following block was removed as it caused an inconsistent initial interaction state,
+    // overriding the 'pan' mode that was set up earlier (around line 459).
+    // The application now consistently starts in 'pan' mode, with OpenLayers interactions
+    // (dragPan active, dragBox inactive) and UI correctly reflecting this initial state.
+    // This ensures that single-click tile selection works as expected from the start.
+    // ---- Removed block ----
+    // if (interactionModeBtn) {
+    //     // Initial mode is set based on OpenLayers interactions further down
+    //     // interactionModeBtn.textContent = 'Mode: Select Tiles';
+    // }
+    // const mapElementOLRef = document.getElementById('map'); // Re-fetch for safety
+    // if (mapElementOLRef) {
+    //     mapElementOLRef.style.cursor = 'crosshair'; // Default to select cursor
+    // }
+    // currentInteractionMode = 'select'; // Ensure mode variable matches
+    // if (dragPanInteraction) dragPanInteraction.setActive(false); // Start with pan off
+    // if (dragBoxInteraction) dragBoxInteraction.setActive(true); // Start with drag box on
+    // ---- End of removed block ----
 
     // --- End User Layer and Tileset List Management ---
 
