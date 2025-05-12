@@ -127,16 +127,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const existingFeaturesInLayer = targetSource.getFeatures();
         const isTileSaved = existingFeaturesInLayer.some(f => f.get('tileId') === tileId);
 
+        let selectionChanged = false;
         if (existingFeature) {
             selectionSource.removeFeature(existingFeature);
+            selectionChanged = true;
         } else if (!isTileSaved) {
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
             newFeature.setId(tileId);
             newFeature.set('isIndividualSelection', true);
             selectionSource.addFeature(newFeature);
+            selectionChanged = true;
         }
         updateSelectedTileCountDisplay();
+
+        // If the selection changed and the globe layer exists, redraw it to reflect selection highlights (if any)
+        // or to clear highlights if a selected tile that was part of a saved set is deselected.
+        // Note: The primary drawing of saved tilesets in OpenGlobus is based on features in userLayers,
+        // but this ensures any temporary selection indicators on the globe are also updated.
+        if (selectionChanged && ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
+            console.log("toggleTileSelection: Triggering ogSavedTilesetsLayer redraw due to selection change.");
+            ogSavedTilesetsLayer.redraw();
+        }
     }
 
     function addTileToSelection(tileCoord) {
@@ -1072,11 +1084,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Trigger redraw of the OpenGlobus saved layer
                 if (ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
-                    console.log("DEBUG: Calling ogSavedTilesetsLayer.redraw() after saving selection.");
+                    console.log("saveSelectionBtn: Calling ogSavedTilesetsLayer.redraw() after saving selection.");
                     ogSavedTilesetsLayer.redraw();
-                } else if (window.globus && window.globus.renderer) {
-                    console.log("DEBUG: Calling globus.renderer.draw() as fallback redraw for saved tilesets.");
-                    window.globus.renderer.draw(); // Fallback redraw
+                } else {
+                    console.warn("saveSelectionBtn: Could not redraw ogSavedTilesetsLayer - layer or redraw function missing.");
+                    if (window.globus && window.globus.renderer) { // Fallback if specific layer redraw isn't available
+                        console.log("saveSelectionBtn: Calling globus.renderer.draw() as fallback redraw for saved tilesets.");
+                        window.globus.renderer.draw();
+                    }
                 }
             }
         });
