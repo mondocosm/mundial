@@ -819,6 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function flyToTilesetGroupInGlobe(groupId) {
+        console.log(`flyToTilesetGroupInGlobe: Attempting to fly to groupId: ${groupId}`);
         if (!window.globus || !window.globus.planet || !window.globus.planet.camera ||
             !window.selectedLayerId || !window.userLayers || !window.userLayers[window.selectedLayerId]) {
             console.warn("flyToTilesetGroupInGlobe: Globus or layer data not ready.");
@@ -828,44 +829,62 @@ document.addEventListener('DOMContentLoaded', () => {
         const layer = window.userLayers[window.selectedLayerId].layer;
         const source = layer.getSource();
         const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+        console.log(`flyToTilesetGroupInGlobe: Found ${groupFeatures.length} features for group.`);
 
         if (groupFeatures.length > 0) {
             const groupExtentEPSG3857 = ol.extent.createEmpty();
-            groupFeatures.forEach(f => ol.extent.extend(groupExtentEPSG3857, f.getGeometry().getExtent()));
+            groupFeatures.forEach(f => {
+                const geom = f.getGeometry();
+                if (geom) {
+                    ol.extent.extend(groupExtentEPSG3857, geom.getExtent());
+                }
+            });
+            console.log(`flyToTilesetGroupInGlobe: EPSG:3857 extent: ${groupExtentEPSG3857}`);
 
             if (!ol.extent.isEmpty(groupExtentEPSG3857)) {
-                // Transform extent to geographic coordinates for OpenGlobus
                 const groupExtentEPSG4326 = ol.proj.transformExtent(groupExtentEPSG3857, 'EPSG:3857', 'EPSG:4326');
+                console.log(`flyToTilesetGroupInGlobe: EPSG:4326 extent: ${groupExtentEPSG4326}`);
                 
                 const centerLon = ol.extent.getCenter(groupExtentEPSG4326)[0];
                 const centerLat = ol.extent.getCenter(groupExtentEPSG4326)[1];
                 
-                // Basic altitude calculation: larger extent = higher altitude
-                // This is a heuristic and might need refinement for better user experience.
-                const width = ol.extent.getWidth(groupExtentEPSG4326); // Width in degrees
-                const height = ol.extent.getHeight(groupExtentEPSG4326); // Height in degrees
+                const width = ol.extent.getWidth(groupExtentEPSG4326);
+                const height = ol.extent.getHeight(groupExtentEPSG4326);
                 const diagonal = Math.sqrt(width * width + height * height);
                 
-                // Heuristic: Convert diagonal degrees to a rough altitude in meters.
-                // 1 degree is roughly 111km. We want to be "above" it.
-                // This factor (e.g., 200000) might need significant tuning.
-                let altitude = Math.max(500, diagonal * 150000); // Ensure a minimum altitude
-                // Cap altitude to avoid being too far out for small selections
-                altitude = Math.min(altitude, 5000000); // Max 5000km altitude
+                // Adjust altitude calculation: Start with a base that works for single ZL21 tiles, then scale up.
+                // A single ZL21 tile is very small.
+                let altitude;
+                if (groupFeatures.length === 1 && diagonal < 0.001) { // Very small extent, likely single ZL21 tile
+                    altitude = 300; // Zoom in close for single tiles
+                } else {
+                    altitude = Math.max(500, diagonal * 200000); // Increased factor for larger areas
+                }
+                altitude = Math.min(altitude, 10000000); // Max 10,000km altitude
 
-                console.log(`flyToTilesetGroupInGlobe: Flying to Lon: ${centerLon.toFixed(4)}, Lat: ${centerLat.toFixed(4)}, Alt: ${altitude.toFixed(0)}`);
+                console.log(`flyToTilesetGroupInGlobe: Flying to Lon: ${centerLon.toFixed(4)}, Lat: ${centerLat.toFixed(4)}, Alt: ${altitude.toFixed(0)} (Diagonal: ${diagonal.toFixed(6)} degrees)`);
                 
                 if (typeof window.globus.planet.camera.flyLonLat === 'function') {
-                    window.globus.planet.camera.flyLonLat(new og.LonLat(centerLon, centerLat, altitude));
+                    window.globus.planet.camera.flyLonLat(new og.LonLat(centerLon, centerLat, altitude), null, null, () => {
+                        console.log("flyToTilesetGroupInGlobe: FlyTo complete.");
+                    });
                 } else {
                     console.warn("flyToTilesetGroupInGlobe: camera.flyLonLat not available.");
                 }
+            } else {
+                console.warn("flyToTilesetGroupInGlobe: Group extent is empty.");
             }
+        } else {
+            console.warn(`flyToTilesetGroupInGlobe: No features found for groupId ${groupId}.`);
         }
     }
 
     function zoomToTilesetGroup(groupId) {
-        if (!window.selectedLayerId || !window.userLayers || !window.userLayers[window.selectedLayerId] || !window.olMap) return;
+        console.log(`zoomToTilesetGroup: Zooming to groupId: ${groupId}`);
+        if (!window.selectedLayerId || !window.userLayers || !window.userLayers[window.selectedLayerId] || !window.olMap) {
+            console.warn("zoomToTilesetGroup: Prerequisites not met.");
+            return;
+        }
         const layer = window.userLayers[window.selectedLayerId].layer;
         const source = layer.getSource();
         const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
@@ -873,10 +892,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const groupExtent = ol.extent.createEmpty();
             groupFeatures.forEach(f => ol.extent.extend(groupExtent, f.getGeometry().getExtent()));
             if (!ol.extent.isEmpty(groupExtent)) {
+                console.log("zoomToTilesetGroup: Fitting OL map view.");
                 window.olMap.getView().fit(groupExtent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: TILE_SELECTION_ZOOM });
                 highlightListItem(groupId);
-                // Also fly the globe to this group
                 flyToTilesetGroupInGlobe(groupId);
+            } else {
+                console.warn("zoomToTilesetGroup: Group extent is empty after processing features.");
             }
         }
     }
@@ -916,21 +937,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const target = event.target;
             const itemDiv = target.closest('.tileset-item'); if (!itemDiv) return;
             const groupId = itemDiv.dataset.tilesetGroupId; if (!groupId) return;
-            if (target.tagName === 'SPAN') {
-                zoomToTilesetGroup(groupId);
+
+            // Check if the click was on the delete button or visibility checkbox
+            if (target.innerHTML === '🗑️') {
+                deleteTilesetGroup(groupId);
+                return; // Action handled, no need to open modal
+            }
+            if (target.type === 'checkbox') {
+                // Visibility is handled by the 'change' event listener, so do nothing here for click
+                return;
+            }
+
+            // If the click was on the name (SPAN) or the edit button, or the itemDiv itself (but not buttons/checkbox)
+            // then zoom and open details.
+            if (target.tagName === 'SPAN' || target.innerHTML === '✏️' || target === itemDiv || itemDiv.contains(target) && !target.closest('button') && target.type !== 'checkbox') {
+                zoomToTilesetGroup(groupId); // This will also fly the globe
                 const layer = window.userLayers[window.selectedLayerId]?.layer;
                 if (layer) {
                     const firstFeature = layer.getSource().getFeatures().find(f => f.get('tilesetGroupId') === groupId);
-                    if (firstFeature) openTilesetDetailsModal(firstFeature);
+                    if (firstFeature) {
+                        openTilesetDetailsModal(firstFeature);
+                    } else {
+                        console.warn(`Could not find feature for groupId ${groupId} to open details modal.`);
+                    }
                 }
-            } else if (target.innerHTML === '✏️') {
-                 const layer = window.userLayers[window.selectedLayerId]?.layer;
-                 if (layer) {
-                     const firstFeature = layer.getSource().getFeatures().find(f => f.get('tilesetGroupId') === groupId);
-                     if (firstFeature) openTilesetDetailsModal(firstFeature);
-                 }
-            } else if (target.innerHTML === '🗑️') {
-                deleteTilesetGroup(groupId);
             }
         });
         tilesetListDiv.addEventListener('change', (event) => {
@@ -1225,75 +1255,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Globe Click Handler for OpenGlobus (from reference) ---
-    function handleGlobeClick(mouse, eventName) {
-        console.log(`Globe ${eventName} event fired`, mouse);
-        if (!window.globus || !window.globus.planet || !tileCubeLayer || !selectionTileGrid || !window.userLayers || !window.selectedLayerId) {
-            console.warn("handleGlobeClick: Globus, essential layers, or selection context not ready.");
-            return;
-        }
-
-        const now = Date.now();
-        if (window.globus._lastClickTime && (now - window.globus._lastClickTime < 300)) {
-            console.log(`Globe ${eventName} ignored (too soon after previous event)`);
-            return;
-        }
-        window.globus._lastClickTime = now;
-
-        const coords = window.globus.planet.getLonLatFromPixelTerrain(mouse);
-        if (coords) {
-            console.log(`Globe clicked at Lon: ${coords.lon}, Lat: ${coords.lat}`);
-            try {
-                const mapCoords = ol.proj.fromLonLat([coords.lon, coords.lat]);
-                const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(mapCoords, TILE_SELECTION_ZOOM);
-                const tileId = getTileId(tileCoord); // Uses the getTileId function already defined
-                console.log(`Corresponding ZL${TILE_SELECTION_ZOOM} Tile: z=${tileCoord[0]}, x=${tileCoord[1]}, y=${tileCoord[2]}, ID=${tileId}`);
-
-                const targetLayer = window.userLayers[window.selectedLayerId]?.layer;
-                let isTileSavedInCurrentLayer = false;
-                if (targetLayer) {
-                    const targetSource = targetLayer.getSource();
-                    isTileSavedInCurrentLayer = targetSource.getFeatures().some(f => f.get('tileId') === tileId);
-                }
-
-                if (isTileSavedInCurrentLayer) {
-                    console.log(`Globe click on tile ${tileId} which is saved in the current OpenLayers layer. Cube placement prevented.`);
-                    if (selectedTileCubeEntity) {
-                        tileCubeLayer.remove(selectedTileCubeEntity);
-                        selectedTileCubeEntity = null;
-                        if (window.globus.renderer) window.globus.renderer.draw();
-                    }
-                    // Potentially open details for this saved tile if clicked on globe?
-                    // const savedFeature = targetLayer.getSource().getFeatures().find(f => f.get('tileId') === tileId);
-                    // if (savedFeature && typeof openTilesetDetailsModal === 'function') openTilesetDetailsModal(savedFeature);
-                    return;
-                }
-
-                const tileExtentEPSG3857 = selectionTileGrid.getTileCoordExtent(tileCoord);
-                const tileCenterEPSG3857 = ol.extent.getCenter(tileExtentEPSG3857);
-                const tileCenterLonLat = ol.proj.toLonLat(tileCenterEPSG3857);
-                const cubeAltitude = 0.5;
-
-                if (selectedTileCubeEntity) {
-                    if (selectedTileCubeEntity.properties.tileId === tileId) {
-                        tileCubeLayer.remove(selectedTileCubeEntity);
-                        selectedTileCubeEntity = null;
-                    } else {
-                        selectedTileCubeEntity.setLonLat(new og.LonLat(tileCenterLonLat[0], tileCenterLonLat[1], cubeAltitude));
-                        selectedTileCubeEntity.properties.tileId = tileId;
-                    }
-                } else {
-                    selectedTileCubeEntity = new og.Entity({
-                        lonlat: [tileCenterLonLat[0], tileCenterLonLat[1], cubeAltitude],
-                        name: `TileCube-${tileId}`,
-                        box: { dimensions: [1, 1, 1], color: "green" },
-                        properties: { tileId: tileId }
-                    });
-                    tileCubeLayer.add(selectedTileCubeEntity);
-                }
-                if (window.globus.renderer) window.globus.renderer.draw();
-            } catch (error) { console.error("Error processing globe click:", error); }
-        } else { console.log("Globe click detected, but no terrain intersection found."); }
-    }
+    // Removed duplicate/older handleGlobeClick function.
+    // The primary one is defined later and used by the event listener.
 
     // Attach Click Listener directly to OpenGlobus Canvas (after globus init)
     setTimeout(() => {
@@ -1669,13 +1632,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleGlobeClick(mouse, eventName) {
         console.log(`%cHANDLEGLOBECLICK: Event '${eventName}' received.`, "color: magenta; font-size: 1.1em; font-weight: bold;", "Mouse data:", mouse);
 
-        // Only process left clicks for selection
         if (eventName !== 'lclick') {
             console.log("HANDLEGLOBECLICK: Not an lclick event, ignoring for selection.");
             return;
         }
 
-        // Check prerequisites
         if (!window.globus || !window.globus.planet || !window.globus.planet.camera || !selectionTileGrid || !window.olMap) {
             console.error("HANDLEGLOBECLICK: Globus, planet, camera, selectionTileGrid or olMap not ready. Cannot process click.");
             return;
@@ -1688,48 +1649,53 @@ document.addEventListener('DOMContentLoaded', () => {
              console.error("HANDLEGLOBECLICK: toggleTileSelection function is not defined.");
              return;
         }
+        console.log("HANDLEGLOBECLICK: Passed initial prerequisite checks.");
 
-        console.log("HANDLEGLOBECLICK: Passed initial checks.");
-
-        // Check zoom level
         const viewpoint = window.globus.planet.getViewpoint();
         if (!viewpoint) {
-            console.warn("HANDLEGLOBECLICK: Could not get viewpoint.");
+            console.warn("HANDLEGLOBECLICK: Could not get viewpoint from globe.");
             return;
         }
         const cameraZoom = Math.round(viewpoint.zoom);
-        console.log(`HANDLEGLOBECLICK: Current camera zoom: ${cameraZoom}`);
-        if (cameraZoom < GRID_VISIBILITY_MIN_ZOOM) {
-            console.log(`HANDLEGLOBECLICK: Clicked at camera zoom ${cameraZoom}, less than GRID_VISIBILITY_MIN_ZOOM (${GRID_VISIBILITY_MIN_ZOOM}). No selection for Z21 grid.`);
-            return;
-        }
+        console.log(`HANDLEGLOBECLICK: Globe camera zoom level: ${cameraZoom}`);
 
-        // Get clicked coordinates
         const lonLat = mouse.lonLat;
         if (!lonLat) {
-            console.warn("HANDLEGLOBECLICK: mouse.lonLat is undefined.");
+            console.warn("HANDLEGLOBECLICK: mouse.lonLat is undefined from globe click. Cannot determine tile.");
             return;
         }
-        console.log("HANDLEGLOBECLICK: Click lonLat:", lonLat);
+        console.log(`HANDLEGLOBECLICK: Clicked LonLat: ${lonLat.lon.toFixed(6)}, ${lonLat.lat.toFixed(6)}`);
 
         try {
-            // Convert LonLat to the ZL21 tile coordinate used by OpenLayers
             const mapCoordsEPSG3857 = ol.proj.fromLonLat([lonLat.lon, lonLat.lat]);
+            console.log(`HANDLEGLOBECLICK: Transformed to EPSG:3857: ${mapCoordsEPSG3857[0].toFixed(2)}, ${mapCoordsEPSG3857[1].toFixed(2)}`);
+
             const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(mapCoordsEPSG3857, TILE_SELECTION_ZOOM);
 
             if (tileCoord) {
-                 console.log(`HANDLEGLOBECLICK: Calculated OL TileCoord: Z=${tileCoord[0]}, X=${tileCoord[1]}, Y=${tileCoord[2]}`);
-                 // Use the existing OpenLayers selection function
-                 toggleTileSelection(tileCoord);
-                 // Note: We no longer manage selectedGlobeTiles array or clear gridLayerOG here.
-                 // Selection state is managed in OpenLayers selectionSource.
-                 // Redraws should be triggered by OpenLayers events or style changes.
-                 // Ensure OpenGlobus saved layer redraws if a selection was made/cleared that might affect it
-                 if (ogSavedTilesetsLayer) ogSavedTilesetsLayer.redraw();
+                 console.log(`HANDLEGLOBECLICK: Calculated OL TileCoord for ZL${TILE_SELECTION_ZOOM}: Z=${tileCoord[0]}, X=${tileCoord[1]}, Y=${tileCoord[2]}`);
+                 toggleTileSelection(tileCoord); // This now also calls ogSavedTilesetsLayer.redraw()
+                 
+                 const tileId = getTileId(tileCoord);
+                 const targetLayer = window.userLayers[window.selectedLayerId]?.layer;
+                 if (targetLayer) {
+                     const source = targetLayer.getSource();
+                     const featuresAtTile = source.getFeatures().filter(f => f.get('tileId') === tileId && f.get('tilesetGroupId'));
+                     if (featuresAtTile.length > 0) {
+                         const clickedFeature = featuresAtTile[0];
+                         const groupId = clickedFeature.get('tilesetGroupId');
+                         console.log(`HANDLEGLOBECLICK: Clicked tile ${tileId} is part of saved group ${groupId}. Opening details and zooming.`);
+                         openTilesetDetailsModal(clickedFeature);
+                         // Do not call zoomToTilesetGroup here if the globe click itself is for selection,
+                         // as it might fight with the user's current globe view.
+                         // Zooming should primarily happen when selecting from the list or map's saved feature click.
+                     } else {
+                         console.log(`HANDLEGLOBECLICK: Clicked tile ${tileId} is not part of a saved group or no group ID found.`);
+                     }
+                 }
             } else {
-                 console.warn("HANDLEGLOBECLICK: Could not calculate tileCoord from clicked location.");
+                 console.warn("HANDLEGLOBECLICK: Could not calculate tileCoord from clicked location for ZL" + TILE_SELECTION_ZOOM);
             }
-
         } catch (e) {
             console.error("HANDLEGLOBECLICK: Error during tile coordinate conversion or selection toggle:", e);
         }
@@ -2114,5 +2080,86 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize maps after DOM is ready
     initializeOpenGlobus();
     initializeOpenLayersMap(); // Call to initialize OpenLayers map
+
+    function createTestTileset() {
+        console.log("Attempting to create test tileset...");
+        if (!window.olMap || !selectionSource || !selectionTileGrid || !window.userLayers || !layer0Id || !saveSelectionBtn) {
+            console.warn("createTestTileset: Prerequisites not met. Cannot create test tileset.");
+            return;
+        }
+
+        const testTileCoord = [21, 617234, 788670]; // From user image Z, X, Y
+        const testTileId = getTileId(testTileCoord);
+        const testTilesetName = "Test Single Tile";
+
+        // Ensure Layer 0 is selected
+        if (window.selectedLayerId !== layer0Id) {
+            selectLayerInList(layer0Id);
+        }
+        
+        const targetSource = window.userLayers[layer0Id].layer.getSource();
+        const existingFeaturesInLayer = targetSource.getFeatures();
+        const isTileSaved = existingFeaturesInLayer.some(f => f.get('tileId') === testTileId && f.get('tilesetName') === testTilesetName);
+
+        if (isTileSaved) {
+            console.log(`Test tileset "${testTilesetName}" with tile ID ${testTileId} already exists.`);
+            // Optionally, select it and open details for testing
+            const existingFeature = existingFeaturesInLayer.find(f => f.get('tileId') === testTileId && f.get('tilesetName') === testTilesetName);
+            if (existingFeature) {
+                const groupId = existingFeature.get('tilesetGroupId');
+                if (groupId) {
+                    console.log(`Found existing test tileset, opening details for group ${groupId}`);
+                    openTilesetDetailsModal(existingFeature);
+                    zoomToTilesetGroup(groupId);
+                }
+            }
+            return;
+        }
+
+        console.log(`Creating test tileset: "${testTilesetName}" with tile ${testTileId}`);
+
+        // Temporarily add the tile to selectionSource to use the saveSelectionBtn logic
+        selectionSource.clear(); // Clear any current selection
+        const tileExtent = selectionTileGrid.getTileCoordExtent(testTileCoord);
+        const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
+        newFeature.setId(testTileId);
+        newFeature.set('isIndividualSelection', true);
+        selectionSource.addFeature(newFeature);
+
+        // Set the name for the tileset to be saved
+        if (tilesetNameInput) {
+            tilesetNameInput.value = testTilesetName;
+        } else {
+            console.warn("createTestTileset: tilesetNameInput not found. Cannot set name for programmatic save.");
+            selectionSource.clear(); // Clean up
+            return;
+        }
+        
+        // Simulate save button click
+        console.log("createTestTileset: Simulating saveSelectionBtn click.");
+        saveSelectionBtn.click(); // This will use current color picker values
+
+        // Clear selection and input after programmatic save
+        selectionSource.clear();
+        if (tilesetNameInput) tilesetNameInput.value = '';
+        console.log("Test tileset created and saved.");
+
+        // Optionally, immediately select and zoom to the newly created test tileset
+        // Need to find its groupId after saving. This might require a slight delay or a callback.
+        setTimeout(() => {
+            const savedTestFeature = targetSource.getFeatures().find(f => f.get('tileId') === testTileId && f.get('tilesetName') === testTilesetName);
+            if (savedTestFeature) {
+                const groupId = savedTestFeature.get('tilesetGroupId');
+                if (groupId) {
+                    console.log(`Selecting and zooming to newly created test tileset, group ID: ${groupId}`);
+                    openTilesetDetailsModal(savedTestFeature);
+                    zoomToTilesetGroup(groupId);
+                }
+            }
+        }, 500); // Delay to allow save operation to complete and list to populate
+    }
+
+    // Call after maps are initialized and DOM is fully ready
+    setTimeout(createTestTileset, 2000); // Delay to ensure everything else is set up
 
 }); // End of DOMContentLoaded
