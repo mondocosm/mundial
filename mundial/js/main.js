@@ -1594,13 +1594,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }, 200); // Keep the 200ms delay, can be adjusted if needed
 
-                if (window.globus.planet.events) {
-                    console.log("%cDEBUG: Attaching 'lclick' and 'rclick' event listeners to window.globus.planet.events", "color: blue; font-weight: bold;");
+                if (window.globus && window.globus.planet && window.globus.planet.events) {
+                    console.log("%cDEBUG: window.globus.planet.events object found. Attaching 'lclick' and 'rclick' event listeners.", "color: blue; font-weight: bold;", window.globus.planet.events);
                     window.globus.planet.events.on("lclick", (mouse) => handleGlobeClick(mouse, 'lclick'));
                     window.globus.planet.events.on("rclick", (mouse) => handleGlobeClick(mouse, 'rclick'));
-                    console.log("DEBUG: OpenGlobus event listeners for lclick and rclick added.");
+                    console.log("DEBUG: OpenGlobus event listeners for lclick and rclick successfully attached.");
                 } else {
-                    console.error("CRITICAL ERROR: window.globus.planet.events is NOT DEFINED. Click listeners CANNOT be added.");
+                    console.error("CRITICAL ERROR: window.globus.planet.events is NOT DEFINED or planet/globus missing. Click listeners CANNOT be attached.",
+                                  "globus:", window.globus,
+                                  "planet:", window.globus ? window.globus.planet : "N/A",
+                                  "events:", window.globus && window.globus.planet ? window.globus.planet.events : "N/A");
                 }
                 // console.log("DEBUG: Click listener attachment SKIPPED for isolation test."); // Commented out
 
