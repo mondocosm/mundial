@@ -398,7 +398,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         clone.set('originalTileId', f.get('tileId'));
                         clone.set('isGroupSelection', true); return clone;
                     });
-                    if (featuresToAdd.length > 0 && selectionSource) selectionSource.addFeatures(featuresToAdd);
+                    if (featuresToAdd.length > 0 && selectionSource) {
+                        selectionSource.addFeatures(featuresToAdd);
+                        // If a saved group is clicked on the map, zoom to it in both views
+                        zoomToTilesetGroup(clickedGroupId);
+                    }
                 } else {
                     if (selectionSource) {
                         const isGroupCurrentlySelected = selectionSource.getFeatures().some(f => f.get('isGroupSelection'));
@@ -814,6 +818,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    function flyToTilesetGroupInGlobe(groupId) {
+        if (!window.globus || !window.globus.planet || !window.globus.planet.camera ||
+            !window.selectedLayerId || !window.userLayers || !window.userLayers[window.selectedLayerId]) {
+            console.warn("flyToTilesetGroupInGlobe: Globus or layer data not ready.");
+            return;
+        }
+
+        const layer = window.userLayers[window.selectedLayerId].layer;
+        const source = layer.getSource();
+        const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
+
+        if (groupFeatures.length > 0) {
+            const groupExtentEPSG3857 = ol.extent.createEmpty();
+            groupFeatures.forEach(f => ol.extent.extend(groupExtentEPSG3857, f.getGeometry().getExtent()));
+
+            if (!ol.extent.isEmpty(groupExtentEPSG3857)) {
+                // Transform extent to geographic coordinates for OpenGlobus
+                const groupExtentEPSG4326 = ol.proj.transformExtent(groupExtentEPSG3857, 'EPSG:3857', 'EPSG:4326');
+                
+                const centerLon = ol.extent.getCenter(groupExtentEPSG4326)[0];
+                const centerLat = ol.extent.getCenter(groupExtentEPSG4326)[1];
+                
+                // Basic altitude calculation: larger extent = higher altitude
+                // This is a heuristic and might need refinement for better user experience.
+                const width = ol.extent.getWidth(groupExtentEPSG4326); // Width in degrees
+                const height = ol.extent.getHeight(groupExtentEPSG4326); // Height in degrees
+                const diagonal = Math.sqrt(width * width + height * height);
+                
+                // Heuristic: Convert diagonal degrees to a rough altitude in meters.
+                // 1 degree is roughly 111km. We want to be "above" it.
+                // This factor (e.g., 200000) might need significant tuning.
+                let altitude = Math.max(500, diagonal * 150000); // Ensure a minimum altitude
+                // Cap altitude to avoid being too far out for small selections
+                altitude = Math.min(altitude, 5000000); // Max 5000km altitude
+
+                console.log(`flyToTilesetGroupInGlobe: Flying to Lon: ${centerLon.toFixed(4)}, Lat: ${centerLat.toFixed(4)}, Alt: ${altitude.toFixed(0)}`);
+                
+                if (typeof window.globus.planet.camera.flyLonLat === 'function') {
+                    window.globus.planet.camera.flyLonLat(new og.LonLat(centerLon, centerLat, altitude));
+                } else {
+                    console.warn("flyToTilesetGroupInGlobe: camera.flyLonLat not available.");
+                }
+            }
+        }
+    }
+
     function zoomToTilesetGroup(groupId) {
         if (!window.selectedLayerId || !window.userLayers || !window.userLayers[window.selectedLayerId] || !window.olMap) return;
         const layer = window.userLayers[window.selectedLayerId].layer;
@@ -825,6 +875,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!ol.extent.isEmpty(groupExtent)) {
                 window.olMap.getView().fit(groupExtent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: TILE_SELECTION_ZOOM });
                 highlightListItem(groupId);
+                // Also fly the globe to this group
+                flyToTilesetGroupInGlobe(groupId);
             }
         }
     }
