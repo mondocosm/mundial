@@ -253,11 +253,63 @@ document.addEventListener('DOMContentLoaded', () => {
             const layer0Id = 'layer-0';
             const layer0Name = 'Layer 0';
             layer0Source = new ol.source.Vector(); // Assign to higher-scoped variable
-            const tilesetFeatureStyle = new ol.style.Style({
-                stroke: new ol.style.Stroke({ color: 'rgba(0, 128, 128, 0.9)', width: 3 }),
-                fill: new ol.style.Fill({ color: 'rgba(0, 0, 0, 0.0)' })
+            // Define a function to create the style based on feature properties
+            const createTilesetStyle = (feature) => {
+                const color = feature.get('color') || '#008080'; // Default teal
+                const fillOpacity = feature.get('fillOpacity') === undefined ? 0.6 : feature.get('fillOpacity'); // Default fill opacity (more fill)
+                const strokeWidth = feature.get('strokeWidth') === undefined ? 0.5 : feature.get('strokeWidth'); // Default stroke width (less stroke)
+
+                // Convert hex color and opacity to rgba for fill
+                let r = 0, g = 0, b = 0;
+                if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(color)) {
+                    let c = color.substring(1).split('');
+                    if (c.length === 3) { c = [c[0], c[0], c[1], c[1], c[2], c[2]]; }
+                    c = '0x' + c.join('');
+                    r = (c >> 16) & 255;
+                    g = (c >> 8) & 255;
+                    b = c & 255;
+                } else if (color.startsWith('rgba')) { // Handle if color is already rgba (e.g. from picker with alpha)
+                    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d\.]+))?\)/);
+                    if (match) {
+                        r = parseInt(match[1]);
+                        g = parseInt(match[2]);
+                        b = parseInt(match[3]);
+                        // If an alpha is in the color string, it's ignored here as fillOpacity is separate
+                    }
+                }
+                const fillColorRgba = `rgba(${r},${g},${b},${fillOpacity})`;
+                // Use the original color for stroke, but ensure full opacity for the stroke itself
+                const strokeColorRgba = color.startsWith('rgba') ? `rgba(${r},${g},${b},1)` : color;
+
+
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: strokeColorRgba,
+                        width: strokeWidth
+                    }),
+                    fill: new ol.style.Fill({
+                        color: fillColorRgba
+                    })
+                });
+            };
+
+            // Function to update a single feature's style
+            const updateFeatureStyle = (feature) => {
+                 if (feature.get('isVisible') !== false) {
+                     feature.setStyle(createTilesetStyle(feature));
+                 } else {
+                     feature.setStyle(null); // Hide if not visible
+                 }
+            };
+
+            // Apply the style function to the layer
+            layer0Layer = new ol.layer.Vector({
+                source: layer0Source,
+                style: createTilesetStyle, // Use the function directly
+                title: layer0Id,
+                zIndex: 2,
+                visible: true
             });
-            layer0Layer = new ol.layer.Vector({ source: layer0Source, style: tilesetFeatureStyle, title: layer0Id, zIndex: 2, visible: true }); // Assign to higher-scoped variable
             layer0Layer.set('userLayerName', layer0Name);
             window.userLayers = { [layer0Id]: { name: layer0Name, layer: layer0Layer, tilesetCount: 0 } }; // Attach to window for broader access if needed
             window.selectedLayerId = layer0Id; // Attach to window
@@ -681,11 +733,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newLayerName && newLayerName.trim() !== '' && window.olMap) {
                 const trimmedName = newLayerName.trim(); const newLayerId = `layer-${layerCounter++}`;
                 const newSource = new ol.source.Vector();
-                const tilesetFeatureStyle = new ol.style.Style({ // Re-define or access from wider scope
-                    stroke: new ol.style.Stroke({ color: 'rgba(0, 128, 128, 0.9)', width: 3 }),
-                    fill: new ol.style.Fill({ color: 'rgba(0, 0, 0, 0.0)' })
+                // Use the same style function for newly created layers
+                const newLayer = new ol.layer.Vector({
+                    source: newSource,
+                    style: createTilesetStyle, // Use the style function
+                    title: newLayerId,
+                    zIndex: 2,
+                    visible: true
                 });
-                const newLayer = new ol.layer.Vector({ source: newSource, style: tilesetFeatureStyle, title: newLayerId, zIndex: 2, visible: true });
                 newLayer.set('userLayerName', trimmedName);
                 window.userLayers[newLayerId] = { name: trimmedName, layer: newLayer, tilesetCount: 0 };
                 window.olMap.addLayer(newLayer);
@@ -771,11 +826,8 @@ document.addEventListener('DOMContentLoaded', () => {
             feature.set('isVisible', isVisible);
             if (isVisible) {
                 const color = feature.get('color') || '#008080'; // Default if no color
-                const tilesetFeatureStyle = new ol.style.Style({ // Recreate or get from global
-                    stroke: new ol.style.Stroke({ color: color, width: 3 }),
-                    fill: new ol.style.Fill({ color: 'rgba(0,0,0,0.0)'})
-                });
-                feature.setStyle(tilesetFeatureStyle);
+                // Update style using the centralized function
+                updateFeatureStyle(feature);
             } else { feature.setStyle(null); }
         });
     }
@@ -828,20 +880,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function openTilesetDetailsModal(feature) {
-        if (!feature || !tilesetDetailsModal || !detailsTilesetNameInput || !detailsColorPicker || !detailsTilesetImageUrlInput || !detailsTilesetLinkInput || !detailsTilesetTagsTextarea || !detailsTilesetImage || !detailsTilesetCoordsSpan ) {
+        // Ensure detailsFillOpacityInput and detailsStrokeWidthInput are defined, similar to other elements
+        const detailsFillOpacityInput = document.getElementById('details-fill-opacity-input');
+        const detailsStrokeWidthInput = document.getElementById('details-stroke-width-input');
+
+        if (!feature || !tilesetDetailsModal || !detailsTilesetNameInput || !detailsColorPicker ||
+            !detailsFillOpacityInput || !detailsStrokeWidthInput || // Add new inputs to the check
+            !detailsTilesetImageUrlInput || !detailsTilesetLinkInput || !detailsTilesetTagsTextarea ||
+            !detailsTilesetImage || !detailsTilesetCoordsSpan ) {
             console.error("openTilesetDetailsModal: One or more required elements or feature is missing.");
             return;
         }
         const groupId = feature.get('tilesetGroupId');
         const name = feature.get('tilesetName') || 'Unnamed Tileset';
         const color = feature.get('color') || '#008080';
+        const fillOpacity = feature.get('fillOpacity') === undefined ? 0.6 : feature.get('fillOpacity');
+        const strokeWidth = feature.get('strokeWidth') === undefined ? 0.5 : feature.get('strokeWidth');
         const imageUrl = feature.get('imageUrl') || '';
         const linkUrl = feature.get('linkUrl') || '';
         const tags = feature.get('tags') || '';
+
         if (!groupId) { return; }
         currentEditingGroupId = groupId;
         detailsTilesetNameInput.value = name;
         detailsColorPicker.value = color;
+        detailsFillOpacityInput.value = fillOpacity; // Populate new input
+        detailsStrokeWidthInput.value = strokeWidth; // Populate new input
         detailsTilesetImageUrlInput.value = imageUrl;
         detailsTilesetLinkInput.value = linkUrl;
         detailsTilesetTagsTextarea.value = tags;
@@ -874,12 +938,25 @@ document.addEventListener('DOMContentLoaded', () => {
         tilesetDetailsModal.style.setProperty('display', 'block', 'important');
     }
 
-    function applyGroupPropertyChange(propertyName, value) {
+    function applyGroupPropertyChange(propertyName, value, skipStyleUpdate = false) {
         if (!currentEditingGroupId || !window.selectedLayerId || !window.userLayers[window.selectedLayerId]) { return false; }
         const layer = window.userLayers[window.selectedLayerId].layer; const source = layer.getSource();
         const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
         if (groupFeatures.length === 0) { return false; }
-        groupFeatures.forEach(feature => { feature.set(propertyName, value); });
+        groupFeatures.forEach(feature => {
+             feature.set(propertyName, value);
+             // Update style immediately if not skipped (e.g., for color, opacity, stroke changes)
+             if (!skipStyleUpdate && feature.get('isVisible') !== false) {
+                 updateFeatureStyle(feature); // This will update the OL feature style
+             }
+        });
+        // Trigger redraw for OpenGlobus layer if visual properties changed
+        if (!skipStyleUpdate && ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
+             console.log("Triggering ogSavedTilesetsLayer redraw due to property change for OpenGlobus.");
+             ogSavedTilesetsLayer.redraw();
+        } else if (!skipStyleUpdate) {
+             console.warn("Could not redraw ogSavedTilesetsLayer - layer or redraw function missing.");
+        }
         return true;
     }
 
@@ -912,26 +989,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (detailsTilesetTagsTextarea) {
         detailsTilesetTagsTextarea.addEventListener('change', (event) => { applyGroupPropertyChange('tags', event.target.value.trim()); });
     }
+    // --- Enhanced Color Picker Event Listeners ---
+    const detailsFillOpacityInput = document.getElementById('details-fill-opacity-input');
+    const detailsStrokeWidthInput = document.getElementById('details-stroke-width-input');
+
     if (detailsColorPicker) {
-        detailsColorPicker.addEventListener('input', (event) => { // 'input' for live color change
-            if (!currentEditingGroupId || !window.selectedLayerId || !window.userLayers[window.selectedLayerId]) return;
-            const layer = window.userLayers[window.selectedLayerId].layer; const source = layer.getSource();
-            const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === currentEditingGroupId);
-            if (groupFeatures.length === 0) return;
-            const newColor = event.target.value;
-            groupFeatures.forEach(feature => {
-                feature.set('color', newColor);
-                if (feature.get('isVisible') !== false) { // Only update style if visible
-                     const style = feature.getStyle() || new ol.style.Style({});
-                     const stroke = style.getStroke() || new ol.style.Stroke({});
-                     stroke.setColor(newColor); // Update stroke color
-                     // Ensure fill is transparent for outline effect
-                     const fill = style.getFill() || new ol.style.Fill({});
-                     fill.setColor('rgba(0,0,0,0)'); // Explicitly transparent fill
-                     feature.setStyle(new ol.style.Style({stroke: stroke, fill: fill}));
-                }
-            });
+        detailsColorPicker.addEventListener('input', (event) => {
+            applyGroupPropertyChange('color', event.target.value);
         });
+    }
+    if (detailsFillOpacityInput) {
+         detailsFillOpacityInput.addEventListener('input', (event) => {
+             const opacity = parseFloat(event.target.value);
+             if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                 applyGroupPropertyChange('fillOpacity', opacity);
+             }
+         });
+    }
+    if (detailsStrokeWidthInput) {
+         detailsStrokeWidthInput.addEventListener('input', (event) => {
+             const width = parseFloat(event.target.value);
+             if (!isNaN(width) && width >= 0) {
+                 applyGroupPropertyChange('strokeWidth', width);
+             }
+         });
     }
 
     if (saveSelectionBtn) {
@@ -975,7 +1056,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 clonedFeature.set('tilesetGroupId', tilesetGroupId);
                 clonedFeature.set('tileId', tileId);
                 clonedFeature.set('isVisible', true);
-                clonedFeature.set('color', detailsColorPicker ? detailsColorPicker.value : '#008080'); // Use current color picker value or default
+                clonedFeature.set('color', detailsColorPicker ? detailsColorPicker.value : '#008080');
+                clonedFeature.set('fillOpacity', detailsFillOpacityInput ? parseFloat(detailsFillOpacityInput.value) : 0.6); // Default to new fill opacity
+                clonedFeature.set('strokeWidth', detailsStrokeWidthInput ? parseFloat(detailsStrokeWidthInput.value) : 0.5); // Default to new stroke width
                 clonedFeature.unset('isIndividualSelection');
                 featuresToAdd.push(clonedFeature);
             });
@@ -1166,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let ogBaseLayers = {};
     let gridLayerOG = null;
     let ogSavedTilesetsLayer = null;
-    let selectedGlobeTiles = []; // Array to store {z, x, y} of Z21 selected tiles (primarily for OG grid highlighting)
+    // let selectedGlobeTiles = []; // Removed: Selection state is now unified in OpenLayers selectionSource
     let tileCubeLayer = null; // Layer for the ZL21 tile *indicator* cube on OpenGlobus
     let selectedTileCubeEntity = null; // The currently displayed indicator cube entity on OpenGlobus
     console.log("DEBUG: OpenGlobus related variables declared.");
@@ -1519,22 +1602,29 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleGlobeClick(mouse, eventName) {
         console.log(`%cHANDLEGLOBECLICK: Event '${eventName}' received.`, "color: magenta; font-size: 1.1em; font-weight: bold;", "Mouse data:", mouse);
 
+        // Only process left clicks for selection
         if (eventName !== 'lclick') {
             console.log("HANDLEGLOBECLICK: Not an lclick event, ignoring for selection.");
             return;
         }
 
-        if (!window.globus || !window.globus.planet || !window.globus.planet.camera) {
-            console.error("HANDLEGLOBECLICK: Globus, planet, or camera not ready. Cannot process click.");
+        // Check prerequisites
+        if (!window.globus || !window.globus.planet || !window.globus.planet.camera || !selectionTileGrid || !window.olMap) {
+            console.error("HANDLEGLOBECLICK: Globus, planet, camera, selectionTileGrid or olMap not ready. Cannot process click.");
             return;
         }
         if (typeof og === 'undefined' || typeof og.mercator === 'undefined') {
             console.error("HANDLEGLOBECLICK: OpenGlobus 'og' or 'og.mercator' not defined. Cannot process click.");
             return;
         }
-        
+        if (typeof toggleTileSelection !== 'function') {
+             console.error("HANDLEGLOBECLICK: toggleTileSelection function is not defined.");
+             return;
+        }
+
         console.log("HANDLEGLOBECLICK: Passed initial checks.");
 
+        // Check zoom level
         const viewpoint = window.globus.planet.getViewpoint();
         if (!viewpoint) {
             console.warn("HANDLEGLOBECLICK: Could not get viewpoint.");
@@ -1542,12 +1632,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const cameraZoom = Math.round(viewpoint.zoom);
         console.log(`HANDLEGLOBECLICK: Current camera zoom: ${cameraZoom}`);
-
         if (cameraZoom < GRID_VISIBILITY_MIN_ZOOM) {
             console.log(`HANDLEGLOBECLICK: Clicked at camera zoom ${cameraZoom}, less than GRID_VISIBILITY_MIN_ZOOM (${GRID_VISIBILITY_MIN_ZOOM}). No selection for Z21 grid.`);
             return;
         }
 
+        // Get clicked coordinates
         const lonLat = mouse.lonLat;
         if (!lonLat) {
             console.warn("HANDLEGLOBECLICK: mouse.lonLat is undefined.");
@@ -1556,46 +1646,25 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("HANDLEGLOBECLICK: Click lonLat:", lonLat);
 
         try {
-            console.log(`HANDLEGLOBECLICK: Attempting lonLatToTile with TILE_SELECTION_ZOOM (${TILE_SELECTION_ZOOM})`);
-            // const tileCoordsArr = og.mercator.lonLatToTile(lonLat, TILE_SELECTION_ZOOM); // Original
-            const tileX = og.mercator.getTileX(lonLat.lon, TILE_SELECTION_ZOOM);
-            const tileY = og.mercator.getTileY(lonLat.lat, TILE_SELECTION_ZOOM);
-            const tileZ = TILE_SELECTION_ZOOM;
-            const tileCoordsArr = [tileX, tileY, tileZ]; // Simulate original array structure
-            console.log("HANDLEGLOBECLICK: lonLatToTile result:", tileCoordsArr);
+            // Convert LonLat to the ZL21 tile coordinate used by OpenLayers
+            const mapCoordsEPSG3857 = ol.proj.fromLonLat([lonLat.lon, lonLat.lat]);
+            const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(mapCoordsEPSG3857, TILE_SELECTION_ZOOM);
 
-            if (tileCoordsArr && tileCoordsArr.length === 3) {
-                const clickedZ21Tile = { z: tileCoordsArr[2], x: tileCoordsArr[0], y: tileCoordsArr[1] };
-                console.log("HANDLEGLOBECLICK: Parsed clickedZ21Tile:", clickedZ21Tile);
-
-                if (clickedZ21Tile.z !== TILE_SELECTION_ZOOM) {
-                    console.warn(`HANDLEGLOBECLICK: lonLatToTile for Z21 selection returned unexpected zoom ${clickedZ21Tile.z}.`);
-                    return;
-                }
-
-                const existingIndex = selectedGlobeTiles.findIndex(
-                    t => t.x === clickedZ21Tile.x && t.y === clickedZ21Tile.y && t.z === clickedZ21Tile.z
-                );
-
-                if (existingIndex > -1) {
-                    selectedGlobeTiles.splice(existingIndex, 1);
-                    console.log(`%cHANDLEGLOBECLICK: Deselected Z21 tile: Z:${clickedZ21Tile.z}, X:${clickedZ21Tile.x}, Y:${clickedZ21Tile.y}. Total: ${selectedGlobeTiles.length}`, "color: orange;");
-                } else {
-                    selectedGlobeTiles.push(clickedZ21Tile);
-                    console.log(`%cHANDLEGLOBECLICK: Selected Z21 tile: Z:${clickedZ21Tile.z}, X:${clickedZ21Tile.x}, Y:${clickedZ21Tile.y}. Total: ${selectedGlobeTiles.length}`, "color: green;");
-                }
-
-                if (gridLayerOG) {
-                    console.log("HANDLEGLOBECLICK: Calling gridLayerOG.clear() to refresh.");
-                    gridLayerOG.clear();
-                } else {
-                    console.warn("HANDLEGLOBECLICK: gridLayerOG is null, cannot clear.");
-                }
+            if (tileCoord) {
+                 console.log(`HANDLEGLOBECLICK: Calculated OL TileCoord: Z=${tileCoord[0]}, X=${tileCoord[1]}, Y=${tileCoord[2]}`);
+                 // Use the existing OpenLayers selection function
+                 toggleTileSelection(tileCoord);
+                 // Note: We no longer manage selectedGlobeTiles array or clear gridLayerOG here.
+                 // Selection state is managed in OpenLayers selectionSource.
+                 // Redraws should be triggered by OpenLayers events or style changes.
+                 // Ensure OpenGlobus saved layer redraws if a selection was made/cleared that might affect it
+                 if (ogSavedTilesetsLayer) ogSavedTilesetsLayer.redraw();
             } else {
-                console.warn("HANDLEGLOBECLICK: og.mercator.lonLatToTile did not return valid Z21 coordinates.", tileCoordsArr);
+                 console.warn("HANDLEGLOBECLICK: Could not calculate tileCoord from clicked location.");
             }
+
         } catch (e) {
-            console.error("HANDLEGLOBECLICK: Error during Z21 tile conversion or selection:", e);
+            console.error("HANDLEGLOBECLICK: Error during tile coordinate conversion or selection toggle:", e);
         }
     }
 
