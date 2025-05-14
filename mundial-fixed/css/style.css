@@ -1,0 +1,704 @@
+/* Basic Reset & Body */
+body {
+   margin: 0;
+   padding: 0;
+   font-family: sans-serif;
+   background-color: #222; /* Dark background */
+   color: #eee; /* Light base text */
+}
+
+/* Map/Globe View Panels */
+.view-panel {
+    position: absolute;
+    background: rgba(50, 50, 50, 0.9);
+    border: 1px solid #555;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    overflow: auto; /* Changed from hidden to allow resize */
+    resize: both; /* Allow resizing */
+    min-width: 50px; /* Allow smaller minimize */
+    min-height: 50px; /* Allow smaller minimize */
+    z-index: 990; /* Default z-index below visible panels */
+    /* Add draggable cursor */
+    cursor: move;
+}
+
+.view-panel.visible-panel {
+    display: block !important; /* Ensure it's visible when class is applied */
+    z-index: 1005 !important; /* Ensure it's on top when visible */
+}
+
+/* Specific positioning for panels */
+#social-panel {
+    bottom: 10px;
+    right: 10px;
+    top: auto;
+    left: auto;
+    width: 250px;
+    height: auto;
+    max-height: 250px;
+    z-index: 1001;
+}
+
+/* Specific positioning for profile panel */
+#profile-panel {
+    top: 60px; /* Position below toolbar */
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    width: 250px; /* Give it a default width */
+    height: auto; /* Allow height to adjust */
+    max-height: 350px; /* Limit max height */
+    z-index: 1001;
+}
+
+/* Specific positioning for XR panel */
+#xr-panel {
+    top: calc(50% - 150px); /* Center vertically */
+    left: calc(50% - 150px); /* Center horizontally */
+    width: 300px;
+    height: 300px;
+    z-index: 1002; /* Above other panels */
+}
+
+/* Specific positioning for map panel when visible */
+#map-panel {
+    left: 10px;
+    width: calc(50% - 15px); /* Take up left half with small margin */
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
+    right: auto;
+}
+
+/* Specific positioning for globe panel when visible */
+#globe-panel {
+    right: 10px; /* Position on the right */
+    width: calc(50% - 15px); /* Take up right half with small margin */
+    left: auto;
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
+}
+
+
+/* Inner Map/Globe Containers */
+#map, #globusContainer {
+   position: absolute; /* Position relative to panel */
+   top: 30px; /* Below panel header */
+   left: 0;
+   bottom: 0;
+   right: 0;
+   width: 100%; /* Fill panel content area */
+   height: calc(100% - 30px); /* Fill panel content area */
+   overflow: hidden;
+   z-index: 1; /* Ensure map is below embedded controls */
+   /* Remove background color if panel has one */
+}
+
+/* Adjust panel header style slightly for view panels */
+.view-panel .panel-header {
+    height: 30px; /* Fixed header height */
+    padding: 0 10px; /* Adjust padding */
+    line-height: 30px; /* Center text vertically */
+}
+
+/* Control Panels */
+.control-panel {
+   position: absolute;
+   width: 220px;
+   min-width: 180px; /* Prevent getting too narrow */
+   min-height: 40px; /* Minimum height for header */
+   background: rgba(50, 50, 50, 0.9); /* Dark background */
+   color: #eee;
+   /* padding: 10px; Moved to panel-content */
+   border-radius: 5px;
+   border: 1px solid #555; /* Lighter border */
+   box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+   font-size: 14px; /* Base font size */
+   box-sizing: border-box;
+   overflow: auto; /* Changed from hidden to allow resize */
+   resize: vertical; /* Allow vertical resizing */
+}
+
+#layer-switcher { top: 60px; /* Moved down below toolbar */ left: 10px; z-index: 1000; }
+
+#user-layers-panel { top: 160px; /* Position below layer-switcher (adjust as needed) */ left: 10px; z-index: 999; } /* Changed right to left */
+#app-controls { bottom: 10px; left: 10px; z-index: 998; } /* Changed right to left */
+
+/* Remove !important from minimized styles as they might interfere */
+.view-panel.minimized {
+    height: 30px; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+
+/* Panel Headers */
+.panel-header {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   /* margin-bottom: 5px; Removed, padding handles spacing */
+   padding: 5px 10px; /* Add padding to header */
+   background-color: rgba(60, 60, 60, 0.95); /* Slightly different header background */
+   border-bottom: 1px solid #555; /* Separator */
+   cursor: move; /* Indicate draggable */
+   z-index: 1010; /* Ensure headers are on top for dragging */
+   position: relative; /* Needed for z-index to work */
+}
+.panel-header h4, .panel-header h5, .panel-header h2 { /* Target h2, h4, h5 */
+   margin: 0;
+   color: #eee;
+   font-weight: bold;
+   flex-grow: 1; /* Allow title to take space */
+   font-size: 1em; /* Consistent header font size relative to panel base */
+   line-height: 1.2; /* Adjust line height for headers */
+}
+
+/* Panel Content */
+.panel-content {
+    padding: 10px; /* Original panel padding */
+    display: block; /* Default state */
+}
+.minimized .panel-content {
+    display: none; /* Hide content when minimized */
+}
+/* Ensure minimized view panels shrink and hide content */
+.view-panel.minimized {
+    height: 30px !important; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px !important; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+.view-panel.minimized #map,
+.view-panel.minimized #globusContainer {
+    display: none; /* Hide map/globe content */
+}
+
+/* Maximized Panel Style */
+.view-panel.maximized {
+    top: 10px; /* Override top */
+    left: 10px; /* Override left */
+    right: 10px; /* Override right */
+    bottom: 10px; /* Override bottom */
+    width: calc(100% - 20px); /* Full width */
+    height: calc(100% - 20px); /* Full height */
+    z-index: 1010; /* Bring to front */
+    resize: none; /* Disable resize when maximized */
+}
+
+
+/* Buttons */
+button {
+   padding: 5px 8px;
+   cursor: pointer;
+   background-color: #555;
+   color: #eee;
+   border: 1px solid #777;
+   border-radius: 3px;
+   line-height: 1; /* Ensure consistent button height */
+}
+button:hover { background-color: #666; }
+button:disabled { background-color: #444; color: #888; cursor: not-allowed; border-color: #666; }
+
+.add-btn {
+   font-size: 16px;
+   font-weight: bold;
+   padding: 0 6px;
+   /* Inherits dark button styles */
+}
+
+.settings-btn-small {
+   font-size: 12px;
+   padding: 1px 4px;
+   vertical-align: middle;
+   /* Inherits dark button styles */
+   /* margin-left is handled dynamically in JS */
+}
+
+.minimize-btn {
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.maximize-btn { /* Style similar to minimize */
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title or other buttons */
+    flex-shrink: 0;
+}
+/* Inputs & Selects */
+select, input[type="text"], input[type="url"], textarea {
+   padding: 4px;
+   margin-bottom: 5px;
+   width: 100%;
+   box-sizing: border-box;
+   background-color: #444;
+   color: #eee;
+   border: 1px solid #666;
+   border-radius: 3px;
+}
+input[type="color"] {
+   padding: 0;
+   border: 1px solid #666;
+   height: 25px;
+   width: 40px; /* Keep specific size */
+   vertical-align: middle;
+   cursor: pointer;
+   background-color: #444; /* Match other inputs */
+}
+input::placeholder, textarea::placeholder { color: #aaa; }
+
+/* User Layer List */
+#user-layer-list {
+   margin-bottom: 10px;
+   max-height: 150px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   padding: 5px;
+   background: #444; /* Match tileset list */
+}
+#user-layer-list .layer-item {
+   padding: 4px 6px;
+   margin-bottom: 2px;
+   /* cursor: pointer; Removed, apply to specific clickable elements */
+   display: flex;
+   align-items: center;
+   gap: 5px; /* Add small gap between flex items */
+}
+#user-layer-list .layer-item:hover { background-color: #555; }
+#user-layer-list .layer-item.selected {
+   background-color: #5a5a5a; /* Darker highlight */
+   /* font-weight: bold; Applied to name span instead */
+}
+/* Style the selection indicator span */
+#user-layer-list .layer-item .selection-indicator {
+    width: 1.2em; /* Keep reserved space */
+    text-align: center;
+    flex-shrink: 0; /* Don't shrink indicator */
+}
+/* Style the visibility button */
+#user-layer-list .layer-item .visibility-btn {
+    flex-shrink: 0; /* Don't shrink button */
+}
+/* Style the name span */
+#user-layer-list .layer-item span {
+   flex-grow: 1; /* Allow name to take space */
+   cursor: pointer; /* Make name clickable */
+   overflow: hidden; /* Prevent long names breaking layout */
+   text-overflow: ellipsis; /* Add ellipsis for long names */
+   white-space: nowrap; /* Keep name on one line */
+}
+#user-layer-list .layer-item.selected span {
+    font-weight: bold; /* Bold selected name */
+}
+/* Style the button container */
+#user-layer-list .layer-item .button-container {
+    display: flex; /* Use flex for buttons inside */
+    gap: 3px; /* Small gap between buttons */
+    flex-shrink: 0; /* Prevent container from shrinking */
+    margin-left: auto; /* Push button container to the right */
+}
+
+/* Tileset List */
+#tileset-list {
+   height: 100px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   margin-bottom: 10px;
+   padding: 5px;
+   background: #444;
+}
+#tileset-list div { /* Style for each tileset item */
+   padding: 2px 4px;
+   margin-bottom: 2px;
+   color: #eee;
+   display: flex;
+   align-items: center;
+   cursor: default; /* Default cursor for the row */
+}
+#tileset-list div:hover { background-color: #555; }
+#tileset-list div input[type="checkbox"] { /* Target checkbox specifically */
+     width: auto;
+     cursor: pointer;
+     margin-right: 5px; /* Add margin after checkbox */
+     /* margin-left: 5px; Removed */
+}
+#tileset-list div span { /* Target name span specifically */
+   flex-grow: 1; /* Allow name to take up space */
+   cursor: pointer; /* Make name clickable for zoom */
+}
+#tileset-list div .button-container { /* Container for buttons */
+   margin-left: 5px;
+}
+.tileset-item.highlighted { /* Style for highlighted list item */
+   background-color: #6a6a6a; /* Slightly lighter highlight than layer selection */
+   font-weight: bold;
+}
+
+
+/* Modal Styles */
+/* Modal Styles (Now used for Tileset Details Side Panel) */
+.modal { /* Keep general modal class for show/hide */
+   display: none; /* Initially hidden */
+   /* Base positioning moved to ID selector below */
+}
+
+/* Position the specific details modal */
+#tileset-details-modal {
+    position: absolute;
+    z-index: 1001; /* Above layer switcher */
+    width: 220px; /* Match other control panels */
+    bottom: 90px; /* Position above app-controls */
+    right: 10px;  /* Align with app-controls */
+    /* Inherits .control-panel styles for background, border etc. */
+}
+
+/* Assets Panel Positioning */
+#assets-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as layer switcher */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px); /* Position to the right of layer-switcher */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+}
+
+/* Settings Panel Positioning */
+#settings-panel {
+    position: absolute;
+    z-index: 1002; /* Higher than profile, modal, layer switcher, etc. */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px + 220px + 10px); /* Position to the right of assets-panel */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+}
+.modal-content {
+   /* Style the content box */
+   /* background: rgba(50, 50, 50, 0.9); Moved to .control-panel */
+   /* color: #eee; Moved to .control-panel */
+   padding: 10px; /* Content padding */
+   /* border: 1px solid #555; Moved to .control-panel */
+   /* border-radius: 5px; Moved to .control-panel */
+   /* box-shadow: 0 2px 5px rgba(0,0,0,0.5); Moved to .control-panel */
+   box-sizing: border-box;
+}
+.modal-section {
+   margin-bottom: 10px;
+}
+.modal-section label {
+   font-weight: bold;
+   display: block;
+   margin-bottom: 2px;
+}
+.modal-section span {
+   display: inline-block;
+   margin-bottom: 5px;
+}
+.modal-actions {
+   display: flex;
+   align-items: center;
+   gap: 5px;
+}
+
+/* Toolbar Styles */
+.top-toolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    padding: 0 10px;
+    z-index: 2000; /* Above all other UI elements */
+    box-sizing: border-box;
+}
+
+/* Separate flex container for toolbar sections */
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    flex-grow: 0; /* Don't grow */
+    flex-shrink: 0; /* Don't shrink */
+}
+
+.toolbar-center {
+    display: flex;
+    align-items: center;
+    margin-left: 15px; /* Space after title */
+    margin-right: 15px; /* Space before buttons */
+    flex-grow: 1; /* Allow to grow */
+}
+
+.toolbar-spacer {
+    flex-grow: 1; /* Push buttons to the right */
+}
+
+.toolbar-view-buttons {
+    display: flex;
+    align-items: center;
+    gap: 5px; /* Space between buttons */
+    flex-grow: 0; /* Don't grow */
+    flex-shrink: 0; /* Don't shrink */
+}
+
+.toolbar-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    white-space: nowrap;
+    flex-shrink: 0; /* Prevent title from shrinking */
+}
+
+.toolbar-input {
+    width: 250px;
+    padding: 5px 10px;
+    border-radius: 15px;
+    border: 1px solid #555;
+    background-color: #333;
+    color: #eee;
+    transition: width 0.3s ease;
+}
+
+.toolbar-input:focus {
+    width: 300px;
+    outline: none;
+    border-color: #777;
+}
+
+.toolbar-button {
+    background-color: #444;
+    color: #ddd;
+    border: 1px solid #555;
+    padding: 5px 10px;
+    margin: 0 1px;
+    cursor: pointer;
+    font-size: 0.9em;
+    border-radius: 3px;
+}
+
+.toolbar-button:hover {
+    background-color: #555;
+}
+
+.toolbar-button.active {
+    background-color: #666;
+    border-color: #888;
+    color: #fff;
+}
+
+/* Special elements */
+.close-btn {
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.close-btn:hover {
+    color: #999;
+}
+
+/* Custom layer styles for the layer picker */
+.map-layer-item {
+    padding: 3px 5px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.map-layer-item:hover {
+    background-color: #555;
+}
+
+.map-layer-item.active {
+    background-color: #666;
+    font-weight: bold;
+}
+
+/* Social panel specifics */
+#chat-messages {
+    height: 200px;
+    overflow-y: scroll;
+    border: 1px solid #555;
+    margin-bottom: 10px;
+    padding: 5px;
+    background: #333;
+}
+
+#chat-input {
+    width: calc(100% - 70px);
+    margin-right: 5px;
+}
+
+#send-message-btn {
+    width: 60px;
+}
+
+#auth-section {
+    margin-top: 15px;
+}
+
+#username-input, #password-input {
+    width: calc(50% - 5px);
+}
+
+#username-input {
+    margin-right: 5px;
+}
+
+#signup-btn, #login-btn {
+    width: calc(50% - 5px);
+    margin-top: 5px;
+}
+
+#signup-btn {
+    margin-right: 5px;
+}
+
+#logout-btn {
+    width: 100%;
+    margin-top: 5px;
+    display: none;
+}
+
+#auth-status {
+    margin-top: 5px;
+}
+
+/* Profile panel specifics */
+.profile-content {
+    padding: 10px;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.profile-picture-container {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 10px;
+    background-color: #555; /* Placeholder color */
+}
+
+.profile-picture {
+    width: 100%;
+    height: auto;
+}
+
+.profile-name {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.profile-details dt {
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+.profile-details dd {
+    margin-left: 0;
+    margin-bottom: 5px;
+}
+
+/* Custom Layer Inputs */
+#custom-layer-inputs {
+    display: none;
+    margin-top: 10px;
+}
+
+#custom-layer-name, #custom-layer-url {
+    margin-bottom: 5px;
+    width: 100%;
+}
+
+#add-custom-layer-btn {
+    width: 100%;
+}
+
+/* Selection actions */
+#selected-tile-count-display {
+    margin-bottom: 5px;
+    font-weight: bold;
+    display: none;
+}
+
+#clear-selection-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    display: none;
+}
+
+#tileset-name-input {
+    display: none;
+    margin-bottom: 5px;
+}
+
+#save-selection-btn {
+    width: 100%;
+}
+
+/* Interaction mode button */
+#interaction-mode-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+/* Tileset details modal specifics */
+#details-tileset-image {
+    max-width: 100%;
+    height: auto;
+    display: none;
+    margin-top: 5px;
+}
+
+#details-tileset-image-url {
+    margin-top: 5px;
+}
+
+#details-color-picker {
+    vertical-align: middle;
+}
+
+/* Assets panel buttons */
+#my-assets-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#asset-market-btn {
+    width: 100%;
+}
+
+#assets-content-area {
+    margin-top: 10px;
+}
+
+/* Setting-specific button */
+#setting-set-start-location-btn {
+    margin-top: 5px;
+}

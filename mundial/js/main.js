@@ -1343,7 +1343,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 target: globusContainerElement,
                 name: "OpenGlobus View",
                 layers: initialOgLayers,
-                // terrain: globusRgbTerrainInstance, // Removed from constructor - will be set explicitly later
+                terrain: globusRgbTerrainInstance, // Set terrain directly in the constructor
                 lon: -74.0445,
                 lat: 40.6892,
                 alt: 3000, // Initial constructor altitude
@@ -2077,12 +2077,92 @@ document.addEventListener('DOMContentLoaded', () => {
 
     }, 1000);
             
+    // --- Simplified Panel Toggle Logic ---
+    const viewToggleButtons = {
+        'map-view-btn': mapPanelOL, // Assumes mapPanelOL is defined from getElementById
+        'globe-view-btn': globePanelOG, // Assumes globePanelOG is defined
+        'xr-view-btn': xrPanel, // Assumes xrPanel is defined
+        'layers-btn': userLayersPanel, // Assumes userLayersPanel is defined
+        'settings-btn': settingsPanel, // Assumes settingsPanel is defined
+        'social-btn': socialPanel, // Assumes socialPanel is defined
+        'profile-btn': profilePanel, // Assumes profilePanel is defined
+        'assets-btn': assetsPanel // Assumes assetsPanel is defined
+        // Add other buttonId: panelElement mappings here
+    };
+
+    console.log("DEBUG: Initializing new simplified panel toggle logic.");
+    Object.keys(viewToggleButtons).forEach(btnId => {
+        const button = document.getElementById(btnId);
+        const panel = viewToggleButtons[btnId];
+
+        if (button && panel) {
+            button.addEventListener('click', function() {
+                if (panel.style.display === 'block' || panel.style.display === '') {
+                    panel.style.display = 'none';
+                    this.classList.remove('active');
+                } else {
+                    panel.style.display = 'block';
+                    this.classList.add('active');
+                    // Specific actions for map/globe when shown
+                    if (panel === mapPanelOL && window.olMap) {
+                        setTimeout(() => { if (window.olMap) window.olMap.updateSize(); }, 100);
+                    } else if (panel === globePanelOG && window.globus?.planet?.renderer) {
+                        panel.style.visibility = 'visible'; panel.style.opacity = '1';
+                        setTimeout(() => {
+                            if (window.globus?.planet?.renderer) {
+                                window.globus.planet.renderer.resize();
+                                if (typeof window.globus.draw === 'function') window.globus.draw();
+                                else if (typeof window.globus.planet.draw === 'function') window.globus.planet.draw();
+                            }
+                        }, 200);
+                    }
+                }
+            });
+        }
+    });
+
+    // Initial Panel States: Hide all, then show Globe by default.
+    console.log("DEBUG: Setting initial panel states (all hidden, then globe shown).");
+    Object.keys(viewToggleButtons).forEach(btnId => {
+        const panel = viewToggleButtons[btnId];
+        const button = document.getElementById(btnId);
+        if (panel) panel.style.display = 'none';
+        if (button) button.classList.remove('active');
+    });
+
+    if (globeViewBtn && globePanelOG) {
+        globePanelOG.style.display = 'block';
+        globePanelOG.style.visibility = 'visible';
+        globePanelOG.style.opacity = '1';
+        globeViewBtn.classList.add('active');
+        console.log("Initial default: Globe panel visible, button active.");
+        // Defer resize/draw until after initializeOpenGlobus completes
+    } else {
+        console.warn("Default initial panel (Globe) not found. No panel shown by default.");
+    }
+    // --- End Simplified Panel Toggle Logic ---
 
     console.log("DEBUG: End of DOMContentLoaded listener.");
 
     // Initialize maps after DOM is ready
-    initializeOpenGlobus();
+    initializeOpenGlobus(); // Globe is initialized here
+    // Now that globe might be initialized, if it's the default, trigger resize/draw
+    if (globePanelOG && globePanelOG.style.display === 'block' && window.globus?.planet?.renderer) {
+        setTimeout(() => {
+            if (window.globus?.planet?.renderer) {
+                console.log("Initial globe post-init: attempting resize and draw.");
+                window.globus.planet.renderer.resize();
+                if (typeof window.globus.draw === 'function') window.globus.draw();
+                else if (typeof window.globus.planet.draw === 'function') window.globus.planet.draw();
+            }
+        }, 250);
+    }
+
     initializeOpenLayersMap(); // Call to initialize OpenLayers map
+    // If map was set to be visible by default (not current logic, but if changed):
+    // if (mapPanelOL && mapPanelOL.style.display === 'block' && window.olMap) {
+    //     setTimeout(() => { if (window.olMap) window.olMap.updateSize(); }, 100);
+    // }
 
     function createTestTileset() {
         console.log("Attempting to create test tileset...");
