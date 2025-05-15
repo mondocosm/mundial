@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Babylon.js + MapLibre</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+        #maplibre-map {
+            width: 50%; /* Example layout: map on left */
+            height: 100%;
+            float: left;
+        }
+        #babylon-canvas {
+            width: 50%; /* Example layout: Babylon on right */
+            height: 100%;
+            float: left;
+            touch-action: none; /* Recommended for Babylon.js */
+        }
+        /* Basic error/status message styling */
+        .status-message {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border-radius: 5px;
+            z-index: 10;
+        }
+    </style>
+    <!-- MapLibre GL JS -->
+    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <!-- Babylon.js -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+    <div id="maplibre-map"></div>
+    <canvas id="babylon-canvas"></canvas>
+    <div id="status" class="status-message" style="display: none;"></div>
+
+    <script>
+        let map;
+        let engine;
+        let scene;
+
+        function showStatus(message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            console.log("Status:", message);
+        }
+
+        // Initialize MapLibre
+        function initMapLibre() {
+            try {
+                // Replace with your MapTiler key or use a different public terrain source
+                const mapTilerKey = 'GET_YOUR_OWN_MAPTILER_KEY'; // IMPORTANT: Replace this
+                
+                map = new maplibregl.Map({
+                    container: 'maplibre-map',
+                    // style: 'https://demotiles.maplibre.org/style.json',
+                    style: {
+                        "version": 8,
+                        "sources": {
+                            "satellite": {
+                                "type": "raster",
+                                "tiles": [`https://api.maptiler.com/maps/satellite/{z}/{x}/{y}.jpg?key=${mapTilerKey}`],
+                                "tileSize": 256,
+                                "attribution": "<a href=\"https://www.maptiler.com/copyright/\" target=\"_blank\">&copy; MapTiler</a> <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>"
+                            },
+                            "terrain_source": {
+                                "type": "raster-dem",
+                                "tiles": [`https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.png?key=${mapTilerKey}`],
+                                "tileSize": 256,
+                                "maxzoom": 14
+                            }
+                        },
+                        "layers": [
+                            {
+                                "id": "satellite",
+                                "type": "raster",
+                                "source": "satellite"
+                            }
+                        ],
+                        "terrain": {
+                            "source": "terrain_source",
+                            "exaggeration": 1.5
+                        }
+                    },
+                    center: [-74.0445, 40.6892], // Statue of Liberty (example)
+                    zoom: 12
+                });
+
+                map.on('load', () => {
+                    showStatus('MapLibre map loaded with terrain configuration.');
+                    // You might need to wait for terrain data to fully load before querying
+                    // map.on('terrain', (e) => { if (e.terrain) console.log('Terrain data loaded/changed'); });
+                });
+                map.on('error', (e) => {
+                    console.error('MapLibre Error:', e);
+                    showStatus('MapLibre Error: ' + e.error?.message || 'Unknown error');
+                });
+            } catch (err) {
+                console.error("Failed to initialize MapLibre:", err);
+                showStatus("Failed to initialize MapLibre: " + err.message);
+            }
+        }
+
+        // Initialize Babylon.js
+        function initBabylon() {
+            const canvas = document.getElementById('babylon-canvas');
+            if (!canvas) {
+                console.error("Babylon canvas not found!");
+                showStatus("Babylon canvas not found!");
+                return;
+            }
+            try {
+                engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+                scene = new BABYLON.Scene(engine);
+                scene.clearColor = new BABYLON.Color4(0.2, 0.2, 0.3, 1); // Dark blue-grey background
+
+                // Camera
+                const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 10, new BABYLON.Vector3(0, 0, 0), scene);
+                camera.attachControl(canvas, true);
+
+                // Light
+                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
+
+                // Basic ground plane (placeholder for terrain)
+                const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
+                const groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+                groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                ground.material = groundMaterial;
+                
+                showStatus('Babylon.js scene initialized.');
+
+                engine.runRenderLoop(() => {
+                    if (scene && scene.activeCamera) {
+                        scene.render();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    if (engine) {
+                        engine.resize();
+                    }
+                });
+            } catch (err) {
+                console.error("Failed to initialize Babylon.js:", err);
+                showStatus("Failed to initialize Babylon.js: " + err.message);
+            }
+        }
+
+        // Initialize both
+        document.addEventListener('DOMContentLoaded', () => {
+            showStatus('Initializing MapLibre and Babylon.js...');
+            initMapLibre();
+            initBabylon();
+
+            // Listen for tileset data from parent window
+            window.addEventListener('message', receiveTilesetData);
+        });
+
+        function receiveTilesetData(event) {
+            // Basic security check for origin if needed in production:
+            // if (event.origin !== "http://localhost:8000") return;
+
+            if (event.data && event.data.type === 'loadTileset' && event.data.data) {
+                const tiles = event.data.data;
+                showStatus(`Received ${tiles.length} tiles for Babylon.js scene.`);
+                if (!scene) {
+                    showStatus("Babylon.js scene not ready to receive tiles.");
+                    return;
+                }
+
+                // Clear existing placeholder ground if any
+                const existingGround = scene.getMeshByName("ground");
+                if (existingGround) {
+                    existingGround.dispose();
+                }
+
+                const TILE_WORLD_SIZE = 10; // Arbitrary size for each tile in Babylon world units
+                const TILE_Y_OFFSET = 0;    // Keep tiles flat on Y=0 plane for now
+
+                tiles.forEach((tile, index) => {
+                    // Simple mapping: tile.x and tile.y to world X and Z
+                    // This assumes tiles are contiguous and from the same zoom level.
+                    // A proper mercator projection or other GIS-to-world transform would be needed for accuracy.
+                    // For this example, we'll just place them in a grid based on their relative X,Y.
+                    // We need a reference point (e.g., minX, minY of the set) to place them correctly.
+                    // For now, let's just offset them based on index for a simple line.
+                    
+                    const posX = index * TILE_WORLD_SIZE; // Simplistic positioning
+                    const posZ = 0;
+
+                    const tilePlane = BABYLON.MeshBuilder.CreateGround(`tile_${tile.z}_${tile.x}_${tile.y}`, {
+                        width: TILE_WORLD_SIZE,
+                        height: TILE_WORLD_SIZE
+                    }, scene);
+                    tilePlane.position = new BABYLON.Vector3(posX, TILE_Y_OFFSET, posZ);
+
+                    const tileMaterial = new BABYLON.StandardMaterial(`tileMat_${index}`, scene);
+                    // Cycle through some basic colors for differentiation
+                    const colors = [new BABYLON.Color3(1,0,0), new BABYLON.Color3(0,1,0), new BABYLON.Color3(0,0,1), new BABYLON.Color3(1,1,0)];
+                    tileMaterial.diffuseColor = colors[index % colors.length];
+                    tileMaterial.alpha = 0.7;
+                    tilePlane.material = tileMaterial;
+
+                    console.log(`Created Babylon plane for tile Z:${tile.z} X:${tile.x} Y:${tile.y} at world X:${posX} Z:${posZ}`);
+                });
+                showStatus(`Processed ${tiles.length} tiles into Babylon.js scene.`);
+            }
+        }
+
+    </script>
+</body>
+</html>
