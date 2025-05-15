@@ -1289,6 +1289,7 @@ if (window.ogSavedTilesetsLayer) {
                     clearMapSelectionAndDetails();
 window.highlightedGlobeGroupId = groupId; // Set for globe highlighting
 console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlightedGlobeGroupId}`);
+highlightListItem(groupId); // Highlight the item in the list
                     const targetSource = layer.getSource();
                     const groupFeatures = targetSource.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
                     const featuresToAdd = groupFeatures.map(f => {
