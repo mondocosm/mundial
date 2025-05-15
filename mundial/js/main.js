@@ -177,6 +177,19 @@ document.addEventListener('DOMContentLoaded', () => {
             selectionChanged = true;
             console.log(`toggleTileSelection: Feature ${tileId} removed. selectionSource count: ${selectionSource.getFeatures().length}`);
         } else if (!isTileSaved) {
+            // Clear any existing group selection before selecting an individual tile
+            if (window.highlightedGlobeGroupId) {
+                console.log(`toggleTileSelection: Clearing group selection ${window.highlightedGlobeGroupId} before individual tile select.`);
+                window.highlightedGlobeGroupId = null;
+                if (typeof highlightListItem === 'function') {
+                    highlightListItem(null); // Clear UI list highlight
+                }
+                // Remove group features from selectionSource
+                const groupFeaturesInSelection = selectionSource.getFeatures().filter(f => f.get('isGroupSelection'));
+                groupFeaturesInSelection.forEach(f => selectionSource.removeFeature(f));
+                console.log(`toggleTileSelection: Removed ${groupFeaturesInSelection.length} group features from selectionSource.`);
+            }
+
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
             newFeature.setId(tileId);
@@ -1610,9 +1623,23 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
             if (featuresToAdd.length > 0) {
                 targetSource.addFeatures(featuresToAdd);
                 console.log(`%cSAVE HANDLER: Added ${featuresToAdd.length} features to targetSource.`, "color: green;");
+                
+                // Explicitly remove original features from temporary selection NOW
+                // Note: selectedFeatures was defined earlier in this function
+                if (selectedFeatures && selectionSource) {
+                    selectedFeatures.forEach(originalFeature => {
+                        originalFeature.unset('isIndividualSelection'); // Ensure flag is removed from original too
+                        const featureId = originalFeature.getId();
+                        if (featureId && selectionSource.getFeatureById(featureId)) {
+                            selectionSource.removeFeature(originalFeature);
+                        }
+                    });
+                    console.log("SAVE HANDLER: Unset isIndividualSelection and explicitly removed original features from selectionSource.");
+                }
+
                 window.userLayers[window.selectedLayerId].tilesetCount = (window.userLayers[window.selectedLayerId].tilesetCount || 0) + 1;
 console.log("%cSAVE HANDLER: populateTilesetList has been called from save handler.", "color: green; font-weight: bold;");
-                clearMapSelectionAndDetails();
+                clearMapSelectionAndDetails(); // This will also call selectionSource.clear(), which is fine.
                 populateTilesetList(window.selectedLayerId); // Call directly, remove setTimeout
                 tilesetNameInput.value = '';
 
@@ -1976,8 +2003,23 @@ console.log("%cDEBUG: PRE-INSTANTIATION of ogSavedTilesetsLayer", "color: yellow
                         else if (tileZoom === TILE_SELECTION_ZOOM_CONST) {
                             // Existing logic for drawing exact ZL21 tiles
                             // 1. Check for temporary individual selections
+                            let isSavedInCurrentUserLayer = false;
+                            if (window.selectedLayerId && window.userLayers && window.userLayers[window.selectedLayerId]) {
+                                const currentLayerSource = window.userLayers[window.selectedLayerId].layer.getSource();
+                                if (currentLayerSource && currentLayerSource.getFeatures().some(f => f.get('tileId') === ogTileId)) {
+                                    isSavedInCurrentUserLayer = true;
+                                }
+                            }
+
                             const tempSelectedFeature = selectionSource ? selectionSource.getFeatures().find(f => (f.getId() === ogTileId || f.get('tileId') === ogTileId) && f.get('isIndividualSelection') === true) : null;
-                            if (tempSelectedFeature) {
+                            
+                            // Enhanced logging for the problematic tile
+                            if (ogTileId === window.debugLastSavedTileIdByGlobe) { // window.debugLastSavedTileIdByGlobe would be set in saveSelectionToLayer
+                                console.log(`%cOG DrawTile DEBUG for ${ogTileId}: isSavedInCurrentUserLayer = ${isSavedInCurrentUserLayer}, tempSelectedFeature exists = ${!!tempSelectedFeature}`, "color: magenta; font-weight: bold;");
+                                if (tempSelectedFeature) console.log(`%cOG DrawTile DEBUG for ${ogTileId}: tempSelectedFeature.isIndividualSelection = ${tempSelectedFeature.get('isIndividualSelection')}`, "color: magenta;");
+                            }
+
+                            if (tempSelectedFeature && !isSavedInCurrentUserLayer) { // Only draw yellow if temporary AND not yet saved to current layer
                                 ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
                                 ctx.fillRect(0, 0, size, size);
                                 ctx.strokeStyle = "rgba(255, 200, 0, 0.8)";
@@ -1986,7 +2028,7 @@ console.log("%cDEBUG: PRE-INSTANTIATION of ogSavedTilesetsLayer", "color: yellow
                                 console.log(`%cOG DrawTile: Drawing TEMP INDIVIDUAL SELECTION ${ogTileId}`, "color: yellow; background: black;");
                                 drawn = true;
                             }
-                            // 2. Else, check for saved tilesets in the active layer
+                            // 2. Else, check for saved tilesets in the active layer (this will now also catch tiles that were tempSelected but are now saved)
                             else if (window.selectedLayerId && window.userLayers && window.userLayers[window.selectedLayerId]) {
                                 const olLayerSource = window.userLayers[window.selectedLayerId].layer.getSource();
                                 // console.log(`OG DrawTile ZL21: Searching for ogTileId='${ogTileId}'. Features in source:`, olLayerSource.getFeatures().map(f => f.get('tileId')));
@@ -2399,6 +2441,20 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
                 panel.style.display = isActiveAfterToggle ? 'block' : 'none';
                 console.log(`Toggled panel ${panel.id} to ${panel.style.display}. Button ${this.id} active: ${isActiveAfterToggle}`);
 
+                // If this is the map-view-btn, also toggle app-controls and layer-switcher
+                if (btnId === 'map-view-btn') {
+                    const appControlsPanel = document.getElementById('app-controls');
+                    const layerSwitcherPanel = document.getElementById('layer-switcher');
+                    if (appControlsPanel) {
+                        appControlsPanel.style.display = isActiveAfterToggle ? 'block' : 'none';
+                        console.log(`Toggled app-controls panel to ${appControlsPanel.style.display}`);
+                    }
+                    if (layerSwitcherPanel) {
+                        layerSwitcherPanel.style.display = isActiveAfterToggle ? 'block' : 'none';
+                        console.log(`Toggled layer-switcher panel to ${layerSwitcherPanel.style.display}`);
+                    }
+                }
+
                 // Special handling for globe panel resize
                 if (panel.id === 'globe-panel' && isActiveAfterToggle && window.globus && window.globus.planet && window.globus.planet.renderer) {
                      setTimeout(() => {
@@ -2473,6 +2529,14 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         layerSwitcherPanel.style.setProperty('display', 'block', 'important');
         layerSwitcherPanel.style.setProperty('z-index', '2000', 'important'); // Much higher z-index to be above all map/globe panels
         console.log("DEBUG: Ensuring layer-switcher (map menu) is visible and in front");
+    }
+
+    // Ensure app-controls is also visible by default if map panel is
+    // const appControlsPanel = document.getElementById('app-controls'); // Already declared at higher scope
+    if (window.appControlsPanel && mapPanelElement && mapPanelElement.style.display === 'block') { // Use window.appControlsPanel or ensure it's in scope
+        window.appControlsPanel.style.setProperty('display', 'block', 'important');
+        // z-index for app-controls is already set in CSS, typically lower than layer-switcher but above map
+        console.log("DEBUG: Ensuring app-controls panel is visible with map panel");
     }
     
     if (layersPanel) {
