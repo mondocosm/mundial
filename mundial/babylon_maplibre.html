@@ -65,13 +65,14 @@
             try {
                 map = new maplibregl.Map({
                     container: 'maplibre-map',
-                    zoom: 12,
-                    center: [-74.0445, 40.6892], // Statue of Liberty (example)
-                    pitch: 60, // Initial pitch to see 3D terrain
+                    zoom: 15.5, // From your example
+                    center: [-74.0066, 40.7135], // NYC from your example
+                    pitch: 45, // From your example
+                    bearing: -17.6, // From your example
                     style: {
                         version: 8,
                         sources: {
-                            osm: {
+                            osm: { // Kept for base imagery if MapTiler basic map fails
                                 type: 'raster',
                                 tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
                                 tileSize: 256,
@@ -80,52 +81,69 @@
                             },
                             terrainSource: { // For 3D terrain
                                 type: 'raster-dem',
-                                url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+                                url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json', // Keyless public DEM
                                 tileSize: 256
+                            },
+                            openmaptiles_buildings: { // Source for 3D buildings
+                                type: 'vector',
+                                url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}` // Uses your key
                             }
-                            // Hillshade source can be the same if desired, or a separate one
-                            // hillshadeSource: {
-                            //     type: 'raster-dem',
-                            //     url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
-                            //     tileSize: 256
-                            // }
                         },
                         layers: [
-                            {
+                            { // Base map imagery
                                 id: 'osm',
                                 type: 'raster',
                                 source: 'osm'
-                            }
-                            // Optional hillshade layer
-                            // {
-                            //     id: 'hills',
-                            //     type: 'hillshade',
-                            //     source: 'terrainSource', // Use the same DEM source for hillshade
-                            //     layout: {visibility: 'visible'},
-                            //     paint: {'hillshade-shadow-color': '#473B24'}
-                            // }
+                            },
+                            // Building layer will be added on 'load' to ensure it's above labels
                         ],
                         terrain: {
                             source: 'terrainSource',
-                            exaggeration: 1.5 // Adjust as desired
+                            exaggeration: 1.0 // Example exaggeration
                         }
-                        // Optional sky layer for better 3D appearance
-                        // "sky": {
-                        //     "sky-type": "atmosphere",
-                        //     "atmosphere-sun-intensity": 5,
-                        //     "atmosphere-sun": [0.0, 0.0]
-                        // }
                     },
-                    maxZoom: 18, // Consistent with example
-                    maxPitch: 85  // Consistent with example
+                    maxZoom: 18,
+                    maxPitch: 85
                 });
 
                 map.on('load', () => {
-                    showStatus('MapLibre map loaded with public demo terrain.');
-                    map.addControl(new maplibregl.NavigationControl({visualizePitch: true}));
-                    map.addControl(new maplibregl.TerrainControl({source: 'terrainSource', exaggeration: 1.5}));
+                    showStatus('MapLibre map loaded. Adding 3D buildings...');
+                    
+                    const layers = map.getStyle().layers;
+                    let labelLayerId;
+                    for (let i = 0; i < layers.length; i++) {
+                        if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+                            labelLayerId = layers[i].id;
+                            break;
+                        }
+                    }
 
-                    // map.on('terrain', (e) => { if (e.terrain) console.log('Terrain data loaded/changed'); });
+                    map.addLayer(
+                        {
+                            'id': '3d-buildings',
+                            'source': 'openmaptiles_buildings',
+                            'source-layer': 'building', // Common source layer for buildings
+                            'type': 'fill-extrusion',
+                            'minzoom': 14, // Show buildings from zoom 14+
+                            'filter': ['!=', ['get', 'hide_3d'], true], // Optional filter
+                            'paint': {
+                                'fill-extrusion-color': [
+                                    'interpolate', ['linear'], ['get', 'render_height'],
+                                    0, 'lightgray',
+                                    50, 'royalblue', // Medium buildings
+                                    100, 'darkslateblue' // Tall buildings
+                                ],
+                                'fill-extrusion-height': ['get', 'render_height'], // Use render_height or height
+                                'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], // Use render_min_height or min_height, default to 0
+                                'fill-extrusion-opacity': 0.85
+                            }
+                        },
+                        labelLayerId // Insert before labels
+                    );
+                    showStatus('MapLibre map loaded with terrain and 3D buildings configured.');
+
+                    map.addControl(new maplibregl.NavigationControl({visualizePitch: true}));
+                    map.addControl(new maplibregl.TerrainControl({source: 'terrainSource', exaggeration: 1.0}));
                 });
                 map.on('error', (e) => {
                     console.error('MapLibre Error:', e);
