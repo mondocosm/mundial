@@ -210,10 +210,10 @@ function loadTestTilesetToLayer0() {
         }
 
         const testTiles = [
-            [TILE_SELECTION_ZOOM, 623390, 790093], // Approx Statue of Liberty ZL21
-            [TILE_SELECTION_ZOOM, 623391, 790093],
-            [TILE_SELECTION_ZOOM, 623390, 790094],
-            [TILE_SELECTION_ZOOM, 623391, 790094]
+            [TILE_SELECTION_ZOOM, 617234, 788670], // User specified tile (top-left)
+            [TILE_SELECTION_ZOOM, 617235, 788670], // Top-right
+            [TILE_SELECTION_ZOOM, 617234, 788671], // Bottom-left
+            [TILE_SELECTION_ZOOM, 617235, 788671]  // Bottom-right
         ];
 
         const tilesetGroupId = `test-tileset-${Date.now()}`;
@@ -248,9 +248,24 @@ function loadTestTilesetToLayer0() {
             populateTilesetList(layer0Id); // Update UI list for Layer 0
             console.log(`Loaded ${featuresToAdd.length} features into "${tilesetName}" on Layer 0.`);
 
+            // Zoom OpenLayers map to the extent of the loaded test tiles
+            if (window.olMap && featuresToAdd.length > 0) {
+                const extent = ol.extent.createEmpty();
+                featuresToAdd.forEach(feature => {
+                    ol.extent.extend(extent, feature.getGeometry().getExtent());
+                });
+                if (!ol.extent.isEmpty(extent)) {
+                    window.olMap.getView().fit(extent, {
+                        padding: [50, 50, 50, 50], // Add some padding
+                        maxZoom: TILE_SELECTION_ZOOM, // Zoom in to ZL21
+                        duration: 1000 // Optional animation
+                    });
+                    console.log("loadTestTilesetToLayer0: Zoomed OpenLayers map to test tileset extent.");
+                }
+            }
             // Optionally, zoom to this test tileset
-            // zoomToTilesetGroup(tilesetGroupId); 
-            // flyToTilesetGroupInGlobe(tilesetGroupId);
+            // zoomToTilesetGroup(tilesetGroupId);
+            // flyToTilesetGroupInGlobe(tilesetGroupId); // REVERTED: This was causing globe to go black
         }
     }
 
@@ -1029,14 +1044,42 @@ function loadTestTilesetToLayer0() {
                 // Adjust altitude calculation: Start with a base that works for single ZL21 tiles, then scale up.
                 // A single ZL21 tile is very small.
                 let altitude;
-                if (groupFeatures.length === 1 && diagonal < 0.001) { // Very small extent, likely single ZL21 tile
-                    altitude = 7000; // Significantly increased min altitude for single tiles
-                } else {
-                    altitude = Math.max(10000, diagonal * 200000); // Significantly increased min altitude
-                }
-                altitude = Math.min(altitude, 10000000); // Max 10,000km altitude
+                const MIN_ALTITUDE_SINGLE_TILE = 15000; // Increased from 7000m
+                const MIN_ALTITUDE_MULTI_TILE = 20000; // Increased from 10000m
+                const ALTITUDE_SCALING_FACTOR = 300000; // Increased from 200000
+                const MAX_ALTITUDE = 15000000; // Max 15,000km altitude
 
-                console.log(`flyToTilesetGroupInGlobe: Flying to Lon: ${centerLon.toFixed(4)}, Lat: ${centerLat.toFixed(4)}, Alt: ${altitude.toFixed(0)} (Diagonal: ${diagonal.toFixed(6)} degrees)`);
+                if (groupFeatures.length === 1 && diagonal < 0.001) { // Very small extent, likely single ZL21 tile
+                    altitude = MIN_ALTITUDE_SINGLE_TILE;
+                    console.log(`flyToTilesetGroupInGlobe: Using MIN_ALTITUDE_SINGLE_TILE: ${altitude}m`);
+                } else {
+                    altitude = Math.max(MIN_ALTITUDE_MULTI_TILE, diagonal * ALTITUDE_SCALING_FACTOR);
+                    console.log(`flyToTilesetGroupInGlobe: Calculated initial altitude (multi-tile or larger single): ${altitude}m`);
+                }
+                altitude = Math.min(altitude, MAX_ALTITUDE);
+                console.log(`flyToTilesetGroupInGlobe: Altitude after MAX_ALTITUDE cap: ${altitude}m`);
+
+                // Further safety: if terrain has maxNativeZoom, try to respect it.
+                // This is a rough heuristic. Lower altitude means higher effective zoom.
+                // ZL17 is ~76m/px at equator. ZL21 is ~4.7m/px.
+                // A very rough estimate for altitude for a given zoom level.
+                // This needs more refinement if terrain details are critical at max zoom.
+                const terrainMaxNativeZoom = window.globus.planet.terrain?.maxNativeZoom || 17; // Default to 17 if not available
+                // If trying to view ZL21 tiles (targetZoom = 21) with ZL17 terrain, we need to be higher up.
+                const targetZoomForTiles = TILE_SELECTION_ZOOM; // Currently 21
+                
+                if (targetZoomForTiles > terrainMaxNativeZoom) {
+                    // If we are trying to see details beyond what terrain supports, ensure altitude is not too low.
+                    // This is a very conservative estimate.
+                    const altitudeForTerrainMaxZoom = 5000 * Math.pow(2, (targetZoomForTiles - terrainMaxNativeZoom));
+                    if (altitude < altitudeForTerrainMaxZoom) {
+                        console.warn(`flyToTilesetGroupInGlobe: Calculated altitude ${altitude}m is too low for terrain maxNativeZoom ${terrainMaxNativeZoom} when viewing ZL${targetZoomForTiles}. Adjusting to ${altitudeForTerrainMaxZoom}m.`);
+                        altitude = altitudeForTerrainMaxZoom;
+                    }
+                }
+
+
+                console.log(`flyToTilesetGroupInGlobe: Flying to Lon: ${centerLon.toFixed(4)}, Lat: ${centerLat.toFixed(4)}, Alt: ${altitude.toFixed(0)} (Diagonal: ${diagonal.toFixed(6)} degrees, TerrainMaxZoom: ${terrainMaxNativeZoom})`);
                 
                 if (typeof window.globus.planet.camera.flyLonLat === 'function') {
                     window.globus.planet.camera.flyLonLat(new og.LonLat(centerLon, centerLat, altitude), null, null, () => {
@@ -1636,12 +1679,14 @@ function loadTestTilesetToLayer0() {
                     console.error("  Error getting direct methods from window.globus.planet:", e);
                 }
 
+console.log("%cDEBUG: PRE-INSTANTIATION of ogSavedTilesetsLayer", "color: yellow; font-weight: bold;");
                 window.ogSavedTilesetsLayer = new og.layer.CanvasTiles("Saved Tilesets", {
                     visibility: true, // Make it visible by default
-                    minZoom: 10, // Draw from a more zoomed-out level for testing
+                    minZoom: 16, // TEMPORARY: Match gridLayerOG's minZoom for testing
                     maxZoom: 22, // Allow drawing up to a high zoom level
                     opacity: 0.7,
                     drawTile: function (material, applyTexture) {
+                        console.log(`%cOG SAVED TILESETS DRAWTILE CALLED: Z:${material.segment.tileZoom} X:${material.segment.tileX} Y:${material.segment.tileY}`, "background: #222; color: #bada55; font-size: 1.2em;");
                         const canvas = document.createElement("canvas");
                         const size = 256;
                         canvas.width = size;
@@ -1655,18 +1700,24 @@ function loadTestTilesetToLayer0() {
                         const tileZoom = material.segment.tileZoom;
                         const tileX = material.segment.tileX;
                         const tileY = material.segment.tileY;
-                        const tileId = (typeof getTileId === 'function') ? getTileId([tileZoom, tileX, tileY]) : `${tileZoom}-${tileX}-${tileY}`;
+                        const ogTileId = (typeof getTileId === 'function') ? getTileId([tileZoom, tileX, tileY]) : `${tileZoom}-${tileX}-${tileY}`;
+                        // console.log(`OG DrawTile: Z:${tileZoom} X:${tileX} Y:${tileY}, ID: ${ogTileId}`);
+
 
                         let isTileSaved = false;
                         let tileColor = null;
                         let featureFillOpacity = 0.6;
+                        let featureFoundDebug = null;
                         
                         if (window.selectedLayerId && window.userLayers && window.userLayers[window.selectedLayerId]) {
-                            const olLayerSource = window.userLayers[window.selectedLayerId].layer.getSource(); // Get OL source
-                            const feature = olLayerSource.getFeatures().find(f => f.get('tileId') === tileId);
+                            // console.log(`OG DrawTile: Checking layer ${window.selectedLayerId}`);
+                            const olLayerSource = window.userLayers[window.selectedLayerId].layer.getSource();
+                            const feature = olLayerSource.getFeatures().find(f => f.get('tileId') === ogTileId);
+                            featureFoundDebug = feature;
                             if (feature) {
+                                // console.log(`OG DrawTile: Found matching OL feature for ${ogTileId}`, feature.getProperties());
                                 isTileSaved = true;
-                                tileColor = feature.get('color') || '#008080'; // Default to teal if no color
+                                tileColor = feature.get('color') || '#008080';
                                 featureFillOpacity = feature.get('fillOpacity') === undefined ? 0.6 : feature.get('fillOpacity');
                                 
                                 if (tileColor.startsWith('#')) {
@@ -1682,19 +1733,38 @@ function loadTestTilesetToLayer0() {
                                     tileColor = tileColor.replace(/[\d\.]+\)$/, `${featureFillOpacity})`);
                                 }
                             }
+                        } else {
+                            // console.log(`OG DrawTile: No feature found for ${ogTileId} in layer ${window.selectedLayerId}`);
                         }
 
                         if (isTileSaved && tileZoom === TILE_SELECTION_ZOOM) {
-                            ctx.fillStyle = tileColor;
+                            ctx.fillStyle = tileColor; // tileColor is already rgba here
                             ctx.fillRect(0, 0, size, size);
+                            if (ogTileId === `${TILE_SELECTION_ZOOM}-617234-788670`) { // Log for one specific test tile
+                                console.log(`%cOG DrawTile: DRAWING tile ${ogTileId} with color ${tileColor}`, "color: green; font-weight: bold;");
+                            }
                         } else {
-                            ctx.clearRect(0, 0, size, size); // Keep non-saved tiles transparent
+                            if (isTileSaved && tileZoom !== TILE_SELECTION_ZOOM) {
+                                // console.log(`OG DrawTile: Tile ${ogTileId} is saved, but its zoom ${tileZoom} !== TILE_SELECTION_ZOOM ${TILE_SELECTION_ZOOM}. Clearing.`);
+                            } else if (!isTileSaved && tileZoom === TILE_SELECTION_ZOOM) {
+                                // Only log if we expected to draw it (i.e., it's a ZL21 tile) but it wasn't found
+                                // This can be noisy if many ZL21 tiles are requested by the globe but not in our test set.
+                                // if (ogTileId === `${TILE_SELECTION_ZOOM}-617234-788670` || ogTileId === `${TILE_SELECTION_ZOOM}-617235-788670` || ogTileId === `${TILE_SELECTION_ZOOM}-617234-788671` || ogTileId === `${TILE_SELECTION_ZOOM}-617235-788671`) {
+                                //    console.log(`%cOG DrawTile: Clearing ZL21 tile ${ogTileId}. Saved: ${isTileSaved}. Feature found in OL:`, "color: orange;", featureFoundDebug);
+                                // }
+                            }
+                            ctx.clearRect(0, 0, size, size);
                         }
                         applyTexture(canvas);
                     }
                 });
                 window.globus.planet.addLayer(window.ogSavedTilesetsLayer);
-                console.log("DEBUG: ogSavedTilesetsLayer added to planet.");
+                console.log("DEBUG: ogSavedTilesetsLayer added to planet. Layer object:", window.ogSavedTilesetsLayer);
+                if (window.ogSavedTilesetsLayer) {
+                    console.log(`DEBUG: ogSavedTilesetsLayer properties after add: _visibility=${window.ogSavedTilesetsLayer._visibility}, _planet exists=${!!window.ogSavedTilesetsLayer._planet}`);
+console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call", "color: yellow; font-weight: bold;");
+                }
+
 
                 // Instantiate gridLayerOG properly BEFORE any check that might log it wasn't created
                 // This ensures gridLayerOG is an object before the subsequent 'if (gridLayerOG)' check.
@@ -2487,13 +2557,13 @@ function loadTestTilesetToLayer0() {
             userLayerListExists: !!userLayerList
         });
     }
-// Load test tileset for debugging and verification (TEMPORARILY DISABLED)
-// if (typeof loadTestTilesetToLayer0 === 'function') {
-//     console.log("DEBUG: Calling loadTestTilesetToLayer0() on startup (TEMPORARILY DISABLED)...");
-//     // loadTestTilesetToLayer0();
-// } else {
-//     console.warn("DEBUG: loadTestTilesetToLayer0 function not found, cannot load test data.");
-// }
+// Load test tileset for debugging and verification
+if (typeof loadTestTilesetToLayer0 === 'function') {
+    console.log("DEBUG: Calling loadTestTilesetToLayer0() on startup...");
+    loadTestTilesetToLayer0();
+} else {
+    console.warn("DEBUG: loadTestTilesetToLayer0 function not found, cannot load test data.");
+}
 
 console.log("DEBUG: End of DOMContentLoaded listener.");
 }); // End of DOMContentLoaded listener
