@@ -705,6 +705,51 @@ function loadTestTilesetToLayer0() {
         }
     }
 
+// --- XR Panel Logic ---
+function setupXRPanelLogic() {
+    console.log("DEBUG: setupXRPanelLogic called.");
+    setTimeout(() => {
+        const xrIframe = document.getElementById('xr-iframe');
+        const xrEngineSelector = document.getElementById('xr-engine-selector');
+        console.log("%cDEBUG (deferred): xrIframe element:", "color: purple", xrIframe);
+        console.log("%cDEBUG (deferred): xrEngineSelector element:", "color: purple", xrEngineSelector);
+
+        if (xrEngineSelector && xrIframe) {
+            xrEngineSelector.addEventListener('click', (event) => {
+                if (event.target.classList.contains('xr-engine-btn')) {
+                    const engineButtons = xrEngineSelector.querySelectorAll('.xr-engine-btn');
+                    engineButtons.forEach(btn => btn.classList.remove('active'));
+                    event.target.classList.add('active');
+
+                    const engine = event.target.dataset.engine;
+                    let targetUrl = '';
+                    console.log(`XR Engine selected: ${engine}`);
+
+                    switch (engine) {
+                        case 'janusweb': 
+                            targetUrl = '/packages/janusweb/build/1.5.42/index.html'; 
+                            break;
+                        case 'babylonjs':
+                            targetUrl = 'about:blank';
+                            alert("BabylonJS view not yet implemented.");
+                            break;
+                        // 'irengine' case has been removed.
+                        default: 
+                            console.error(`Unknown XR engine: ${engine}`); 
+                            if(xrIframe) xrIframe.src='about:blank'; 
+                            return;
+                    }
+                    if (targetUrl && xrIframe) { 
+                        console.log(`Setting XR iframe src to: ${targetUrl}`);
+                        xrIframe.src = targetUrl; 
+                    }
+                }
+            });
+        } else {
+            console.error("XR panel elements (xr-engine-selector or xr-iframe) not found (deferred).");
+        }
+    }, 0); // setTimeout to ensure DOM elements are likely available
+}
     if (interactionModeBtn) {
         // Set initial mode to 'pan' and update UI accordingly
         currentInteractionMode = 'pan';
@@ -2857,6 +2902,12 @@ if (typeof loadTestTilesetToLayer0 === 'function') {
     console.warn("DEBUG: loadTestTilesetToLayer0 function not found, cannot load test data.");
 }
 
+if (typeof setupXRPanelLogic === 'function') {
+        console.log("DEBUG: Calling setupXRPanelLogic() from DOMContentLoaded.");
+        setupXRPanelLogic();
+    } else {
+        console.warn("DEBUG: setupXRPanelLogic function not found, cannot set up XR panel.");
+    }
 console.log("DEBUG: End of DOMContentLoaded listener.");
 }); // End of DOMContentLoaded listener;
 

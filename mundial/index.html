@@ -121,8 +121,12 @@
              <button class="minimize-btn" title="Minimize/Expand">-</button>
          </div>
          <div class="panel-content">
-             <p>XR view content will go here.</p>
-             <!-- Placeholder for XR content -->
+             <div id="xr-engine-selector">
+                 <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb">Janus</button>
+                 <button type="button" class="xr-engine-btn" data-engine="babylonjs" title="BabylonJS + MapLibre">Babylon</button>
+             </div>
+             <iframe id="xr-iframe" title="XR Content View"></iframe>
+             <!-- Placeholder text removed -->
          </div>
     </div>
 
@@ -276,8 +280,14 @@
             <hr>
 
             <div class="modal-actions">
-                 <label>Color:</label>
-                 <input type="color" id="details-color-picker" style="vertical-align: middle;">
+                 <label for="details-color-picker">Color:</label>
+                 <input type="color" id="details-color-picker" style="vertical-align: middle; margin-right: 10px;">
+                 
+                 <label for="details-fill-opacity-input" style="margin-left: 10px;">Opacity:</label>
+                 <input type="number" id="details-fill-opacity-input" min="0" max="1" step="0.1" style="width: 50px; vertical-align: middle; margin-right: 10px;" title="Fill Opacity (0.0 - 1.0)">
+                 
+                 <label for="details-stroke-width-input" style="margin-left: 10px;">Stroke:</label>
+                 <input type="number" id="details-stroke-width-input" min="0" max="10" step="0.1" style="width: 50px; vertical-align: middle;" title="Stroke Width (px)">
                  <!-- Save/More Settings buttons removed -->
             </div>
         </div>
@@ -306,6 +316,10 @@
     <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
     <!-- OlCesium JS (Keep for potential future use/comparison) -->
     <!-- <script src="lib/olcesium.js"></script> -->
+    <!-- Define OpenGlobus resource path BEFORE loading the library -->
+    <script>
+        var OG_RESOURCES_PATH = "../packages/openglobus/res/"; // Adjusted path relative to mundial/index.html
+    </script>
     <!-- OpenGlobus JS (UMD build) -->
     <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
     <!-- Main Application Logic -->

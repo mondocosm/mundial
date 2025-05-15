@@ -215,9 +215,10 @@ button:disabled { background-color: #444; color: #888; cursor: not-allowed; bord
 }
 
 .settings-btn-small {
-   font-size: 12px;
-   padding: 1px 4px;
+   font-size: 10px; /* Smaller font for icons */
+   padding: 1px 2px; /* Reduced padding */
    vertical-align: middle;
+   line-height: 1; /* Constrain height */
    /* Inherits dark button styles */
    /* margin-left is handled dynamically in JS */
 }
@@ -274,7 +275,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
    /* cursor: pointer; Removed, apply to specific clickable elements */
    display: flex;
    align-items: center;
-   gap: 5px; /* Add small gap between flex items */
+   /* gap: 5px; Removed global gap */
 }
 #user-layer-list .layer-item:hover { background-color: #555; }
 #user-layer-list .layer-item.selected {
@@ -292,7 +293,8 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     flex-shrink: 0; /* Don't shrink button */
 }
 /* Style the name span */
-#user-layer-list .layer-item span {
+#user-layer-list .layer-item span { /* This targets nameSpan */
+   margin-left: 5px; /* Add space to the left of the name, after the indicator */
    flex-grow: 1; /* Allow name to take space */
    cursor: pointer; /* Make name clickable */
    overflow: hidden; /* Prevent long names breaking layout */
@@ -668,3 +670,91 @@ body {
     /* left: auto; */
     /* width: 220px; */ /* Already applied by .control-panel */
 }
+/* Styles for Globe Panel and Container */
+#globe-panel {
+    display: block; /* Or controlled by JS */
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    left: 100%; /* Placeholder, JS/CSS should manage layout */
+    border-left: 1px solid #ccc;
+    background: #777; /* Placeholder background */
+    z-index: 5; /* Example z-index, adjust as needed */
+}
+
+#globusContainer {
+    width: 100%;
+    height: 100%;
+}
+/* XR Panel Specific Styles */
+#xr-engine-selector {
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: #333;
+    border-radius: 4px;
+}
+
+#xr-iframe {
+    width: 100%;
+    height: calc(100% - 40px); /* Assumes parent .panel-content has a defined height or xr-engine-selector has fixed height */
+    border: none;
+}
+/* XR Panel Full Page Styling */
+#xr-panel {
+    position: fixed;
+    top: 50px; /* Adjust if top toolbar height is different */
+    left: 0;
+    width: 100vw;
+    height: calc(100vh - 50px); /* Adjust 50px if top toolbar height is different */
+    z-index: 100; 
+    border: none;
+    box-shadow: none;
+    background-color: #000; /* Added a background for visibility if iframe is blank */
+}
+
+#xr-panel .panel-content,
+#xr-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: block; /* Ensure iframe takes up space */
+}
+
+/* Uncomment to hide XR panel header for a more immersive view */
+/*
+#xr-panel .panel-header {
+    display: none;
+}
+*/
+/* XR Panel Full Page Styling */
+#xr-panel {
+    position: fixed;
+    top: 50px; /* Adjust if top toolbar height is different */
+    left: 0;
+    width: 100vw;
+    height: calc(100vh - 50px); /* Adjust 50px if top toolbar height is different */
+    z-index: 10000; /* High z-index to be on top */
+    border: none;
+    box-shadow: none;
+    background-color: #000; /* Background for visibility if iframe is blank */
+}
+
+#xr-panel .panel-content,
+#xr-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: block; /* Ensure iframe takes up space */
+}
+
+/* Uncomment to hide XR panel header for a more immersive view */
+/*
+#xr-panel .panel-header {
+    display: none;
+}
+*/
