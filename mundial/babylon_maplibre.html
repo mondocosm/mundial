@@ -72,78 +72,77 @@
                     style: {
                         version: 8,
                         sources: {
-                            osm: { // Kept for base imagery if MapTiler basic map fails
+                            osm: {
                                 type: 'raster',
                                 tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
                                 tileSize: 256,
                                 attribution: '&copy; OpenStreetMap Contributors',
                                 maxzoom: 19
-                            },
-                            terrainSource: { // For 3D terrain
-                                type: 'raster-dem',
-                                url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json', // Keyless public DEM
-                                tileSize: 256
-                            },
-                            openmaptiles_buildings: { // Source for 3D buildings
-                                type: 'vector',
-                                url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}` // Uses your key
                             }
+                            // terrainSource: { // For 3D terrain
+                            //     type: 'raster-dem',
+                            //     url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json', // Keyless public DEM
+                            //     tileSize: 256
+                            // },
+                            // openmaptiles_buildings: { // Source for 3D buildings
+                            //     type: 'vector',
+                            //     url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}` // Uses your key
+                            // }
                         },
                         layers: [
                             { // Base map imagery
                                 id: 'osm',
                                 type: 'raster',
                                 source: 'osm'
-                            },
-                            // Building layer will be added on 'load' to ensure it's above labels
-                        ],
-                        terrain: {
-                            source: 'terrainSource',
-                            exaggeration: 1.0 // Example exaggeration
-                        }
+                            }
+                        ]
+                        // terrain: {
+                        //     source: 'terrainSource',
+                        //     exaggeration: 1.0 // Example exaggeration
+                        // }
                     },
                     maxZoom: 18,
                     maxPitch: 85
                 });
 
                 map.on('load', () => {
-                    showStatus('MapLibre map loaded. Adding 3D buildings...');
+                    showStatus('MapLibre map loaded with basic OSM raster style.'); // Updated status
                     
-                    const layers = map.getStyle().layers;
-                    let labelLayerId;
-                    for (let i = 0; i < layers.length; i++) {
-                        if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
-                            labelLayerId = layers[i].id;
-                            break;
-                        }
-                    }
+                    // const layers = map.getStyle().layers;
+                    // let labelLayerId;
+                    // for (let i = 0; i < layers.length; i++) {
+                    //     if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+                    //         labelLayerId = layers[i].id;
+                    //         break;
+                    //     }
+                    // }
 
-                    map.addLayer(
-                        {
-                            'id': '3d-buildings',
-                            'source': 'openmaptiles_buildings',
-                            'source-layer': 'building', // Common source layer for buildings
-                            'type': 'fill-extrusion',
-                            'minzoom': 14, // Show buildings from zoom 14+
-                            'filter': ['!=', ['get', 'hide_3d'], true], // Optional filter
-                            'paint': {
-                                'fill-extrusion-color': [
-                                    'interpolate', ['linear'], ['get', 'render_height'],
-                                    0, 'lightgray',
-                                    50, 'royalblue', // Medium buildings
-                                    100, 'darkslateblue' // Tall buildings
-                                ],
-                                'fill-extrusion-height': ['get', 'render_height'], // Use render_height or height
-                                'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], // Use render_min_height or min_height, default to 0
-                                'fill-extrusion-opacity': 0.85
-                            }
-                        },
-                        labelLayerId // Insert before labels
-                    );
-                    showStatus('MapLibre map loaded with terrain and 3D buildings configured.');
+                    // map.addLayer(
+                    //     {
+                    //         'id': '3d-buildings',
+                    //         'source': 'openmaptiles_buildings',
+                    //         'source-layer': 'building', // Common source layer for buildings
+                    //         'type': 'fill-extrusion',
+                    //         'minzoom': 14, // Show buildings from zoom 14+
+                    //         'filter': ['!=', ['get', 'hide_3d'], true], // Optional filter
+                    //         'paint': {
+                    //             'fill-extrusion-color': [
+                    //                 'interpolate', ['linear'], ['get', 'render_height'],
+                    //                 0, 'lightgray',
+                    //                 50, 'royalblue', // Medium buildings
+                    //                 100, 'darkslateblue' // Tall buildings
+                    //             ],
+                    //             'fill-extrusion-height': ['get', 'render_height'], // Use render_height or height
+                    //             'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], // Use render_min_height or min_height, default to 0
+                    //             'fill-extrusion-opacity': 0.85
+                    //         }
+                    //     },
+                    //     labelLayerId // Insert before labels
+                    // );
+                    // showStatus('MapLibre map loaded with terrain and 3D buildings configured.'); // Original status
 
                     map.addControl(new maplibregl.NavigationControl({visualizePitch: true}));
-                    map.addControl(new maplibregl.TerrainControl({source: 'terrainSource', exaggeration: 1.0}));
+                    // map.addControl(new maplibregl.TerrainControl({source: 'terrainSource', exaggeration: 1.0})); // Terrain source is commented out
                 });
                 map.on('error', (e) => {
                     console.error('MapLibre Error:', e);
