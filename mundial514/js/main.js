@@ -6,6 +6,8 @@ window.globus = null; // Declare globus in global scope and attach to window
 window.olMap = null; // Declare olMap in global scope for OpenLayers map
 const TILE_SELECTION_ZOOM = 21; // Global scope for OpenGlobus layers
 let highlightedGlobeGroupId = null; // To store the ID of the tileset group to highlight on the globe
+let saveSelectionListenerAttached = false;
+let populateListCallCounter = 0;
 const GRID_VISIBILITY_MIN_ZOOM = 16; // Global scope for OpenGlobus grid layer
 let gridLayerZ21 = null; // For OpenLayers ZL21 grid
 let selectionTileGrid = null; // For OpenLayers ZL21 grid calculation
@@ -131,25 +133,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let selectionChanged = false;
         if (existingFeature) {
+            console.log(`toggleTileSelection: Removing feature ${tileId} from selectionSource.`);
             selectionSource.removeFeature(existingFeature);
             selectionChanged = true;
+            console.log(`toggleTileSelection: Feature ${tileId} removed. selectionSource count: ${selectionSource.getFeatures().length}`);
         } else if (!isTileSaved) {
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
             newFeature.setId(tileId);
-            newFeature.set('isIndividualSelection', true);
+            newFeature.set('isIndividualSelection', true); // Mark as temporary selection
+            console.log(`toggleTileSelection: Adding feature ${tileId} to selectionSource.`);
             selectionSource.addFeature(newFeature);
             selectionChanged = true;
+            console.log(`toggleTileSelection: Feature ${tileId} added. selectionSource count: ${selectionSource.getFeatures().length}`);
         }
         updateSelectedTileCountDisplay();
 
-        // If the selection changed and the globe layer exists, redraw it to reflect selection highlights (if any)
-        // or to clear highlights if a selected tile that was part of a saved set is deselected.
-        // Note: The primary drawing of saved tilesets in OpenGlobus is based on features in userLayers,
-        // but this ensures any temporary selection indicators on the globe are also updated.
-        if (selectionChanged && ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
-            console.log("toggleTileSelection: Triggering ogSavedTilesetsLayer redraw due to selection change.");
-            ogSavedTilesetsLayer.redraw();
+        // If the selection changed and the globe layer exists, clear it to force redraw
+        if (selectionChanged && window.ogSavedTilesetsLayer && typeof window.ogSavedTilesetsLayer.clear === 'function') {
+            console.log("toggleTileSelection: selectionChanged is true. Triggering ogSavedTilesetsLayer.clear().");
+            window.ogSavedTilesetsLayer.clear();
+        } else if (selectionChanged) {
+            console.warn("toggleTileSelection: selectionChanged but ogSavedTilesetsLayer or its clear method is missing.");
         }
     }
 
@@ -222,6 +227,7 @@ function loadTestTilesetToLayer0() {
             [TILE_SELECTION_ZOOM, 617235, 788671]  // Bottom-right
         ];
 
+        console.log("%cLOAD TEST TILESET TO LAYER 0 - EXECUTING", "background: #222; color: #bada55; font-size: 1.2em;");
         const tilesetGroupId = `test-tileset-${Date.now()}`;
         const tilesetName = "Test Tileset SoL";
         const featuresToAdd = [];
@@ -495,8 +501,48 @@ function loadTestTilesetToLayer0() {
                     }, { hitTolerance: 3 });
                 }
                 if (clickedSavedFeature && clickedGroupId) {
-                    // Group selection logic remains commented out for now as it was causing issues
-                    console.log(`clickSelectHandler: Clicked saved feature group ${clickedGroupId}, but group processing is SKIPPED for debug.`);
+                    console.log(`clickSelectHandler: Clicked saved group ${clickedGroupId}. Comparing with currentEditingGroupId ('${currentEditingGroupId}')`);
+                    // Check if this group is already selected and detailed
+                    if (currentEditingGroupId === clickedGroupId && tilesetDetailsModal.style.display === 'block') {
+                        console.log(`clickSelectHandler: Deselecting already active group ${clickedGroupId}`);
+                        clearMapSelectionAndDetails(); // This will clear highlightedGlobeGroupId and refresh globe
+                        return;
+                    }
+
+                    // If not already selected, or if details modal is hidden, proceed to select
+                    clearMapSelectionAndDetails(); // Clear previous, including globe highlight
+                    window.highlightedGlobeGroupId = clickedGroupId; // Set for globe highlighting
+                    console.log(`clickSelectHandler: Set highlightedGlobeGroupId to: ${clickedGroupId}`);
+
+                    const targetSource = window.userLayers[window.selectedLayerId].layer.getSource();
+                    const groupFeatures = targetSource.getFeatures().filter(f => f.get('tilesetGroupId') === clickedGroupId);
+                    const featuresToAdd = groupFeatures.map(f => {
+                        const clone = f.clone();
+                        clone.setId(`selection-${f.getId() || f.ol_uid}`);
+                        clone.set('originalTileId', f.get('tileId'));
+                        clone.set('isGroupSelection', true); return clone;
+                    });
+
+                    if (featuresToAdd.length > 0 && selectionSource) {
+                        selectionSource.addFeatures(featuresToAdd);
+                    }
+                    
+                    // Note: openTilesetDetailsModal is still commented out globally for black screen debugging
+                    if (typeof openTilesetDetailsModal === 'function' && clickedSavedFeature) {
+                       openTilesetDetailsModal(clickedSavedFeature);
+                    } else {
+                        console.log("clickSelectHandler: openTilesetDetailsModal not called (function or feature missing).");
+                    }
+                    // console.log("clickSelectHandler: SKIPPED openTilesetDetailsModal for debugging black screen."); // Keep this line if you want to skip for now
+                    
+                    // Note: zoomToTilesetGroup (and its internal flyToTilesetGroupInGlobe) is still globally neutered for black screen debugging
+                    zoomToTilesetGroup(clickedGroupId);
+                    highlightListItem(clickedGroupId); // Highlight in UI list
+
+                    if (window.ogSavedTilesetsLayer) {
+                        window.ogSavedTilesetsLayer.clear(); // Refresh globe for highlight
+                        console.log("DEBUG: ogSavedTilesetsLayer cleared after map click group selection.");
+                    }
                 } else {
                     // This is the path for individual tile selection if no group was clicked
                     if (selectionSource) {
@@ -776,6 +822,7 @@ function loadTestTilesetToLayer0() {
     }
 
     function selectLayerInList(layerId) {
+        console.log(`%cSELECT LAYER IN LIST CALLED for layerId: ${layerId}`, "color: purple; font-weight: bold;");
         if (!userLayerList || !window.userLayers || !window.olMap) {
             console.warn("selectLayerInList: Prerequisites not met (userLayerList, userLayers, or olMap).");
             return;
@@ -812,8 +859,8 @@ function loadTestTilesetToLayer0() {
         }
         
         window.selectedLayerId = layerId; // Update the global selected layer ID
-        populateTilesetList(layerId); // Populate tilesets for the new layer
-        console.log(`Selected layer: ${layerId}. Visibility updated.`);
+        // populateTilesetList(layerId); // populateTilesetList will be called by the initiator of layer selection
+        console.log(`Selected layer: ${layerId}. Visibility updated. populateTilesetList NOT called from here.`);
 if (window.ogSavedTilesetsLayer) {
             window.ogSavedTilesetsLayer.clear(); // Force redraw of the globe layer
             console.log("DEBUG: ogSavedTilesetsLayer cleared after selecting new layer.");
@@ -942,52 +989,124 @@ if (window.ogSavedTilesetsLayer) {
     }
     
     function populateTilesetList(layerId) {
+        populateListCallCounter++;
+        console.log(`%cPOPULATE TILESET LIST #${populateListCallCounter} for layerId: ${layerId}`, "color: blue; font-weight: bold;");
         if (!tilesetListDiv || !window.userLayers || !window.userLayers[layerId]) {
             if(tilesetListDiv) tilesetListDiv.innerHTML = '<small><i>Invalid layer or no layer selected.</i></small>';
+            console.warn("populateTilesetList: Prerequisites not met or invalid layerId.");
             return;
         }
-        tilesetListDiv.innerHTML = '';
+        tilesetListDiv.innerHTML = ''; // Clear current list
+
         const layerInfo = window.userLayers[layerId];
         const source = layerInfo.layer.getSource();
         const features = source.getFeatures();
+        console.log(`%cpopulateTilesetList #${populateListCallCounter} - Raw features for layer ${layerId}:`, "color: orange;", features.map(f => ({ id: f.getId(), groupId: f.get('tilesetGroupId'), name: f.get('tilesetName') }) ));
+        console.log(`populateTilesetList: Found ${features.length} raw features in layer ${layerId}.`);
+        
         const groupedTilesets = {};
+        // First, group features by their tilesetGroupId
         features.forEach(feature => {
             const groupId = feature.get('tilesetGroupId');
             const name = feature.get('tilesetName') || 'Unnamed Tileset';
-            if (groupId) {
-                if (!groupedTilesets[groupId]) { groupedTilesets[groupId] = { name: name, features: [], isVisible: feature.get('isVisible') !== false, color: feature.get('color') }; }
+            if (groupId) { // Only process features that are part of a tileset group
+                if (!groupedTilesets[groupId]) {
+                    groupedTilesets[groupId] = {
+                        name: name,
+                        features: [],
+                        // Determine visibility: if any feature in group is visible, group is visible. Default true.
+                        isVisible: feature.get('isVisible') !== false,
+                        color: feature.get('color') // Take color from first feature encountered for the group
+                    };
+                }
                 groupedTilesets[groupId].features.push(feature);
-                if (feature.get('isVisible') !== false) groupedTilesets[groupId].isVisible = true;
-                if (!groupedTilesets[groupId].color) groupedTilesets[groupId].color = feature.get('color');
+                // If any feature in the group is explicitly set to visible, mark the group as visible
+                if (feature.get('isVisible') !== false) { // Check for explicit false, otherwise assume visible or inherit
+                    groupedTilesets[groupId].isVisible = true;
+                }
+                // Ensure a color is set for the group, taking the first available one.
+                if (!groupedTilesets[groupId].color) {
+                    groupedTilesets[groupId].color = feature.get('color');
+                }
             }
         });
-        if (Object.keys(groupedTilesets).length === 0) { tilesetListDiv.innerHTML = '<small><i>No tilesets saved in this layer.</i></small>'; return; }
+
+        if (Object.keys(groupedTilesets).length === 0) {
+            tilesetListDiv.innerHTML = '<small><i>No tilesets saved in this layer.</i></small>';
+            return;
+        }
+
+        // Now, create list items for each group
         Object.entries(groupedTilesets).forEach(([groupId, groupData]) => {
             const itemDiv = document.createElement('div');
-            itemDiv.classList.add('layer-item', 'tileset-item');
+console.log(`populateTilesetList: Creating list item for groupId: '${groupId}', name: '${groupData.name}'`);
+            itemDiv.classList.add('layer-item', 'tileset-item'); // Added 'tileset-item' for specific styling/selection
             itemDiv.dataset.tilesetGroupId = groupId;
+
             const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox'; checkbox.checked = groupData.isVisible;
+            checkbox.type = 'checkbox';
+            checkbox.checked = groupData.isVisible; // Group visibility
             checkbox.title = `Toggle visibility of "${groupData.name}"`;
+
             const nameSpan = document.createElement('span');
             nameSpan.textContent = groupData.name;
-            nameSpan.title = `Zoom to "${groupData.name}"`;
-            const buttonContainer = document.createElement('div'); buttonContainer.classList.add('button-container');
-            const editBtn = document.createElement('button'); editBtn.innerHTML = '✏️'; editBtn.classList.add('settings-btn-small'); editBtn.title = `Edit details for "${groupData.name}"`;
-            const deleteBtn = document.createElement('button'); deleteBtn.innerHTML = '🗑️'; deleteBtn.classList.add('settings-btn-small'); deleteBtn.title = `Delete tileset "${groupData.name}"`;
-            buttonContainer.appendChild(editBtn); buttonContainer.appendChild(deleteBtn);
-            itemDiv.appendChild(checkbox); itemDiv.appendChild(nameSpan); itemDiv.appendChild(buttonContainer);
+            nameSpan.title = `Zoom to "${groupData.name}"`; // Click name to zoom
+
+            const buttonContainer = document.createElement('div');
+            buttonContainer.classList.add('button-container');
+
+            const editBtn = document.createElement('button');
+            editBtn.innerHTML = '✏️'; // Pencil icon
+            editBtn.classList.add('settings-btn-small');
+            editBtn.title = `Edit details for "${groupData.name}"`;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.innerHTML = '🗑️'; // Trash icon
+            deleteBtn.classList.add('settings-btn-small');
+            deleteBtn.title = `Delete tileset "${groupData.name}"`;
+
+            buttonContainer.appendChild(editBtn);
+            buttonContainer.appendChild(deleteBtn);
+
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(nameSpan);
+            itemDiv.appendChild(buttonContainer);
+            console.log(`%cpopulateTilesetList: BEFORE appendChild for groupId: ${groupId}, name: ${groupData.name}. Current children: ${tilesetListDiv.children.length}`, "color: magenta;");
             tilesetListDiv.appendChild(itemDiv);
+            console.log(`%cpopulateTilesetList: AFTER appendChild for groupId: ${groupId}, name: ${groupData.name}. Current children: ${tilesetListDiv.children.length}`, "color: magenta;");
         });
+console.log(`populateTilesetList: Generated ${Object.keys(groupedTilesets).length} groups. Group IDs:`, Object.keys(groupedTilesets));
+        // After repopulating, re-apply highlight if a group is globally selected
+        if (window.highlightedGlobeGroupId) {
+            console.log(`populateTilesetList: Attempting to re-apply highlight for ${window.highlightedGlobeGroupId}`);
+            highlightListItem(window.highlightedGlobeGroupId);
+        } else {
+            console.log("populateTilesetList: No highlightedGlobeGroupId to re-apply.");
+        }
+        console.log(`%cEND POPULATE TILESET LIST for layerId: ${layerId}`, "color: blue; font-weight: bold;");
     }
 
     function highlightListItem(groupId) {
-        if (!tilesetListDiv) return;
+        console.log(`highlightListItem called with groupId: ${groupId}`);
+        if (!tilesetListDiv) {
+            console.log("highlightListItem: tilesetListDiv not found, returning.");
+            return;
+        }
         const currentlyHighlighted = tilesetListDiv.querySelector('.highlighted');
-        if (currentlyHighlighted) currentlyHighlighted.classList.remove('highlighted');
+        if (currentlyHighlighted) {
+            console.log("highlightListItem: Removing 'highlighted' class from previously selected item:", currentlyHighlighted);
+            currentlyHighlighted.classList.remove('highlighted');
+        }
         if (groupId) {
             const listItem = tilesetListDiv.querySelector(`.tileset-item[data-tileset-group-id="${groupId}"]`);
-            if (listItem) listItem.classList.add('highlighted');
+            if (listItem) {
+                console.log("highlightListItem: Found listItem, adding 'highlighted' class:", listItem);
+                listItem.classList.add('highlighted');
+            } else {
+                console.log(`highlightListItem: listItem NOT found for groupId: ${groupId}`);
+            }
+        } else {
+            console.log("highlightListItem: groupId is null/undefined, so no new item will be highlighted.");
         }
     }
     
@@ -1186,16 +1305,15 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
                     // --- End selection logic ---
 
                     const firstFeature = groupFeatures.length > 0 ? groupFeatures[0] : null; // Use already filtered features
-                    // if (firstFeature) {
-                    //     openTilesetDetailsModal(firstFeature); // This will set currentEditingGroupId // TEMP COMMENT OUT
-                    // } else {
-                    //     console.warn(`Could not find feature for groupId ${groupId} to open details modal.`);
-                    // }
-if (window.ogSavedTilesetsLayer) {
+                    if (firstFeature) {
+                        openTilesetDetailsModal(firstFeature); // This will set currentEditingGroupId
+                    } else {
+                        console.warn(`Could not find feature for groupId ${groupId} to open details modal.`);
+                    }
+                    if (window.ogSavedTilesetsLayer) {
                         window.ogSavedTilesetsLayer.clear(); // Refresh globe for highlight
                         // console.log("DEBUG: ogSavedTilesetsLayer cleared after UI list group selection.");
                     }
-                    console.log("tilesetListDiv click: SKIPPED openTilesetDetailsModal for debugging black screen.");
                 }
             }
         });
@@ -1350,8 +1468,10 @@ if (window.ogSavedTilesetsLayer) {
          });
     }
 
-    if (saveSelectionBtn) {
+    if (saveSelectionBtn && !saveSelectionListenerAttached) {
+        console.log("%cSAVE SELECTION BTN: Attaching listener...", "color: blue; font-weight: bold;");
         saveSelectionBtn.addEventListener('click', () => {
+            console.log("%cSAVE SELECTION BTN CLICKED", "color: red; font-weight: bold; background: yellow;");
             if (!window.selectedLayerId || !window.userLayers[window.selectedLayerId] || !selectionSource || !tilesetNameInput) {
                 alert("Cannot save: Critical components missing."); return;
             }
@@ -1380,7 +1500,7 @@ if (window.ogSavedTilesetsLayer) {
             }
             const featuresToAdd = [];
             const tilesetGroupId = `tileset-group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-            let tilesetFeatureCounter = 0; // Local counter for feature IDs within this save operation
+            let tilesetFeatureCounter = 0;
             selectedFeatures.forEach(feature => {
                 const tileId = feature.getId();
                 if (!tileId || !tileId.includes('-')) { return; }
@@ -1391,44 +1511,46 @@ if (window.ogSavedTilesetsLayer) {
                 clonedFeature.set('tilesetGroupId', tilesetGroupId);
                 clonedFeature.set('tileId', tileId);
                 clonedFeature.set('isVisible', true);
-                const chosenColor = detailsColorPicker?.value; // Get value safely
+                const chosenColor = detailsColorPicker?.value;
                 const lowerChosenColor = chosenColor ? chosenColor.toLowerCase() : "";
                 const isBlack = lowerChosenColor === '#000000' || lowerChosenColor === 'black' || lowerChosenColor === 'rgb(0,0,0)' || lowerChosenColor.startsWith('rgba(0,0,0');
-                clonedFeature.set('color', chosenColor && chosenColor !== "" && !isBlack ? chosenColor : '#90EE90'); // Fallback to Light Green if empty or various forms of black
+                clonedFeature.set('color', chosenColor && chosenColor !== "" && !isBlack ? chosenColor : '#90EE90');
                 let opacityValue = detailsFillOpacityInput ? parseFloat(detailsFillOpacityInput.value) : 0.6;
-                if (isNaN(opacityValue)) {
-                    opacityValue = 0.6; // Ensure fallback if parseFloat results in NaN
-                }
+                if (isNaN(opacityValue)) { opacityValue = 0.6; }
                 clonedFeature.set('fillOpacity', opacityValue);
-                clonedFeature.set('strokeWidth', detailsStrokeWidthInput ? parseFloat(detailsStrokeWidthInput.value) : 0.5); // Default to new stroke width
+                clonedFeature.set('strokeWidth', detailsStrokeWidthInput ? parseFloat(detailsStrokeWidthInput.value) : 0.5);
                 clonedFeature.unset('isIndividualSelection');
                 featuresToAdd.push(clonedFeature);
             });
+
             if (featuresToAdd.length > 0) {
                 targetSource.addFeatures(featuresToAdd);
+                console.log(`%cSAVE HANDLER: Added ${featuresToAdd.length} features to targetSource.`, "color: green;");
                 window.userLayers[window.selectedLayerId].tilesetCount = (window.userLayers[window.selectedLayerId].tilesetCount || 0) + 1;
+console.log("%cSAVE HANDLER: populateTilesetList has been called from save handler.", "color: green; font-weight: bold;");
                 clearMapSelectionAndDetails();
-                setTimeout(() => { populateTilesetList(window.selectedLayerId); }, 100);
-                // updateSelectedTileCountDisplay(); // Now called by clearMapSelectionAndDetails
+                populateTilesetList(window.selectedLayerId); // Call directly, remove setTimeout
                 tilesetNameInput.value = '';
 
-                // Trigger redraw of the OpenGlobus saved layer
-if (window.ogSavedTilesetsLayer) {
-                    window.ogSavedTilesetsLayer.clear(); // Force redraw of the globe layer
+                if (window.ogSavedTilesetsLayer) {
+                    window.ogSavedTilesetsLayer.clear();
                     console.log("DEBUG: ogSavedTilesetsLayer cleared after saving new tileset.");
                 }
-                if (ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
-                    console.log("saveSelectionBtn: Calling ogSavedTilesetsLayer.redraw() after saving selection.");
-                    ogSavedTilesetsLayer.redraw();
-                } else {
-                    console.warn("saveSelectionBtn: Could not redraw ogSavedTilesetsLayer - layer or redraw function missing.");
-                    if (window.globus && window.globus.renderer) { // Fallback if specific layer redraw isn't available
-                        console.log("saveSelectionBtn: Calling globus.renderer.draw() as fallback redraw for saved tilesets.");
-                        window.globus.renderer.draw();
-                    }
-                }
+                // Fallback redraws (previously misplaced)
+                // Note: .redraw() is often for specific layer types, .clear() is more general for CanvasTiles for full refresh
+                // if (ogSavedTilesetsLayer && typeof ogSavedTilesetsLayer.redraw === 'function') {
+                //     console.log("saveSelectionBtn: Calling ogSavedTilesetsLayer.redraw() after saving selection.");
+                //     ogSavedTilesetsLayer.redraw();
+                // } else if (window.globus && window.globus.renderer) {
+                //     console.log("saveSelectionBtn: Calling globus.renderer.draw() as fallback redraw for saved tilesets.");
+                //     window.globus.renderer.draw();
+                // }
             }
-        });
+        }); // End of addEventListener callback
+        saveSelectionListenerAttached = true;
+        console.log("Save selection listener ATTACHED.");
+    } else if (saveSelectionBtn && saveSelectionListenerAttached) {
+        console.log("Save selection listener ALREADY attached (not re-attaching).");
     } else {
         console.warn("DEBUG: saveSelectionBtn not found, event listener not attached.");
     }
@@ -1703,14 +1825,15 @@ console.log("%cDEBUG: PRE-INSTANTIATION of ogSavedTilesetsLayer", "color: yellow
                         let drawn = false;
 
                         // 1. Check for temporary individual selections
-                        if (selectionSource && selectionSource.getFeatures().some(f => f.getId() === ogTileId || f.get('tileId') === ogTileId)) {
+                        const tempSelectedFeature = selectionSource ? selectionSource.getFeatures().find(f => (f.getId() === ogTileId || f.get('tileId') === ogTileId) && f.get('isIndividualSelection') === true) : null;
+                        if (tempSelectedFeature) {
                             // Style for temporary individual tile selection (before saving)
                             ctx.fillStyle = "rgba(255, 255, 0, 0.5)"; // Bright yellow, semi-transparent
                             ctx.fillRect(0, 0, size, size);
                             ctx.strokeStyle = "rgba(255, 200, 0, 0.8)";
                             ctx.lineWidth = 3;
                             ctx.strokeRect(0, 0, size, size);
-                            console.log(`%cOG DrawTile: Drawing TEMP SELECTION ${ogTileId}`, "color: yellow; background: black;");
+                            console.log(`%cOG DrawTile: Drawing TEMP INDIVIDUAL SELECTION ${ogTileId}`, "color: yellow; background: black;");
                             drawn = true;
                         }
                         // 2. Else, check for saved tilesets in the active layer
@@ -1745,8 +1868,14 @@ console.log("%cDEBUG: PRE-INSTANTIATION of ogSavedTilesetsLayer", "color: yellow
                                 // Highlight if it's part of the selected/highlighted group
                                 // console.log(`OG DrawTile: Tile ${ogTileId}, GroupID: ${featureGroupId}, HighlightedGroupID: ${window.highlightedGlobeGroupId}`); // Verbose
                                 if (featureGroupId && featureGroupId === window.highlightedGlobeGroupId) {
-                                    ctx.strokeStyle = "rgba(0, 255, 255, 0.9)"; // Bright cyan border for highlighted group
-                                    ctx.lineWidth = 4;
+                                    // Apply a semi-transparent cyan fill for highlight, then the border
+                                    const originalFill = ctx.fillStyle; // Save original fill
+                                    ctx.fillStyle = "rgba(0, 220, 220, 0.5)"; // Increased opacity for cyan fill
+                                    ctx.fillRect(0, 0, size, size);
+                                    // ctx.fillStyle = originalFill; // Restore original fill if needed for other elements on same tile (not currently the case)
+
+                                    ctx.strokeStyle = "rgba(0, 255, 255, 1.0)"; // Fully opaque cyan border
+                                    ctx.lineWidth = 4; // Make border prominent
                                     ctx.strokeRect(0, 0, size, size);
                                     console.log(`%cOG DrawTile: HIGHLIGHTING group ${featureGroupId} for tile ${ogTileId}`, "color: cyan; background: black;");
                                 } else if (featureGroupId) {
@@ -1999,6 +2128,8 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
 
                          // Replicate group selection logic from tilesetListDiv click handler
                          clearMapSelectionAndDetails();
+window.highlightedGlobeGroupId = groupId; // Set for globe highlighting
+                         console.log(`handleGlobeClick: Set highlightedGlobeGroupId to: ${groupId}`);
 
                          const groupFeatures = source.getFeatures().filter(f => f.get('tilesetGroupId') === groupId);
                          const featuresToAddForSelection = groupFeatures.map(f => {
@@ -2014,18 +2145,20 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
                          }
                          
                          updateSelectedTileCountDisplay();
-                         // openTilesetDetailsModal(clickedFeature); // Open modal with the specific clicked feature // TEMP COMMENT OUT
-                         console.log("handleGlobeClick: SKIPPED openTilesetDetailsModal for debugging black screen.");
+                         if (typeof openTilesetDetailsModal === 'function' && clickedFeature) {
+                            openTilesetDetailsModal(clickedFeature); // Open modal with the specific clicked feature
+                         } else {
+                            console.log("handleGlobeClick: openTilesetDetailsModal not called (function or feature missing).");
+                         }
                          zoomToTilesetGroup(groupId); // Zoom map and fly globe
                          highlightListItem(groupId); // Highlight in UI list
 
                          // Refresh globe layer if its appearance depends on selection state
                          // Temporarily commented out to debug black screen issue after globe click selection
-                         // if (window.ogSavedTilesetsLayer) {
-                         //     window.ogSavedTilesetsLayer.clear();
-                         //     console.log("DEBUG: ogSavedTilesetsLayer clear SKIPPED after globe click group selection for debug.");
-                         // }
-                         console.log("DEBUG: ogSavedTilesetsLayer clear SKIPPED after globe click group selection for debug.");
+                         if (window.ogSavedTilesetsLayer) {
+                             window.ogSavedTilesetsLayer.clear();
+                             console.log("DEBUG: ogSavedTilesetsLayer cleared after globe click group selection.");
+                         }
 
                      } else {
                          console.log(`HANDLEGLOBECLICK: Clicked tile ${tileId} (Z${TILE_SELECTION_ZOOM}) is not part of a known tileset group.`);
