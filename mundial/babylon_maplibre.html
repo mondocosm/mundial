@@ -112,12 +112,24 @@
                                 id: 'osm',
                                 type: 'raster',
                                 source: 'osm'
+                            },
+                            { // Optional hillshade layer for better terrain visualization
+                                id: 'hills',
+                                type: 'hillshade',
+                                source: 'terrainSource', // Use the same DEM source
+                                layout: {visibility: 'visible'},
+                                paint: {'hillshade-shadow-color': '#473B24'}
                             }
                             // 3D Buildings layer will be added on load if source exists
                         ],
                         terrain: { // Terrain initially enabled
                             source: 'terrainSource',
-                            exaggeration: 1.0 
+                            exaggeration: 1.0
+                        },
+                        sky: { // Adding sky layer as in the example
+                            "sky-type": "atmosphere",
+                            "atmosphere-sun-intensity": 5,
+                            "atmosphere-sun": [0.0, 0.0]
                         }
                     },
                     maxZoom: 18,
