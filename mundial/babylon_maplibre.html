@@ -119,18 +119,24 @@
                                 source: 'terrainSource', // Use the same DEM source
                                 layout: {visibility: 'visible'},
                                 paint: {'hillshade-shadow-color': '#473B24'}
+                            },
+                            { // Sky layer definition
+                                "id": "sky",
+                                "type": "sky",
+                                "paint": {
+                                    "sky-type": "atmosphere"
+                                    // Add sun properties here if basic sky works
+                                    // "sky-atmosphere-sun": [0.0, 0.0],
+                                    // "sky-atmosphere-sun-intensity": 5
+                                }
                             }
                             // 3D Buildings layer will be added on load if source exists
                         ],
                         terrain: { // Terrain initially enabled
                             source: 'terrainSource',
                             exaggeration: 1.0
-                        },
-                        sky: {
-                            "sky-type": "atmosphere"
-                            // "sky-atmosphere-sun-intensity": 5,
-                            // "sky-atmosphere-sun": [0.0, 0.0]
                         }
+                        // Removed top-level sky property
                     },
                     maxZoom: 18,
                     maxPitch: 85
