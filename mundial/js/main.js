@@ -1,13 +1,8 @@
-console.log("%cMAIN.JS SCRIPT EXECUTION STARTED - VERY TOP LINE", "color: green; font-size: 1.5em; font-weight: bold;");
-// alert("MAIN.JS LOADED - TOP OF FILE"); // Removed after confirming script load
-// alert("DEBUG: main.js SCRIPT EXECUTION STARTED. Click OK to continue."); // Removed debug alert
-console.log("GLOBAL SCOPE: JavaScript is running in main.js (line 4 now)");
-window.globus = null; // Declare globus in global scope and attach to window
-window.olMap = null; // Declare olMap in global scope for OpenLayers map
+// console.log("%cMAIN.JS SCRIPT EXECUTION STARTED - VERY TOP LINE", "color: green; font-size: 1.5em; font-weight: bold;");
+// console.log("GLOBAL SCOPE: JavaScript is running in main.js (line 4 now)");
+// let globus = null; // Declare globus in local scope
+// let olMap = null; // Declare olMap in local scope for OpenLayers map
 const TILE_SELECTION_ZOOM = 21; // Global scope for OpenGlobus layers
-let highlightedGlobeGroupId = null; // To store the ID of the tileset group to highlight on the globe
-let saveSelectionListenerAttached = false;
-let populateListCallCounter = 0;
 const GRID_VISIBILITY_MIN_ZOOM = 16; // Global scope for OpenGlobus grid layer
 let gridLayerZ21 = null; // For OpenLayers ZL21 grid
 let selectionTileGrid = null; // For OpenLayers ZL21 grid calculation
@@ -20,11 +15,26 @@ let layer0Layer = null;
 const layer0Id = 'layer-0'; // Define layer0Id at a higher scope
 let dragPanInteraction = null; // Define dragPanInteraction at top level
 let dragBoxInteraction = null; // Define dragBoxInteraction at top level
+
+const state = {
+    globus: null, // Declare globus in local scope
+    olMap: null, // Declare olMap in local scope for OpenLayers map
+    gridLayerZ21: null, // For OpenLayers ZL21 grid
+    selectionTileGrid: null, // For OpenLayers ZL21 grid calculation
+    selectionSource: null,
+    selectionLayer: null,
+    highlightSource: null,
+    highlightLayer: null,
+    layer0Source: null,
+    layer0Layer: null,
+    highlightedGlobeGroupId: null, // To store the ID of the tileset group to highlight on the globe
+    saveSelectionListenerAttached: false,
+    populateListCallCounter: 0
+};
 // userLayers and selectedLayerId are already on window object from previous steps
 // mundial/main.js - Full version with OpenGlobus focus
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("DEBUG: DOMContentLoaded entered (alert removed).");
 
     // --- Settings Panel DOM Elements ---
     const settingStartLonInput = document.getElementById('setting-start-lon');
@@ -33,7 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingSetStartLocationBtn = document.getElementById('setting-set-start-location-btn');
     const settingGridVisibleCheckbox = document.getElementById('setting-grid-visible');
     const settingGridWeightInput = document.getElementById('setting-grid-weight');
-    console.log("DEBUG: Settings panel DOM elements obtained.");
+
+    // Globe settings buttons
+    const settingGlobeEarthBtn = document.getElementById('setting-globe-earth'); // Renamed var and ID
+    const settingGlobeMoonBtn = document.getElementById('setting-globe-moon');   // Renamed var and ID
+    const settingGlobeMarsBtn = document.getElementById('setting-globe-mars');   // Renamed var and ID
+    const settingGlobeMetaverseBtn = document.getElementById('setting-globe-metaverse'); // Renamed var and ID
+    const settingGlobeCustomBtn = document.getElementById('setting-globe-custom'); // Renamed var and ID
 
     // --- Draggable Panels ---
     function makeDraggable(elmnt) {
@@ -65,47 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.onmouseup = null; document.onmousemove = null;
       }
     }
-    console.log("DEBUG: makeDraggable function defined.");
 
     // --- XR Panel Logic ---
-    function setupXRPanelLogic() {
-        console.log("DEBUG: setupXRPanelLogic called.");
-        setTimeout(() => {
-            const xrIframe = document.getElementById('xr-iframe');
-            const xrEngineSelector = document.getElementById('xr-engine-selector');
-            console.log("%cDEBUG (deferred): xrIframe element:", "color: purple", xrIframe);
-            console.log("%cDEBUG (deferred): xrEngineSelector element:", "color: purple", xrEngineSelector);
-
-            if (xrEngineSelector && xrIframe) {
-                xrEngineSelector.addEventListener('click', (event) => {
-                    if (event.target.classList.contains('xr-engine-btn')) {
-                        const engineButtons = xrEngineSelector.querySelectorAll('.xr-engine-btn');
-                        engineButtons.forEach(btn => btn.classList.remove('active'));
-                        event.target.classList.add('active');
-
-                        const engine = event.target.dataset.engine;
-                        let targetUrl = '';
-                        console.log(`XR Engine selected: ${engine}`);
-
-                        switch (engine) {
-                            case 'janusweb': targetUrl = '/mundial/january-fixed.html'; break; // Load our stabilized JanusWeb
-                            case 'streetsgl':
-                                targetUrl = 'about:blank';
-                                alert("Streets.gl is currently unavailable due to external tile server certificate issues.");
-                                break;
-                            case 'babylonjs': targetUrl = 'about:blank'; alert("BabylonJS view not yet implemented."); break;
-                            case 'webxr': targetUrl = 'about:blank'; alert("WebXR view not yet implemented."); break; // Added WebXR placeholder
-                            case 'irengine': targetUrl = 'about:blank'; alert("IR-Engine view not yet implemented."); break;
-                            default: console.error(`Unknown XR engine: ${engine}`); if(xrIframe) xrIframe.src='about:blank'; return;
-                        }
-                        if (targetUrl && xrIframe) { xrIframe.src = targetUrl; }
-                    }
-                });
-            } else {
-                console.error("XR panel elements (xr-engine-selector or xr-iframe) not found (deferred).");
-            }
-        }, 0);
-    }
+// Removed duplicate setupXRPanelLogic function
 
     // --- UI Element References (from reference code) ---
     const baseLayerSelectOL = document.getElementById('base-layer-select'); // Renamed to avoid conflict if an OG one exists
@@ -144,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const signInBtn = document.getElementById('signin-btn');
     const profileBtn = document.getElementById('profile-btn');
     const xrViewBtn = document.getElementById('xr-view-btn');
+    const sceneBtn = document.getElementById('scene-btn'); // New Scene Button
 
     const socialPanel = document.getElementById('social-panel');
     const mapPanelOL = document.getElementById('map-panel'); // Renamed to avoid conflict
@@ -151,8 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const layerSwitcherPanelOL = document.getElementById('layer-switcher'); // Renamed
     const profilePanel = document.getElementById('profile-panel');
     const xrPanel = document.getElementById('xr-panel');
-    
-    console.log("DEBUG: UI Element References obtained.");
+    const scenePanel = document.getElementById('scene-panel'); // New Scene Panel
+
+    // Calls to initializeOpenLayersMap() and initializeOpenGlobus() moved to later in the script,
+    // after all function definitions are complete.
 
     // --- Tile Selection & User Layer Core Logic Functions (from reference) ---
     let currentInteractionMode = 'pan'; // Initial mode is 'pan'
@@ -195,19 +176,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const newFeature = new ol.Feature({ geometry: ol.geom.Polygon.fromExtent(tileExtent) });
             newFeature.setId(tileId);
             newFeature.set('isIndividualSelection', true); // Mark as temporary selection
-            console.log(`toggleTileSelection: Adding feature ${tileId} to selectionSource.`);
             selectionSource.addFeature(newFeature);
             selectionChanged = true;
-            console.log(`toggleTileSelection: Feature ${tileId} added. selectionSource count: ${selectionSource.getFeatures().length}`);
         }
         updateSelectedTileCountDisplay();
 
         // If the selection changed and the globe layer exists, clear it to force redraw
         if (selectionChanged && window.ogSavedTilesetsLayer && typeof window.ogSavedTilesetsLayer.clear === 'function') {
-            console.log("toggleTileSelection: selectionChanged is true. Triggering ogSavedTilesetsLayer.clear().");
             window.ogSavedTilesetsLayer.clear();
         } else if (selectionChanged) {
-            console.warn("toggleTileSelection: selectionChanged but ogSavedTilesetsLayer or its clear method is missing.");
         }
     }
 
@@ -265,7 +242,6 @@ window.highlightedGlobeGroupId = null; // Clear globe highlight
         }
         updateSelectionActionsVisibility(); // Hide/show selection action buttons
         updateSelectedTileCountDisplay(); // Reset tile count display
-        console.log("clearMapSelectionAndDetails: Map selection cleared and details panel hidden.");
     }
 function loadTestTilesetToLayer0() {
         if (!window.olMap || !layer0Source || !selectionTileGrid) {
@@ -280,7 +256,6 @@ function loadTestTilesetToLayer0() {
             [TILE_SELECTION_ZOOM, 617235, 788671]  // Bottom-right
         ];
 
-        console.log("%cLOAD TEST TILESET TO LAYER 0 - EXECUTING", "background: #222; color: #bada55; font-size: 1.2em;");
         const tilesetGroupId = `test-tileset-${Date.now()}`;
         const tilesetName = "Test Tileset SoL";
         const featuresToAdd = [];
@@ -313,10 +288,8 @@ function loadTestTilesetToLayer0() {
             
             // Store tile data for Babylon.js view
             window.currentTilesetForBabylon = testTiles.map(tc => ({ z: tc[0], x: tc[1], y: tc[2] })); // Store Z,X,Y
-            console.log("Stored test tileset data for Babylon.js:", window.currentTilesetForBabylon);
 
             populateTilesetList(layer0Id); // Update UI list for Layer 0
-            console.log(`Loaded ${featuresToAdd.length} features into "${tilesetName}" on Layer 0.`);
 
             // Zoom OpenLayers map to the extent of the loaded test tiles
             if (window.olMap && featuresToAdd.length > 0) {
@@ -330,7 +303,6 @@ function loadTestTilesetToLayer0() {
                         maxZoom: TILE_SELECTION_ZOOM, // Zoom in to ZL21
                         duration: 1000 // Optional animation
                     });
-                    console.log("loadTestTilesetToLayer0: Zoomed OpenLayers map to test tileset extent.");
                 }
             }
             // Optionally, zoom to this test tileset
@@ -349,7 +321,7 @@ function loadTestTilesetToLayer0() {
 
     // --- OpenLayers Map Initialization ---
 
-    // Moved from initializeOpenLayersMap to make them accessible to createLayerBtn
+    // Define style functions BEFORE they are needed by initializeOpenLayersMap
     const createTilesetStyle = (feature) => {
         const color = feature.get('color') || '#33CCFF'; // Brighter default: Bright Sky Blue
         const fillOpacity = feature.get('fillOpacity') === undefined ? 0.6 : feature.get('fillOpacity'); // Default fill opacity (more fill)
@@ -357,7 +329,6 @@ function loadTestTilesetToLayer0() {
 
         // Convert hex color and opacity to rgba for fill
         let r = 0, g = 0, b = 0;
-        console.log(`createTilesetStyle: Input color for feature ${feature.getId() || 'unknown'}:`, color);
         if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(color)) {
             let c = color.substring(1).split('');
             if (c.length === 3) { c = [c[0], c[0], c[1], c[1], c[2], c[2]]; }
@@ -374,9 +345,7 @@ function loadTestTilesetToLayer0() {
                 // If an alpha is in the color string, it's ignored here as fillOpacity is separate
             }
         }
-        console.log(`createTilesetStyle: Derived r,g,b: ${r},${g},${b}. Used fillOpacity: ${fillOpacity}`);
         const fillColorRgba = `rgba(${r},${g},${b},${fillOpacity})`;
-        console.log(`createTilesetStyle: Final fillColorRgba: ${fillColorRgba}`);
         // Use the original color for stroke, but ensure full opacity for the stroke itself
         const strokeColorRgba = color.startsWith('rgba') ? `rgba(${r},${g},${b},1)` : color;
 
@@ -1605,7 +1574,7 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
          });
     }
 
-    if (saveSelectionBtn && !saveSelectionListenerAttached) {
+    if (saveSelectionBtn && !state.saveSelectionListenerAttached) {
         console.log("%cSAVE SELECTION BTN: Attaching listener...", "color: blue; font-weight: bold;");
         saveSelectionBtn.addEventListener('click', () => {
             console.log("%cSAVE SELECTION BTN CLICKED", "color: red; font-weight: bold; background: yellow;");
@@ -1698,9 +1667,9 @@ console.log("%cSAVE HANDLER: populateTilesetList has been called from save handl
                 // }
             }
         }); // End of addEventListener callback
-        saveSelectionListenerAttached = true;
+        state.saveSelectionListenerAttached = true;
         console.log("Save selection listener ATTACHED.");
-    } else if (saveSelectionBtn && saveSelectionListenerAttached) {
+    } else if (saveSelectionBtn && state.saveSelectionListenerAttached) {
         console.log("Save selection listener ALREADY attached (not re-attaching).");
     } else {
         console.warn("DEBUG: saveSelectionBtn not found, event listener not attached.");
@@ -2756,6 +2725,190 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         }
     }
 
+    // Store original configurations for switching back to Earth
+    let originalOpenLayersBaseLayerSource = null;
+    let originalOpenLayersViewConfig = null;
+    // For OpenGlobus, initializeOpenGlobus() will be used to restore Earth.
+
+    function updateActiveGlobeButton(activeButtonId) {
+        const globeButtons = [
+            settingGlobeEarthBtn, // Use new var names
+            settingGlobeMoonBtn,
+            settingGlobeMarsBtn,
+            settingGlobeMetaverseBtn,
+            settingGlobeCustomBtn
+        ];
+        globeButtons.forEach(button => {
+            if (button) { // Check if button exists
+                if (button.id === activeButtonId) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            }
+        });
+    }
+
+    function switchToEarthView() {
+        console.log("Switching to Earth view...");
+        if (!state.olMap) {
+            console.warn("OpenLayers Map not initialized. Cannot switch to Earth.");
+            return;
+        }
+
+        // Restore OpenLayers
+        if (originalOpenLayersBaseLayerSource && originalOpenLayersViewConfig && state.olMap) {
+            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (baseLayer) {
+                baseLayer.setSource(originalOpenLayersBaseLayerSource);
+            }
+            state.olMap.setView(new ol.View({
+                center: originalOpenLayersViewConfig.center,
+                zoom: originalOpenLayersViewConfig.zoom,
+                projection: originalOpenLayersViewConfig.projection || 'EPSG:3857',
+                maxZoom: originalOpenLayersViewConfig.maxZoom,
+                minZoom: originalOpenLayersViewConfig.minZoom
+            }));
+            console.log("OpenLayers switched to Earth.");
+        } else {
+            console.warn("Original OpenLayers Earth configuration not found or olMap not ready. Re-initializing OpenLayers.");
+             if (state.olMap && typeof state.olMap.dispose === 'function') {
+                state.olMap.dispose();
+             }
+             state.olMap = null;
+             initializeOpenLayersMap();
+        }
+
+        // Restore OpenGlobus for Earth
+        if (state.globus && typeof state.globus.planet?.remove === 'function') {
+            state.globus.planet.remove();
+            state.globus = null;
+        }
+        initializeOpenGlobus();
+        console.log("OpenGlobus switched to Earth.");
+        updateActiveGlobeButton('setting-globe-earth'); // Use new ID
+    }
+
+    function switchToMoonView() {
+        console.log("Switching to Moon view...");
+        if (!state.olMap) {
+            console.warn("OpenLayers Map not initialized. Cannot switch to Moon.");
+            return;
+        }
+        if (typeof og === 'undefined' || typeof ol === 'undefined') {
+            console.error("OpenGlobus (og) or OpenLayers (ol) library not loaded.");
+            return;
+        }
+
+        // Store original OL config if not already stored
+        if (!originalOpenLayersBaseLayerSource && state.olMap && state.olMap.getLayers().getArray().length > 0) {
+            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (baseLayer && baseLayer.getSource()) {
+                originalOpenLayersBaseLayerSource = baseLayer.getSource();
+            }
+            const view = state.olMap.getView();
+            if (view) {
+                originalOpenLayersViewConfig = {
+                    center: view.getCenter(),
+                    zoom: view.getZoom(),
+                    projection: view.getProjection().getCode(),
+                    maxZoom: view.getMaxZoom(),
+                    minZoom: view.getMinZoom()
+                };
+            }
+        }
+
+        // OpenLayers Moon Setup
+        const moonOLSource = new ol.source.XYZ({
+            url: 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png',
+            attributions: 'Moon basemap © OPM Builder, CartoDB',
+            maxZoom: 10
+        });
+        const olBaseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+        if (olBaseLayer) {
+            olBaseLayer.setSource(moonOLSource);
+        }
+        state.olMap.setView(new ol.View({
+            center: ol.proj.fromLonLat([0, 0], 'EPSG:4326'), // Ensure center is in view projection
+            zoom: 2,
+            projection: 'EPSG:4326',
+            maxZoom: 10
+        }));
+        console.log("OpenLayers switched to Moon.");
+
+        // OpenGlobus Moon Setup
+        if (state.globus && typeof state.globus.planet?.remove === 'function') {
+            state.globus.planet.remove();
+            state.globus = null;
+        }
+
+        const moonSatLayer = new og.layer.XYZ("moon-base-sat", {
+            isBaseLayer: true,
+            url: "https://{s}.terrain.openglobus.org/moon/sat/{z}/{x}/{y}.png",
+            visibility: true,
+            maxNativeZoom: 10,
+            attribution: "LRO Global Morphology Mosaic 100m",
+            diffuse: [1.1, 1.1, 1.3],
+            ambient: [0.01, 0.01, 0.02],
+        });
+
+        const lunarQuickMapLayer = new og.layer.XYZ("Lunar QuickMap", {
+            isBaseLayer: true,
+            url: "https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/{z}/{x}/{y}.jpg",
+            visibility: false,
+            attribution: '<a href="https://lunar.quickmap.io">Lunar QuickMap</a>, NASA, ASU & ACT Corp.',
+            diffuse: [1.1, 1.1, 1.3],
+            ambient: [0.01, 0.01, 0.02],
+            urlRewrite: (s) => `https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/${s.tileZoom + 1}/${s.tileX}/${s.tileY}.jpg`
+        });
+        
+        const appoloSatLayer = new og.layer.XYZ("APPOLO_SAT_Moon", {
+            isBaseLayer: false,
+            url: "https://{s}.terrain.openglobus.org/moon/sat_appolo/{z}/{x}/{y}.png",
+            visibility: true,
+            maxNativeZoom: 12,
+            extent: [[19.9771, 30.4294], [20.3639, 30.9162]] // Corrected extent to [minLon, minLat], [maxLon, maxLat]
+        });
+
+        const moonTerrain = new og.terrain.RgbTerrain(null, {
+            geoidSrc: null,
+            maxZoom: 7,
+            url: "https://{s}.terrain.openglobus.org/moon/dem/{z}/{x}/{y}.png",
+            heightFactor: 0.5,
+            minHeight: -20000,
+            resolution: 0.1021,
+            gridSizeByZoom: [64, 32, 16, 16, 32, 64, 64, 32, 16, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2]
+        });
+        
+        state.globus = new og.Globe({
+            target: "globusContainer",
+            name: "Moon",
+            ellipsoid: og.ellipsoid.moon,
+            quadTreeStrategyPrototype: og.quadTreeStrategyType.equi,
+            maxAltitude: 5841727,
+            terrain: moonTerrain,
+            layers: [moonSatLayer, lunarQuickMapLayer, appoloSatLayer],
+            nightTextureSrc: null,
+            specularTextureSrc: null,
+            atmosphereEnabled: false,
+            gamma: 1.25,
+            exposure: 2.195,
+        });
+
+        if (state.globus.planet) {
+            if (og.control && og.control.TimelineControl) state.globus.planet.addControl(new og.control.TimelineControl());
+            if (og.control && og.control.LayerSwitcher) state.globus.planet.addControl(new og.control.LayerSwitcher());
+            
+            if (state.globus.planet.renderer && state.globus.planet.renderer.controls.SimpleSkyBackground) {
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorOne = "rgb(0, 0, 0)";
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorTwo = "rgb(0, 0, 0)";
+            }
+        }
+        
+        console.log("OpenGlobus switched to Moon.");
+        updateActiveGlobeButton('setting-globe-moon'); // Use new ID
+    }
+
     if (settingSetStartLocationBtn) {
         settingSetStartLocationBtn.addEventListener('click', () => {
             console.log("DEBUG: 'Set Current View as Start' button clicked.");
@@ -2964,19 +3117,55 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         // }
 
     }, 1000);
+
+    // Initialize maps and globes now that all their functions should be defined
+    if (typeof initializeOpenLayersMap === 'function') {
+        initializeOpenLayersMap();
+    } else {
+        console.error("initializeOpenLayersMap function is not defined! Maps may not work.");
+    }
+    if (typeof initializeOpenGlobus === 'function') {
+        initializeOpenGlobus();
+    } else {
+        console.error("initializeOpenGlobus function is not defined! Globe may not work.");
+    }
+
+    // Event Listeners for Globe Buttons
+    if (settingGlobeEarthBtn) { // Use new var name
+        settingGlobeEarthBtn.addEventListener('click', switchToEarthView);
+    }
+    if (settingGlobeMoonBtn) { // Use new var name
+        settingGlobeMoonBtn.addEventListener('click', switchToMoonView);
+    }
+    if (settingGlobeMarsBtn) { // Use new var name
+        settingGlobeMarsBtn.addEventListener('click', () => {
+            console.log("Mars globe button clicked - functionality not yet implemented.");
+            updateActiveGlobeButton('setting-globe-mars'); // Use new ID
+            // Potentially call switchToMarsView(); in the future
+        });
+    }
+    if (settingGlobeMetaverseBtn) { // Use new var name
+        settingGlobeMetaverseBtn.addEventListener('click', () => {
+            console.log("Metaverse globe button clicked - functionality not yet implemented.");
+            updateActiveGlobeButton('setting-globe-metaverse'); // Use new ID
+        });
+    }
+    if (settingGlobeCustomBtn) { // Use new var name
+        settingGlobeCustomBtn.addEventListener('click', () => {
+            console.log("Custom globe button clicked - functionality not yet implemented.");
+            updateActiveGlobeButton('setting-globe-custom'); // Use new ID
+        });
+    }
+    updateActiveGlobeButton('setting-globe-earth'); // Set Earth as active by default, use new ID
+    // Set Earth as active by default on load, after maps are initialized
+    // This might be better placed after initializeOpenGlobus and initializeOpenLayersMap calls
+    // For now, it's here, assuming buttons are ready.
+    // Removed misplaced conditional initialization block.
+    // Initialization calls are moved earlier.
+    // updateActiveSphereButton will be called after event listeners are set.
             
 
-console.log("%cENTERED initializeApp() - START", "background: purple; color: white; font-size: 1.5em; font-weight: bold;");
     // Initial UI setup calls for Layer 0
-    // Initial UI setup calls for Layer 0
-    console.log("DEBUG: Attempting to add Layer 0 to UI list. Current state:", {
-        userLayersDefined: !!window.userLayers,
-        selectedLayerIdValue: window.selectedLayerId,
-        layer0IdValue: layer0Id, // Global const
-        isUserLayersLayer0Defined: !!(window.userLayers && window.userLayers[layer0Id]),
-        userLayerListElement: userLayerList ? 'Exists' : 'MISSING'
-    });
-
     if (window.userLayers && typeof window.userLayers === 'object' &&
         window.selectedLayerId === layer0Id &&
         window.userLayers[layer0Id] &&
@@ -2988,14 +3177,7 @@ console.log("%cENTERED initializeApp() - START", "background: purple; color: whi
         selectLayerInList(layer0Id);
         console.log("DEBUG: Layer 0 added and selected in UI list.");
     } else {
-        console.error("DEBUG: Could not add Layer 0 to list. Detailed prerequisites check:", {
-            userLayersObject: window.userLayers,
-            isUserLayersAnObject: typeof window.userLayers === 'object',
-            selectedLayerIdIsLayer0Id: window.selectedLayerId === layer0Id,
-            userLayersLayer0Entry: window.userLayers ? window.userLayers[layer0Id] : 'N/A (userLayers missing)',
-            isLayer0NameString: window.userLayers && window.userLayers[layer0Id] ? typeof window.userLayers[layer0Id].name === 'string' : 'N/A',
-            userLayerListExists: !!userLayerList
-        });
+        console.warn("DEBUG: Conditions NOT met to add Layer 0 to UI list initially. Check userLayers, selectedLayerId, layer0Id, and userLayerList.");
     }
 // Load test tileset for debugging and verification
 console.log("%cENTERED DOMContentLoaded LISTENER - START", "background: orange; color: black; font-size: 1.5em; font-weight: bold;");
@@ -3013,7 +3195,7 @@ if (typeof setupXRPanelLogic === 'function') {
         console.warn("DEBUG: setupXRPanelLogic function not found, cannot set up XR panel.");
     }
 console.log("DEBUG: End of DOMContentLoaded listener.");
-}); // End of DOMContentLoaded listener;
+}); // End of DOMContentLoaded listener
 
 // Initialize maps after DOM is ready
 // initializeOpenGlobus(); // Redundant - already called within DOMContentLoaded

@@ -125,7 +125,7 @@ body {
 #layer-switcher { top: 60px; /* Moved down below toolbar */ left: 10px; z-index: 1000; }
 
 #user-layers-panel { top: 160px; /* Position below layer-switcher (adjust as needed) */ left: 10px; z-index: 999; } /* Changed right to left */
-#app-controls { bottom: 10px; left: 10px; z-index: 998; } /* Changed right to left */
+#app-controls { bottom: 10px; left: 10px; z-index: 1001; } /* Changed right to left, increased z-index */
 
 /* Remove !important from minimized styles as they might interfere */
 .view-panel.minimized {
@@ -391,6 +391,22 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     max-height: calc(100vh - 80px); /* Example max height */
     overflow-y: auto;
 }
+
+/* Scene Panel Positioning */
+#scene-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as other control panels */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    /* Example positioning: to the right of settings panel if it's visible and positioned by JS */
+    /* Or a fixed position: e.g., left: calc(10px + 220px + 10px + 220px + 10px + 220px + 10px); */
+    /* For now, let's place it next to where settings panel *would* be if it were the last one */
+    left: calc(10px + 220px + 10px + 220px + 10px + 220px + 10px); /* Approx next to settings */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
 .modal-content {
    /* Style the content box */
    /* background: rgba(50, 50, 50, 0.9); Moved to .control-panel */
@@ -398,6 +414,176 @@ input::placeholder, textarea::placeholder { color: #aaa; }
    padding: 10px; /* Content padding */
    /* border: 1px solid #555; Moved to .control-panel */
    /* border-radius: 5px; Moved to .control-panel */
+
+/* Styles moved from inline */
+#chat-messages {
+   height: 200px;
+   overflow-y: scroll;
+   border: 1px solid #555;
+   margin-bottom: 10px;
+   padding: 5px;
+   background: #333;
+}
+
+#chat-input {
+   width: calc(100% - 70px);
+   margin-right: 5px;
+}
+
+#send-message-btn {
+   width: 60px;
+}
+
+#auth-section {
+   margin-top: 15px;
+}
+
+#username-input {
+   width: calc(50% - 5px);
+   margin-right: 5px;
+}
+
+#password-input {
+   width: calc(50% - 5px);
+}
+
+#signup-btn {
+   width: calc(50% - 5px);
+   margin-top: 5px;
+   margin-right: 5px;
+}
+
+#login-btn {
+   width: calc(50% - 5px);
+   margin-top: 5px;
+}
+
+#logout-btn {
+   width: 100%;
+   margin-top: 5px;
+   display: none; /* Initial state */
+}
+
+#auth-status {
+    margin-top: 5px;
+}
+
+#custom-layer-inputs {
+    display: none; /* Initial state */
+    margin-top: 10px;
+}
+
+#custom-layer-name,
+#custom-layer-url {
+    margin-bottom: 5px;
+    width: 100%; /* Already default for inputs, but explicit */
+}
+
+#add-custom-layer-btn {
+    width: 100%;
+}
+
+/* Style for h4 within user-layers-panel header */
+#user-layers-panel .panel-header h4 {
+    flex-grow: 0;
+    margin-right: 5px;
+}
+
+.flex-spacer { /* Class for the div spacer */
+    flex-grow: 1;
+}
+
+#user-layer-list { /* This already has some styles, appending/overriding */
+    margin-bottom: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #555; /* Existing */
+    padding: 5px; /* Existing */
+    background: #444; /* Existing */
+}
+
+.styled-hr { /* Class for styled HR elements */
+    margin: 10px 0;
+    border: 0;
+    height: 1px;
+    background: #555;
+}
+
+#selected-tile-count-display {
+    margin-bottom: 5px;
+    font-weight: bold;
+    display: none; /* Initial state */
+}
+
+#clear-selection-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    display: none; /* Initial state */
+}
+
+#tileset-name-input {
+    display: none; /* Initial state */
+    margin-bottom: 5px; /* Already default for inputs, but explicit */
+}
+
+#save-selection-btn {
+    width: 100%;
+}
+
+#interaction-mode-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#setting-set-start-location-btn {
+    margin-top: 5px;
+}
+
+#details-tileset-image {
+    max-width: 100%;
+    height: auto;
+    display: none; /* Initial state */
+    margin-top: 5px;
+}
+
+#details-tileset-image-url {
+    margin-top: 5px;
+}
+
+#details-color-picker {
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+/* Styling for labels associated with detail inputs */
+label[for="details-fill-opacity-input"],
+label[for="details-stroke-width-input"] {
+    margin-left: 10px;
+}
+
+#details-fill-opacity-input {
+    width: 50px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+#details-stroke-width-input {
+    width: 50px;
+    vertical-align: middle;
+}
+
+#my-assets-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#asset-market-btn {
+    width: 100%;
+}
+
+#assets-content-area {
+    margin-top: 10px;
+}
    /* box-shadow: 0 2px 5px rgba(0,0,0,0.5); Moved to .control-panel */
    box-sizing: border-box;
    /* Width and positioning are now handled by #tileset-details-modal */

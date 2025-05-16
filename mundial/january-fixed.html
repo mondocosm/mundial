@@ -37,7 +37,8 @@
     <script>
         const iframe = document.getElementById('janusweb-iframe');
         const loading = document.getElementById('loading');
-        const janusWebBuildPath = window.location.origin + '/packages/janusweb/build/1.5.42/';
+        // const janusWebBuildPath = window.location.origin + '/packages/janusweb/build/1.5.42/'; // Old local path
+        const janusWebBuildPath = 'https://web.janusvr.com/'; // New hosted path
 
         function getDependencyFixScripts_inline() { // This script is injected AFTER three.js is loaded in iframe
             return `
@@ -76,7 +77,7 @@ console.log('[FixScript] Dependency fix scripts finished.');
         function getConfigScript_inline(buildPath, host, port, protocol) {
             const proto = protocol.slice(0, -1);
             const fullHost = host + (port ? ':' + port : '');
-            const rootDir = '/packages/janusweb/build/1.5.42/';
+            const rootDir = '/'; // Hosted version's root is the domain root
 
             return `
 console.log('[IFrame Config] Setting up elation.config overrides.');
@@ -95,13 +96,13 @@ function setDeep(obj, path, value) {
 }
 
 const settings_iframe = {
-    // Essential pathing - KEEP
-    'dependencies.protocol': '\${proto}',
-    'dependencies.host': '\${fullHost}',
-    'dependencies.rootdir': '\${rootDir}', // Should be /packages/janusweb/build/1.5.42/
-    'dependencies.path': '\${buildPath}',   // Should be /packages/janusweb/build/1.5.42/
+    // Pathing for hosted version will be relative to web.janusvr.com, or handled internally by janusweb.js
+    // 'dependencies.protocol': '\${proto}', // Likely not needed for hosted
+    // 'dependencies.host': '\${fullHost}',   // Likely not needed for hosted
+    // 'dependencies.rootdir': '\${rootDir}', // Likely not needed for hosted
+    // 'dependencies.path': '\${buildPath}',   // Likely not needed for hosted
 
-    'janusweb.datapath': '\${buildPath}media/', // Path to media folder within build - KEEP for resolving internal assets
+    // 'janusweb.datapath': '\${buildPath}media/', // Hosted version manages its own datapath
 
     // Explicitly disable networking and related features - KEEP
     'janusweb.network.enabled': false,
@@ -134,9 +135,9 @@ const settings_iframe = {
     // 'engine.systems.physics.enabled': false, // Let it default (likely true, but we're not loading complex rooms)
     // 'engine.systems.ai.enabled': false,       // Let it default
 
-    'janusweb.client.version': 'Mondocosm Embedded Minimal Config', // Update version string
-    'janusweb.start_url': '', // Let init control this
-    'janusweb.homepage': ''  // Let init control this
+    'janusweb.client.version': 'Mondocosm Hosted Test', // Update version string
+    'janusweb.start_url': '', // Let init control this, or JanusWeb default
+    'janusweb.homepage': ''  // Let init control this, or JanusWeb default
 
     // Removed:
     // 'janusweb.player.stereo': false,
@@ -192,21 +193,29 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('[Mondocosm Init] Attempting elation.janusweb.init.');
     elation.janusweb.init({
       el: container, // Restore our container
-      url: '/mundial/empty.html',
-      homepage: '/mundial/empty.html',
-      // uiconfig: '/mundial/testing_ui.json', // Omit uiconfig, let JanusWeb use its default
+      url: '/mundial/empty.html', // Back to our simple empty room
+      homepage: '/mundial/empty.html', // Back to our simple empty room
+      // uiconfig: '/mundial/testing_ui.json', // Omit for now, let hosted version use its default UI
       avatarsrc: '',
-      networking: false,
+      networking: false, // Explicitly pass networking: false here too
       corsproxy: '',
-      usevoip: false,
+      usevoip: false, // Already here, good
       autoload: true,
       // Explicitly set some paths that might be causing issues with 'nullmedia'
       // These are usually derived from datapath, but let's be explicit if problems persist
       // 'janusweb.ui.apps.path': 'assets/webui/apps/', // Example if needed
       // 'janusweb.ui.themes.path': 'assets/webui/themes/', // Example if needed
     }).then(function(client) {
-      window.janus = client;
+      window.janus = client.janusweb; // Assign client.janusweb to window.janus
       console.log('[Mondocosm Init] elation.janusweb.init promise resolved. Client:', client);
+      console.log('[Mondocosm Init] Assigning client.janusweb to window.janus. Now typeof window.janus.getAsset:', typeof window.janus.getAsset);
+      console.log('[Mondocosm Init] typeof client.getAsset:', typeof client.getAsset);
+      console.log('[Mondocosm Init] typeof client.janusweb?.getAsset:', typeof client.janusweb?.getAsset);
+      console.log('[Mondocosm Init] typeof client.engine?.systems?.assets?.getAsset:', typeof client.engine?.systems?.assets?.getAsset);
+      console.log('[Mondocosm Init] client.janusweb object:', client.janusweb);
+      console.log('[Mondocosm Init] client.engine.systems.assets object:', client.engine?.systems?.assets);
+
+
       if (client && client.janusweb && typeof client.janusweb.stopNetworking === 'function') {
         client.janusweb.stopNetworking();
         console.log('[Mondocosm Init] Called client.janusweb.stopNetworking()');
@@ -227,9 +236,9 @@ if (document.readyState === "complete" || document.readyState === "loaded" || do
         }
 
         const dependencyFixes = getDependencyFixScripts_inline();
-        const configOverrides = getConfigScript_inline(janusWebBuildPath, window.location.hostname, window.location.port, window.location.protocol);
-        const parentOriginForIframe = window.location.origin; // Capture parent origin
-        const janusInitializer = getJanusInitScript_inline(parentOriginForIframe); // Pass it to the function
+        const configOverrides = getConfigScript_inline(janusWebBuildPath, "web.janusvr.com", "", "https:"); // Adjust for hosted
+        const parentOriginForIframe = 'https://web.janusvr.com'; // Hosted origin
+        const janusInitializer = getJanusInitScript_inline(parentOriginForIframe);
 
         // Minimal iframe content - no scripts embedded as strings
         const iframeContent = [
@@ -308,9 +317,9 @@ if (document.readyState === "complete" || document.readyState === "loaded" || do
                     console.log("Injected dependencyFixes script into iframe head.");
                     
                     const janusScriptEl = iframe.contentDocument.createElement('script');
-                    janusScriptEl.src = janusWebBuildPath + 'janusweb.min.js';
+                    janusScriptEl.src = janusWebBuildPath + 'janusweb.js'; // Use janusweb.js as per docs
                     janusScriptEl.onload = function() {
-                        console.log("JanusWeb script (janusweb.min.js) loaded in iframe.");
+                        console.log("JanusWeb script (janusweb.js from web.janusvr.com) loaded in iframe.");
                         
                         // Initialize JanusWeb AFTER janusweb.min.js has loaded
                         const initScriptEl = iframe.contentDocument.createElement('script');

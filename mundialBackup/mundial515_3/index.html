@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geome Map</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.1.0/ol.css">
+    <!-- Cesium Widgets CSS (Keep for potential future use/comparison, but not needed for OpenGlobus) -->
+    <!-- <link href="lib/cesium/Widgets/widgets.css" rel="stylesheet"> -->
+    <!-- OpenGlobus CSS -->
+    <link rel="stylesheet" href="../packages/openglobus/lib/@openglobus/og.css" type="text/css">
+    <link rel="stylesheet" href="css/style.css"> <!-- Link to external CSS -->
+</head>
+<body>
+<header class="top-toolbar">
+        <div class="toolbar-left"> <!-- Group title and search -->
+            <div class="toolbar-title">MUNDIAL</div>
+            <div class="toolbar-center"> <!-- Keep class for styling, but it's not centered globally now -->
+                <input type="text" class="toolbar-input" placeholder="Search or enter command...">
+            </div>
+        </div>
+        <!-- Removed nav class="toolbar-nav" -->
+        <div class="toolbar-spacer"></div> <!-- Spacer to push buttons right -->
+        <div class="toolbar-view-buttons"> <!-- Buttons on the far right -->
+            <button class="toolbar-button" id="social-btn">Social</button>
+            <button class="toolbar-button active" id="map-view-btn">Map</button> <!-- Start active -->
+            <button class="toolbar-button active" id="globe-view-btn">Globe</button> <!-- Start active -->
+            <button class="toolbar-button" id="xr-view-btn">XR</button>
+            <button class="toolbar-button" id="layers-btn">Layers</button>
+            <button class="toolbar-button" id="profile-btn">Profile</button>
+            <button class="toolbar-button" id="settings-btn">Settings</button> <!-- Added Settings Button -->
+            <button class="toolbar-button" id="assets-btn">Assets</button> <!-- Added Assets Button -->
+<button class="toolbar-button" id="signin-btn">Sign In</button>
+            <!-- Sign In button will be added next -->
+        </div>
+    </header>
+
+
+    <!-- Map View Panel -->
+    <div id="map-panel" class="view-panel" style="display: block;"> <!-- Start visible -->
+        <div class="panel-header">
+            <h4>2D Map View</h4>
+            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div id="map"></div> <!-- OpenLayers target -->
+    </div>
+
+    <!-- Globe View Panel -->
+    <div id="globe-panel" class="view-panel" style="display: block;"> <!-- Start visible -->
+         <div class="panel-header">
+<!-- Misplaced button removed -->
+            <h4>3D Globe View</h4>
+            <button class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div id="globusContainer"></div> <!-- OpenGlobus target -->
+    </div>
+<!-- Social Panel (Initially Hidden) -->
+    <div id="social-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Social Feed</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <!-- Gun.js Chat Interface -->
+             <div id="chat-messages" style="height: 200px; overflow-y: scroll; border: 1px solid #555; margin-bottom: 10px; padding: 5px; background: #333;">
+                 <!-- Messages will appear here -->
+             </div>
+             <input type="text" id="chat-input" placeholder="Type message..." style="width: calc(100% - 70px); margin-right: 5px;">
+             <button id="send-message-btn" style="width: 60px;">Send</button>
+             <!-- User Authentication (Simplified) -->
+             <div id="auth-section" style="margin-top: 15px;">
+                 <input type="text" id="username-input" placeholder="Username" style="width: calc(50% - 5px); margin-right: 5px;">
+                 <input type="password" id="password-input" placeholder="Password" style="width: calc(50% - 5px);">
+                 <button id="signup-btn" style="width: calc(50% - 5px); margin-top: 5px; margin-right: 5px;">Sign Up</button>
+                 <button id="login-btn" style="width: calc(50% - 5px); margin-top: 5px;">Log In</button>
+                 <button id="logout-btn" style="width: 100%; margin-top: 5px; display: none;">Log Out</button>
+                 <div id="auth-status" style="margin-top: 5px;">Status: Not logged in</div>
+             </div>
+         </div>
+    </div>
+
+    <!-- Profile Panel (Placeholder - Initially Hidden) -->
+    <div id="profile-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Profile</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content profile-content">
+             <div class="profile-header">
+                 <div class="profile-picture-container">
+                     <img id="profile-picture" alt="Profile Picture" class="profile-picture"> <!-- Removed src="placeholder.png" -->
+                     <!-- Add button/link to change picture later -->
+                 </div>
+                 <h5 id="profile-name" class="profile-name">User Name</h5>
+                 <!-- Add button/link to edit name later -->
+             </div>
+             <hr>
+             <div class="profile-details">
+                 <h6>Details</h6>
+                 <dl>
+                     <dt>Email:</dt>
+                     <dd id="profile-email">user@example.com</dd>
+                     <dt>Joined:</dt>
+                     <dd id="profile-joined">Jan 1, 2024</dd>
+                     <!-- Add more fields as needed -->
+                 </dl>
+                 <!-- Add sections for bio, settings, etc. later -->
+             </div>
+         </div>
+    </div>
+  
+    <!-- XR Panel (Standalone) -->
+    <div id="xr-panel" class="view-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>XR View</h4>
+             <button class="maximize-btn" title="Maximize/Restore">□</button>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <div id="xr-engine-selector">
+                 <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb">Janus</button>
+                 <button type="button" class="xr-engine-btn" data-engine="streetsgl" title="Streets.gl">Streets</button>
+                 <button type="button" class="xr-engine-btn" data-engine="babylonjs" title="BabylonJS + MapLibre">Babylon</button>
+                 <button type="button" class="xr-engine-btn" data-engine="irengine" title="IR-Engine">IR</button>
+             </div>
+             <iframe id="xr-iframe" title="XR Content View"></iframe>
+             <!-- Placeholder text removed -->
+         </div>
+    </div>
+
+    <div id="layer-switcher" class="control-panel">
+        <div class="panel-header">
+             <h4>Maps</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <select id="base-layer-select">
+                <option value="satellite">Satellite</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="topo">Topographic</option>
+                <option value="terrarium">Terrarium DEM</option>
+
+                <option value="add-custom">Add Custom Layer...</option>
+            </select>
+            <div id="custom-layer-inputs" style="display: none; margin-top: 10px;">
+                <input type="text" id="custom-layer-name" placeholder="Layer Name" style="margin-bottom: 5px; width: 100%;"> <!-- Use 100% width -->
+                <input type="text" id="custom-layer-url" placeholder="XYZ URL Template" style="margin-bottom: 5px; width: 100%;"> <!-- Use 100% width -->
+                <button id="add-custom-layer-btn" style="width: 100%;">Add Layer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOVED: Layers Panel -->
+    <div id="user-layers-panel" class="control-panel"> <!-- Removed 'minimized' class -->
+        <div class="panel-header">
+            <h4 style="flex-grow: 0; margin-right: 5px;">Layers</h4> <!-- Allow h4 to shrink, add margin -->
+            <button id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
+            <div style="flex-grow: 1;"></div> <!-- Spacer -->
+            <!-- Removed minimize button -->
+        </div>
+        <div class="panel-content"> <!-- Removed inline style -->
+            <div id="user-layer-list" style="margin-bottom: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #555; padding: 5px; background: #444;"> <!-- Adjusted styles -->
+                <!-- Layer items will be added here by JS -->
+                <!-- Removed static Layer0 item -->
+                <small><i>No layers created yet.</i></small> <!-- Keep initial message -->
+            </div>
+
+            <hr style="margin: 10px 0;">
+
+            <h5>Tilesets in Layer:</h5>
+            <div id="tileset-list">
+                <small><i>Select a layer above.</i></small>
+                <!-- Tilesets for the selected layer will be listed here -->
+            </div>
+
+            <div id="selected-tile-count-display" style="margin-bottom: 5px; font-weight: bold; display: none;">Selected: 0 / 1000</div>
+            <button id="clear-selection-btn" style="width: 100%; margin-bottom: 5px; display: none;">Clear Current Selection</button>
+            <div id="selection-actions" style="display: none;">
+                 <input type="text" id="tileset-name-input" placeholder="Enter Tileset Name" style="display: none; margin-bottom: 5px;">
+                 <button id="save-selection-btn" style="width: 100%;">Save Selection to Layer</button>
+            </div>
+            <!-- Old Inline Tileset Color Picker Removed -->
+        </div>
+    </div>
+    <!-- END MOVED: Layers Panel -->
+
+
+     <div id="app-controls" class="control-panel">
+         <div class="panel-header">
+             <h4>Controls</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+            <button id="interaction-mode-btn" style="width: 100%; margin-bottom: 5px;">Mode: Select Tiles</button>
+         </div>
+    </div>
+<!-- Settings Panel -->
+    <div id="settings-panel" class="control-panel" style="display: none;"> <!-- Start hidden -->
+        <div class="panel-header">
+            <h4>Settings</h4>
+            <button class="minimize-btn" title="Minimize/Expand">-</button>
+        </div>
+        <div class="panel-content">
+            <h5>Start Location</h5>
+            <div>
+                <label for="setting-start-lon">Lon:</label>
+                <input type="number" id="setting-start-lon" step="any">
+            </div>
+            <div>
+                <label for="setting-start-lat">Lat:</label>
+                <input type="number" id="setting-start-lat" step="any">
+            </div>
+            <div>
+                <label for="setting-start-zoom">Zoom:</label>
+                <input type="number" id="setting-start-zoom" min="0" max="22" step="1">
+            </div>
+            <button id="setting-set-start-location-btn" style="margin-top: 5px;">Set Current View as Start</button>
+            <hr>
+            <h5>Grid Settings</h5>
+            <div>
+                <label for="setting-grid-visible">Grid Visible (ZL >= 16):</label>
+                <input type="checkbox" id="setting-grid-visible" checked>
+            </div>
+            <div>
+                <label for="setting-grid-weight">Grid Line Weight:</label>
+                <input type="number" id="setting-grid-weight" min="0.1" max="5" step="0.1" value="0.5">
+            </div>
+        </div>
+    </div>
+
+    <!-- Tileset Details Modal (Styled as Panel) -->
+    <div id="tileset-details-modal" class="modal control-panel"> <!-- Added control-panel class -->
+         <div class="panel-header"> <!-- Added panel header -->
+             <h2>Tileset Details</h2>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+             <span class="close-btn" id="close-tileset-details-modal" title="Close Details">&times;</span>
+         </div>
+        <div class="modal-content panel-content"> <!-- Added panel-content class -->
+            <div class="modal-section">
+                <label for="details-tileset-name">Name:</label>
+                <input type="text" id="details-tileset-name" placeholder="Tileset Name">
+            </div>
+
+            <div class="modal-section">
+                <label>Coordinates:</label>
+                <span id="details-tileset-coords">N/A</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Tile Count:</label>
+                <span id="details-tileset-tile-count">0</span>
+            </div>
+
+            <div class="modal-section">
+                <label>Location Info:</label>
+                <span id="details-location-info">Loading...</span> <!-- Placeholder for reverse geocoding -->
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-image">Image:</label>
+                <img id="details-tileset-image" src="" alt="Tileset Image" style="max-width: 100%; height: auto; display: none; margin-top: 5px;">
+                <input type="url" id="details-tileset-image-url" placeholder="Image URL (optional)" style="margin-top: 5px;">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-link">Hyperlink:</label>
+                <input type="url" id="details-tileset-link" placeholder="Link URL (optional)">
+            </div>
+
+            <div class="modal-section">
+                <label for="details-tileset-tags">Tags/Metadata:</label>
+                <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
+            </div>
+
+<!-- Gun.js and SEA -->
+    <script src="../packages/gun/gun.js"></script>
+    <script src="../packages/gun/sea.js"></script>
+            <hr>
+
+            <div class="modal-actions">
+                 <label for="details-color-picker">Color:</label>
+                 <input type="color" id="details-color-picker" style="vertical-align: middle; margin-right: 10px;">
+                 
+                 <label for="details-fill-opacity-input" style="margin-left: 10px;">Opacity:</label>
+                 <input type="number" id="details-fill-opacity-input" min="0" max="1" step="0.1" style="width: 50px; vertical-align: middle; margin-right: 10px;" title="Fill Opacity (0.0 - 1.0)">
+                 
+                 <label for="details-stroke-width-input" style="margin-left: 10px;">Stroke:</label>
+                 <input type="number" id="details-stroke-width-input" min="0" max="10" step="0.1" style="width: 50px; vertical-align: middle;" title="Stroke Width (px)">
+                 <!-- Save/More Settings buttons removed -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Assets Panel (Initially Hidden) -->
+    <div id="assets-panel" class="control-panel" style="display: none;">
+         <div class="panel-header">
+             <h4>Assets</h4>
+             <button class="minimize-btn" title="Minimize/Expand">-</button>
+         </div>
+         <div class="panel-content">
+             <button id="my-assets-btn" style="width: 100%; margin-bottom: 5px;">My Assets</button>
+             <button id="asset-market-btn" style="width: 100%;">Asset Market</button>
+             <!-- Content for My Assets / Market will go here -->
+             <div id="assets-content-area" style="margin-top: 10px;">
+                 <p>Select an option above.</p>
+             </div>
+         </div>
+    </div>
+
+    <!-- Only include OpenLayers script -->
+    <!-- Cesium JS (Keep for potential future use/comparison) -->
+    <!-- <script src="lib/cesium/Cesium.js"></script> -->
+    <!-- OpenLayers JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
+    <!-- OlCesium JS (Keep for potential future use/comparison) -->
+    <!-- <script src="lib/olcesium.js"></script> -->
+    <!-- Define OpenGlobus resource path BEFORE loading the library -->
+    <script>
+        var OG_RESOURCES_PATH = "../packages/openglobus/res/"; // Adjusted path relative to mundial/index.html
+    </script>
+    <!-- OpenGlobus JS (UMD build) -->
+    <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
+    <!-- Main Application Logic -->
+    <script src="js/main.js"></script> <!-- Removed type="module" for testing -->
+
+</body>
+</html>
