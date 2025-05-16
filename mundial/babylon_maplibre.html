@@ -126,10 +126,10 @@
                             source: 'terrainSource',
                             exaggeration: 1.0
                         },
-                        sky: { // Adding sky layer as in the example
+                        sky: {
                             "sky-type": "atmosphere",
-                            "atmosphere-sun-intensity": 5,
-                            "atmosphere-sun": [0.0, 0.0]
+                            "sky-atmosphere-sun-intensity": 5, // Corrected property name
+                            "sky-atmosphere-sun": [0.0, 0.0]     // Corrected property name
                         }
                     },
                     maxZoom: 18,
