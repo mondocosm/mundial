@@ -69,6 +69,19 @@
         let map;
         let engine;
         let scene;
+
+        // --- Tile Math Utilities ---
+        function long2tile(lon, zoom) { return (Math.floor((lon + 180) / 360 * Math.pow(2, zoom))); }
+        function lat2tile(lat, zoom)  { return (Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom))); }
+        function tile2long(x, zoom) { return (x / Math.pow(2, zoom) * 360 - 180); }
+        function tile2lat(y, zoom) {
+            const n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
+            return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));
+        }
+        // --- End Tile Math Utilities ---
+
+        let gridSourceInitialized = false; // Flag to ensure source/layer are added only once
+
         const mapTilerKey = "T82iw5O12y2FVZUGLFIX"; // IMPORTANT: Replace this
         
         function showStatus(message) {
@@ -133,8 +146,34 @@
                 });
 
                 map.on('load', () => {
-                    showStatus('MapLibre map loaded. Configuring layers...');
+                    showStatus('MapLibre map loaded. Configuring layers and grid...');
                     
+                    // Add ZL21 Grid Source and Layer
+                    if (!map.getSource('grid-source')) {
+                        map.addSource('grid-source', {
+                            type: 'geojson',
+                            data: { type: 'FeatureCollection', features: [] }
+                        });
+                    }
+                    if (!map.getLayer('grid-layer')) {
+                        map.addLayer({
+                            id: 'grid-layer',
+                            type: 'line',
+                            source: 'grid-source',
+                            paint: {
+                                'line-color': '#00FFFF', // Cyan
+                                'line-width': 1,
+                                'line-opacity': 0.4
+                            },
+                            minzoom: 18 // Only show ZL21 grid at high zoom levels
+                        });
+                    }
+                    gridSourceInitialized = true;
+                    updateMapGrid(); // Initial grid draw
+
+                    map.on('moveend', updateMapGrid);
+                    map.on('zoomend', updateMapGrid);
+
                     const layers = map.getStyle().layers;
                     let labelLayerId;
                     for (let i = 0; i < layers.length; i++) {
@@ -283,6 +322,62 @@
             });
             showStatus(`Processed ${tiles.length} tiles into Babylon.js scene.`);
         }
+
+        function updateMapGrid() {
+            if (!map || !gridSourceInitialized || map.getZoom() < 18) { // Check zoom level
+                if (map && map.getSource('grid-source')) {
+                     // Clear grid if zoomed out too far
+                    map.getSource('grid-source').setData({ type: 'FeatureCollection', features: [] });
+                }
+                return;
+            }
+
+            const ZL21 = 21;
+            const bounds = map.getBounds();
+            const ne = bounds.getNorthEast();
+            const sw = bounds.getSouthWest();
+
+            // Get tile range for ZL21
+            const minTileX = long2tile(sw.lng, ZL21);
+            const maxTileX = long2tile(ne.lng, ZL21);
+            const minTileY = lat2tile(ne.lat, ZL21); // Note: lat2tile is inverted for typical map Y
+            const maxTileY = lat2tile(sw.lat, ZL21);
+
+            const gridFeatures = [];
+
+            // Horizontal lines
+            for (let y = minTileY; y <= maxTileY + 1; y++) {
+                const lat = tile2lat(y, ZL21);
+                gridFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[tile2long(minTileX, ZL21), lat], [tile2long(maxTileX + 1, ZL21), lat]]
+                    }
+                });
+            }
+
+            // Vertical lines
+            for (let x = minTileX; x <= maxTileX + 1; x++) {
+                const lon = tile2long(x, ZL21);
+                gridFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[lon, tile2lat(minTileY, ZL21)], [lon, tile2lat(maxTileY + 1, ZL21)]]
+                    }
+                });
+            }
+            
+            if (map.getSource('grid-source')) {
+                map.getSource('grid-source').setData({
+                    type: 'FeatureCollection',
+                    features: gridFeatures
+                });
+            }
+            // console.log(`Updated ZL21 grid with ${gridFeatures.length} lines.`);
+        }
+
 
         document.addEventListener('DOMContentLoaded', () => {
             showStatus('Initializing components...');
