@@ -122,8 +122,9 @@
          </div>
          <div class="panel-content">
              <div id="xr-engine-selector">
-                 <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb">Janus</button>
+                 <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb (Hosted, Stable)">Janus</button>
                  <button type="button" class="xr-engine-btn" data-engine="babylonjs" title="BabylonJS + MapLibre">Babylon</button>
+                 <button type="button" class="xr-engine-btn" data-engine="webxr" title="Native WebXR">WebXR</button>
              </div>
              <iframe id="xr-iframe" title="XR Content View"></iframe>
              <!-- Placeholder text removed -->
@@ -318,10 +319,14 @@
     <!-- <script src="lib/olcesium.js"></script> -->
     <!-- Define OpenGlobus resource path BEFORE loading the library -->
     <script>
-        var OG_RESOURCES_PATH = "../packages/openglobus/res/"; // Adjusted path relative to mundial/index.html
+        var OG_RESOURCES_PATH = "../packages/openglobus/lib/@openglobus/res/"; // Corrected path
     </script>
     <!-- OpenGlobus JS (UMD build) -->
     <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
+<!-- Explicitly include three.js to ensure it's available globally -->
+    <script src="../packages/ir-engine/packages/client/public/workers/three.min.js"></script>
+    <script src="../packages/janusweb/build/1.5.42/janusweb.assetworker.min.js"></script>
+    <script src="../packages/janusweb/build/1.5.42/service-worker.js"></script>
     <!-- Main Application Logic -->
     <script src="js/main.js"></script> <!-- Removed type="module" for testing -->
 

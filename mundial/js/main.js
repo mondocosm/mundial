@@ -88,12 +88,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.log(`XR Engine selected: ${engine}`);
 
                         switch (engine) {
-                            case 'janusweb': targetUrl = '/packages/janusweb/build/1.5.42/index.html'; break;
+                            case 'janusweb': targetUrl = '/mundial/january-fixed.html'; break; // Load our stabilized JanusWeb
                             case 'streetsgl':
                                 targetUrl = 'about:blank';
                                 alert("Streets.gl is currently unavailable due to external tile server certificate issues.");
                                 break;
                             case 'babylonjs': targetUrl = 'about:blank'; alert("BabylonJS view not yet implemented."); break;
+                            case 'webxr': targetUrl = 'about:blank'; alert("WebXR view not yet implemented."); break; // Added WebXR placeholder
                             case 'irengine': targetUrl = 'about:blank'; alert("IR-Engine view not yet implemented."); break;
                             default: console.error(`Unknown XR engine: ${engine}`); if(xrIframe) xrIframe.src='about:blank'; return;
                         }
@@ -309,6 +310,11 @@ function loadTestTilesetToLayer0() {
             if (window.userLayers[layer0Id]) {
                 window.userLayers[layer0Id].tilesetCount = (window.userLayers[layer0Id].tilesetCount || 0) + 1; // Increment if counting groups
             }
+            
+            // Store tile data for Babylon.js view
+            window.currentTilesetForBabylon = testTiles.map(tc => ({ z: tc[0], x: tc[1], y: tc[2] })); // Store Z,X,Y
+            console.log("Stored test tileset data for Babylon.js:", window.currentTilesetForBabylon);
+
             populateTilesetList(layer0Id); // Update UI list for Layer 0
             console.log(`Loaded ${featuresToAdd.length} features into "${tilesetName}" on Layer 0.`);
 
@@ -739,12 +745,46 @@ function setupXRPanelLogic() {
                     console.log(`XR Engine selected: ${engine}`);
 
                     switch (engine) {
-                        case 'janusweb': 
-                            targetUrl = '/packages/janusweb/build/1.5.42/index.html'; 
+                        case 'janusweb':
+                            targetUrl = '/packages/janusweb/build/1.5.42/index.html';
+                            break;
+                        case 'janusweb-preload':
+                            targetUrl = '/mundial/january.html';
+                            break;
+                        case 'janusweb-fixed':
+                            targetUrl = '/mundial/january-fixed.html';
                             break;
                         case 'babylonjs':
-                            targetUrl = 'about:blank';
-                            alert("BabylonJS view not yet implemented.");
+                            targetUrl = '/mundial/babylon_maplibre.html';
+                            // alert("BabylonJS view not yet implemented."); // Alert removed
+                            
+                            // Add listener to send data after iframe loads
+                            if (xrIframe) {
+                                const sendDataToBabylonIframe = () => {
+                                    if (xrIframe.contentWindow) {
+                                        let initialView = null;
+                                        if (window.olMap && window.olMap.getView()) {
+                                            const view = window.olMap.getView();
+                                            const center = ol.proj.toLonLat(view.getCenter()); // Convert to LonLat
+                                            initialView = {
+                                                center: center, // [lon, lat]
+                                                zoom: view.getZoom()
+                                            };
+                                        }
+
+                                        xrIframe.contentWindow.postMessage({
+                                            type: 'initialSetup',
+                                            tilesetData: window.currentTilesetForBabylon, // May be undefined if test tileset not loaded
+                                            mapView: initialView
+                                        }, '*'); // Consider a specific target origin for security in production
+                                        console.log("Sent initialSetup data (tileset, mapView) to babylon_maplibre.html iframe.");
+                                    } else {
+                                        console.warn("Babylon iframe contentWindow not available to post message.");
+                                    }
+                                    xrIframe.removeEventListener('load', sendDataToBabylonIframe); // Clean up listener
+                                };
+                                xrIframe.addEventListener('load', sendDataToBabylonIframe);
+                            }
                             break;
                         // 'irengine' case has been removed.
                         default: 
