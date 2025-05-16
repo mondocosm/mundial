@@ -49,9 +49,9 @@
             margin-bottom: 5px;
         }
     </style>
-    <!-- MapLibre GL JS -->
-    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
-    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <!-- MapLibre GL JS (v5.5.0 from your example) -->
+    <link href="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.js"></script>
     <!-- Babylon.js -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
@@ -69,7 +69,7 @@
         let map;
         let engine;
         let scene;
-        const mapTilerKey = 'T82iw5O12y2FVZUGLFIX'; // IMPORTANT: Replace this
+        const mapTilerKey = "T82iw5O12y2FVZUGLFIX"; // IMPORTANT: Replace this
         
         function showStatus(message) {
             const statusDiv = document.getElementById('status');
