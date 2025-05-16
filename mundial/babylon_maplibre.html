@@ -101,11 +101,11 @@
                                 type: 'raster-dem',
                                 url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
                                 tileSize: 256
-                            },
-                            openmaptiles_buildings: { 
-                                type: 'vector',
-                                url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}`
                             }
+                            // openmaptiles_buildings: {
+                            //     type: 'vector',
+                            //     url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}`
+                            // }
                         },
                         layers: [
                             {
@@ -144,33 +144,35 @@
                         }
                     }
 
-                    // Add 3D Buildings Layer (initially visible by default if source exists)
-                    if (map.getSource('openmaptiles_buildings')) {
-                        map.addLayer(
-                            {
-                                'id': '3d-buildings',
-                                'source': 'openmaptiles_buildings',
-                                'source-layer': 'building',
-                                'type': 'fill-extrusion',
-                                'minzoom': 14,
-                                'filter': ['!=', ['get', 'hide_3d'], true],
-                                'paint': {
-                                    'fill-extrusion-color': [
-                                        'interpolate', ['linear'], ['get', 'render_height'],
-                                        0, 'lightgray', 50, 'royalblue', 100, 'darkslateblue'
-                                    ],
-                                    'fill-extrusion-height': ['get', 'render_height'],
-                                    'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-                                    'fill-extrusion-opacity': 0.85
-                                }
-                            },
-                            labelLayerId
-                        );
-                        showStatus('MapLibre map configured with terrain and 3D buildings.');
-                    } else {
-                        showStatus('MapLibre map configured with terrain. Building source not available.');
-                        console.warn("Building source 'openmaptiles_buildings' not found in style, skipping 3d-buildings layer.");
-                    }
+                    // // Add 3D Buildings Layer (initially visible by default if source exists)
+                    // if (map.getSource('openmaptiles_buildings')) {
+                    //     map.addLayer(
+                    //         {
+                    //             'id': '3d-buildings',
+                    //             'source': 'openmaptiles_buildings',
+                    //             'source-layer': 'building',
+                    //             'type': 'fill-extrusion',
+                    //             'minzoom': 14,
+                    //             'filter': ['!=', ['get', 'hide_3d'], true],
+                    //             'paint': {
+                    //                 'fill-extrusion-_color': [ // Deliberate error to ensure this block is not active if uncommented without fixing
+                    //                     'interpolate', ['linear'], ['get', 'render_height'],
+                    //                     0, 'lightgray', 50, 'royalblue', 100, 'darkslateblue'
+                    //                 ],
+                    //                 'fill-extrusion-height': ['get', 'render_height'],
+                    //                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+                    //                 'fill-extrusion-opacity': 0.85
+                    //             }
+                    //         },
+                    //         labelLayerId
+                    //     );
+                    //     showStatus('MapLibre map configured with terrain and 3D buildings.');
+                    // } else {
+                    //     showStatus('MapLibre map configured with terrain. Building source not available.');
+                    //     console.warn("Building source 'openmaptiles_buildings' not found in style, skipping 3d-buildings layer.");
+                    // }
+                    showStatus('MapLibre map configured with terrain (buildings commented out).');
+
 
                     map.addControl(new maplibregl.NavigationControl({visualizePitch: true}));
                     if (map.getSource('terrainSource')) {
