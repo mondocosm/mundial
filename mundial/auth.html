@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In / Sign Up - PLANETIC</title>
+    <link rel="stylesheet" href="css/style.css"> <!-- Link to main style for consistency -->
+    <link rel="stylesheet" href="auth.css">     <!-- Link to specific auth styles -->
+</head>
+<body class="auth-page">
+    <header class="top-toolbar">
+        <div class="toolbar-left">
+            <div class="toolbar-title">PLANETIC</div>
+            <!-- toolbar-center and toolbar-right are intentionally omitted -->
+        </div>
+    </header>
+
+    <div class="auth-container">
+        <div class="auth-form-container" id="signin-container">
+            <h2>Sign In</h2>
+            <form id="signin-form">
+                <div>
+                    <label for="signin-username">Username or Email:</label>
+                    <input type="text" id="signin-username" name="username" required>
+                </div>
+                <div>
+                    <label for="signin-password">Password:</label>
+                    <input type="password" id="signin-password" name="password" required>
+                </div>
+                <button type="submit" class="auth-button">Sign In</button>
+            </form>
+            <p>Don't have an account? <a href="#" id="show-signup">Sign Up</a></p>
+        </div>
+
+        <div class="auth-form-container" id="signup-container" style="display: none;">
+            <h2>Sign Up</h2>
+            <form id="signup-form">
+                <div>
+                    <label for="signup-username">Username:</label>
+                    <input type="text" id="signup-username" name="username" required>
+                </div>
+                <div>
+                    <label for="signup-email">Email:</label>
+                    <input type="email" id="signup-email" name="email" required>
+                </div>
+                <div>
+                    <label for="signup-password">Password:</label>
+                    <input type="password" id="signup-password" name="password" required>
+                </div>
+                <div>
+                    <label for="signup-confirm-password">Confirm Password:</label>
+                    <input type="password" id="signup-confirm-password" name="confirmPassword" required>
+                </div>
+                <button type="submit" class="auth-button">Sign Up</button>
+            </form>
+            <p>Already have an account? <a href="#" id="show-signin">Sign In</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Basic toggle logic for sign-in/sign-up forms
+        const signInContainer = document.getElementById('signin-container');
+        const signUpContainer = document.getElementById('signup-container');
+        const showSignUpLink = document.getElementById('show-signup');
+        const showSignInLink = document.getElementById('show-signin');
+
+        if (showSignUpLink) {
+            showSignUpLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                signInContainer.style.display = 'none';
+                signUpContainer.style.display = 'block';
+            });
+        }
+
+        if (showSignInLink) {
+            showSignInLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                signUpContainer.style.display = 'none';
+                signInContainer.style.display = 'block';
+            });
+        }
+        // Placeholder for actual form submission logic (e.g., to Gun.js or a backend)
+        // document.getElementById('signin-form')?.addEventListener('submit', function(e) {
+        //     e.preventDefault(); console.log('Sign In attempt'); /* Add actual sign-in logic */
+        // });
+        // document.getElementById('signup-form')?.addEventListener('submit', function(e) {
+        //     e.preventDefault(); console.log('Sign Up attempt'); /* Add actual sign-up logic */
+        // });
+    </script>
+</body>
+</html>
