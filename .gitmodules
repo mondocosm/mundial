@@ -1,9 +1,6 @@
 [submodule "mundial/packages/janusweb"]
 	path = mundial/packages/janusweb
 	url = https://github.com/jbaicoianu/janusweb.git
-[submodule "packages/synapse"]
-	path = packages/synapse
-	url = https://github.com/matrix-org/synapse.git
 [submodule "packages/thirdroom"]
 	path = packages/thirdroom
 	url = https://github.com/matrix-org/thirdroom.git
@@ -31,3 +28,6 @@
 [submodule "mundial/packages/rete"]
 	path = mundial/packages/rete
 	url = https://github.com/retejs/rete.git
+[submodule "mundial/packages/js-ipfs"]
+	path = mundial/packages/js-ipfs
+	url = https://github.com/ipfs/js-ipfs.git
