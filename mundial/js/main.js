@@ -406,8 +406,7 @@ function loadTestTilesetToLayer0() {
                     minZoom: 0
                 })
             });
-            state.olMap = window.olMap; // Update state object
-            console.log("%cDEBUG: ol.Map constructor SUCCEEDED. window.olMap and state.olMap object created.", "color: green; font-weight: bold;", state.olMap);
+            console.log("%cDEBUG: ol.Map constructor SUCCEEDED. window.olMap object created.", "color: green; font-weight: bold;", window.olMap);
 
             // ZL21 Grid Setup for OpenLayers
             const gridStyleZ21 = new ol.style.Style({ stroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 1 }) });
@@ -1095,8 +1094,8 @@ if (window.ogSavedTilesetsLayer) {
     }
     
     function populateTilesetList(layerId) {
-        state.populateListCallCounter++;
-        console.log(`%cPOPULATE TILESET LIST #${state.populateListCallCounter} for layerId: ${layerId}`, "color: blue; font-weight: bold;");
+        populateListCallCounter++;
+        console.log(`%cPOPULATE TILESET LIST #${populateListCallCounter} for layerId: ${layerId}`, "color: blue; font-weight: bold;");
         if (!tilesetListDiv || !window.userLayers || !window.userLayers[layerId]) {
             if(tilesetListDiv) tilesetListDiv.innerHTML = '<small><i>Invalid layer or no layer selected.</i></small>';
             console.warn("populateTilesetList: Prerequisites not met or invalid layerId.");
@@ -1834,8 +1833,7 @@ console.log("%cSAVE HANDLER: populateTilesetList has been called from save handl
                 });
 
             if (window.globus) {
-                state.globus = window.globus; // Update state object
-                console.log("%cDEBUG: og.Globe constructor SUCCEEDED. window.globus and state.globus object created.", "color: green; font-weight: bold;", state.globus);
+                console.log("%cDEBUG: og.Globe constructor SUCCEEDED. window.globus object created.", "color: green; font-weight: bold;", window.globus);
                 // LayerSwitcher is now added via constructor options.
                 // const layerSwitcher = new og.control.LayerSwitcher({
                 //     // Optionally, you can configure the LayerSwitcher here, e.g.,
@@ -2568,13 +2566,7 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
     initializeOpenLayersMap(); // Moved here, inside DOMContentLoaded
     applyDraggableToAllPanels();
     setupXRPanelLogic(); // Initialize XR panel logic
-
-    // Sign In button to navigate to auth.html
-    if (signInBtn) {
-        signInBtn.addEventListener('click', () => {
-            window.location.href = 'auth.html'; // Navigate to auth.html in the same tab
-        });
-    }
+    
     function flyToStatueOfLiberty() {
         console.log("%cflyToStatueOfLiberty function called", "color: magenta; font-weight: bold;");
         if (window.globus && window.globus.planet && window.globus.planet.camera) {
@@ -2803,8 +2795,8 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
             console.warn("OpenLayers Map not initialized. Cannot switch to Moon.");
             return;
         }
-        if (typeof og === 'undefined' || !og.Globe || !og.layer || !og.ellipsoid || !og.ellipsoid.moon || !og.quadTreeStrategyType) {
-            console.error("OpenGlobus (og) library or essential components (Globe, layer, ellipsoid.moon, quadTreeStrategyType) not loaded/defined. Cannot switch to Moon. Please check for 404 errors for OpenGlobus assets.");
+        if (typeof og === 'undefined' || typeof ol === 'undefined') {
+            console.error("OpenGlobus (og) or OpenLayers (ol) library not loaded.");
             return;
         }
 
@@ -2842,13 +2834,7 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
             projection: 'EPSG:4326',
             maxZoom: 10
         }));
-        // Hide Earth-specific OL grid/selection layers
-        if (gridLayerZ21) gridLayerZ21.setVisible(false);
-        if (selectionLayer) selectionLayer.setVisible(false);
-        if (highlightLayer) highlightLayer.setVisible(false);
-        if (layer0Layer) layer0Layer.setVisible(false); // Hide user's saved tilesets for Earth
-
-        console.log("OpenLayers switched to Moon; Earth layers hidden.");
+        console.log("OpenLayers switched to Moon.");
 
         // OpenGlobus Moon Setup
         if (state.globus && typeof state.globus.planet?.remove === 'function') {
@@ -2921,81 +2907,6 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         
         console.log("OpenGlobus switched to Moon.");
         updateActiveGlobeButton('setting-globe-moon'); // Use new ID
-    }
-
-    function switchToMarsView() {
-        console.log("Switching to Mars view...");
-        if (typeof og === 'undefined' || !og.Globe || !og.layer || !og.ellipsoid || !og.ellipsoid.mars || !og.terrain || !og.quadTreeStrategyType) {
-            console.error("OpenGlobus (og) library or essential components (Globe, layer, ellipsoid.mars, terrain, quadTreeStrategyType) not loaded/defined. Cannot switch to Mars. Please check for 404 errors for OpenGlobus assets.");
-            return;
-        }
-
-        // OpenLayers: Clear or set to a generic view for Mars
-        if (state.olMap) {
-            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
-            if (baseLayer) {
-                baseLayer.setSource(null); // Detach source, effectively blanking it for Mars
-            }
-            state.olMap.setView(new ol.View({
-                center: [0, 0],
-                zoom: 1,
-                projection: 'EPSG:4326'
-            }));
-            // Hide Earth-specific OL grid/selection layers
-            if (gridLayerZ21) gridLayerZ21.setVisible(false);
-            if (selectionLayer) selectionLayer.setVisible(false);
-            if (highlightLayer) highlightLayer.setVisible(false);
-            if (layer0Layer) layer0Layer.setVisible(false); // Hide user's saved tilesets for Earth
-
-            console.log("OpenLayers view adjusted for Mars; Earth layers hidden.");
-        } else {
-            console.warn("OpenLayers map not available to adjust for Mars view.");
-        }
-
-        // OpenGlobus Mars Setup
-        if (state.globus && typeof state.globus.planet?.remove === 'function') {
-            state.globus.planet.remove();
-            state.globus = null;
-        }
-
-        const marsSatLayer = new og.layer.XYZ("Mars-Viking", {
-            isBaseLayer: true,
-            url: "https://terrain.openglobus.org/mars/sat/{z}/{x}/{y}.png",
-            maxNativeZoom: 8,
-            visibility: true,
-            attribution: "NASA Viking"
-        });
-
-        const marsTerrain = new og.terrain.RgbTerrain("MarsDEM", {
-            geoidSrc: null,
-            maxZoom: 8,
-            maxNativeZoom: 8,
-            url: "https://{s}.terrain.openglobus.org/mars/dem/{z}/{x}/{y}.png",
-            heightFactor: 2
-        });
-
-        state.globus = new og.Globe({
-            target: "globusContainer",
-            name: "Mars",
-            ellipsoid: og.ellipsoid.mars,
-            quadTreeStrategyPrototype: og.quadTreeStrategyType.equi,
-            terrain: marsTerrain,
-            layers: [marsSatLayer],
-            nightTextureSrc: null,
-            specularTextureSrc: null,
-            atmosphereEnabled: false
-        });
-
-        if (state.globus.planet && state.globus.planet.renderer && state.globus.planet.renderer.controls.SimpleSkyBackground) {
-            state.globus.planet.renderer.controls.SimpleSkyBackground.colorOne = "rgb(183, 133, 135)";
-            state.globus.planet.renderer.controls.SimpleSkyBackground.colorTwo = "rgb(41, 41, 41)";
-        }
-        
-        // For Mars, we are not adding Earth-specific ogSavedTilesetsLayer or gridLayerOG yet.
-        // These would need to be adapted or re-thought for Mars.
-
-        console.log("OpenGlobus switched to Mars.");
-        updateActiveGlobeButton('setting-globe-mars');
     }
 
     if (settingSetStartLocationBtn) {
@@ -3207,8 +3118,6 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
 
     }, 1000);
 
-    // Duplicate initialization calls removed. Proper calls are made earlier.
-
     // Initialize maps and globes now that all their functions should be defined
     if (typeof initializeOpenLayersMap === 'function') {
         initializeOpenLayersMap();
@@ -3229,7 +3138,11 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         settingGlobeMoonBtn.addEventListener('click', switchToMoonView);
     }
     if (settingGlobeMarsBtn) { // Use new var name
-        settingGlobeMarsBtn.addEventListener('click', switchToMarsView);
+        settingGlobeMarsBtn.addEventListener('click', () => {
+            console.log("Mars globe button clicked - functionality not yet implemented.");
+            updateActiveGlobeButton('setting-globe-mars'); // Use new ID
+            // Potentially call switchToMarsView(); in the future
+        });
     }
     if (settingGlobeMetaverseBtn) { // Use new var name
         settingGlobeMetaverseBtn.addEventListener('click', () => {

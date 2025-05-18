@@ -13,3 +13,15 @@
 [submodule "packages/openglobus"]
 	path = packages/openglobus
 	url = https://github.com/openglobus/openglobus.git
+[submodule "packages/Leaflet"]
+	path = packages/Leaflet
+	url = https://github.com/Leaflet/Leaflet.git
+[submodule "packages/rete"]
+	path = packages/rete
+	url = https://github.com/retejs/rete.git
+[submodule "packages/itowns"]
+	path = packages/itowns
+	url = https://github.com/iTowns/itowns.git
+[submodule "packages/js-ipfs"]
+	path = packages/js-ipfs
+	url = https://github.com/ipfs/js-ipfs.git
