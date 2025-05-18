@@ -20,4 +20,4 @@ mundial1/
 node_modules/
 
 # Kart repository data (ignore entire directory)
-backend-server/kart-repos/world-data/
+backend/kart-repos/world-data/
