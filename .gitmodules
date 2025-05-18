@@ -1,5 +1,5 @@
-[submodule "packages/janusweb"]
-	path = packages/janusweb
+[submodule "mundial/packages/janusweb"]
+	path = mundial/packages/janusweb
 	url = https://github.com/jbaicoianu/janusweb.git
 [submodule "packages/kart"]
 	path = packages/kart
@@ -31,3 +31,6 @@
 [submodule "mundial/packages/itowns"]
 	path = mundial/packages/itowns
 	url = https://github.com/iTowns/itowns.git
+[submodule "mundial/packages/gun"]
+	path = mundial/packages/gun
+	url = https://github.com/amark/gun.git
