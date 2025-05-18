@@ -28,3 +28,6 @@
 [submodule "packages/synapse"]
 	path = packages/synapse
 	url = https://github.com/matrix-org/synapse.git
+[submodule "packages/thirdroom"]
+	path = packages/thirdroom
+	url = https://github.com/matrix-org/thirdroom.git
