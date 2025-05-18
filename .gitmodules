@@ -10,9 +10,6 @@
 [submodule "packages/maplibre-gl-js"]
 	path = packages/maplibre-gl-js
 	url = https://github.com/maplibre/maplibre-gl-js.git
-[submodule "packages/openglobus"]
-	path = packages/openglobus
-	url = https://github.com/openglobus/openglobus.git
 [submodule "packages/Leaflet"]
 	path = packages/Leaflet
 	url = https://github.com/Leaflet/Leaflet.git
@@ -31,3 +28,6 @@
 [submodule "packages/thirdroom"]
 	path = packages/thirdroom
 	url = https://github.com/matrix-org/thirdroom.git
+[submodule "mundial/libs/radio-garden"]
+	path = mundial/libs/radio-garden
+	url = https://github.com/uniquelipu/Radio-Garden.git
