@@ -1,6 +1,3 @@
-[submodule "packages/gun"]
-	path = packages/gun
-	url = https://github.com/amark/gun.git
 [submodule "packages/janusweb"]
 	path = packages/janusweb
 	url = https://github.com/jbaicoianu/janusweb.git
@@ -16,9 +13,6 @@
 [submodule "packages/rete"]
 	path = packages/rete
 	url = https://github.com/retejs/rete.git
-[submodule "packages/itowns"]
-	path = packages/itowns
-	url = https://github.com/iTowns/itowns.git
 [submodule "packages/js-ipfs"]
 	path = packages/js-ipfs
 	url = https://github.com/ipfs/js-ipfs.git
@@ -31,3 +25,9 @@
 [submodule "mundial/libs/radio-garden"]
 	path = mundial/libs/radio-garden
 	url = https://github.com/uniquelipu/Radio-Garden.git
+[submodule "mundial/packages/openglobus"]
+	path = mundial/packages/openglobus
+	url = https://github.com/openglobus/openglobus.git
+[submodule "mundial/packages/itowns"]
+	path = mundial/packages/itowns
+	url = https://github.com/iTowns/itowns.git
