@@ -1,9 +1,6 @@
 [submodule "mundial/packages/janusweb"]
 	path = mundial/packages/janusweb
 	url = https://github.com/jbaicoianu/janusweb.git
-[submodule "packages/Leaflet"]
-	path = packages/Leaflet
-	url = https://github.com/Leaflet/Leaflet.git
 [submodule "packages/rete"]
 	path = packages/rete
 	url = https://github.com/retejs/rete.git
@@ -31,3 +28,6 @@
 [submodule "mundial/packages/kart"]
 	path = mundial/packages/kart
 	url = https://github.com/koordinates/kart.git
+[submodule "mundial/packages/maplibre-gl-js"]
+	path = mundial/packages/maplibre-gl-js
+	url = https://github.com/maplibre/maplibre-gl-js.git
