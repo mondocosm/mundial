@@ -1,0 +1,13 @@
+{
+  "apps": {},
+  "includes": [
+  ],
+  "templates": {
+    "janusweb.ui": "/packages/janusweb/build/1.5.42/media/assets/webui/default.html"
+  },
+  "css": [
+    "/packages/janusweb/build/1.5.42/media/assets/webui/themes/default.css"
+  ],
+  "scripts": [
+  ]
+}

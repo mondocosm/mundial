@@ -1,0 +1,1014 @@
+/* Basic Reset & Body */
+body {
+   margin: 0;
+   padding: 0; /* Will be overridden by padding-top */
+   padding-top: 50px !important; /* Match backup: Account for fixed toolbar height */
+   font-family: sans-serif;
+   background-color: #222; /* Dark background */
+   color: #eee; /* Light base text */
+   box-sizing: border-box; /* Ensure padding doesn't add to total width/height */
+   min-height: 100vh; /* Match backup */
+   overflow: hidden; /* Match backup: Prevent body scrollbars */
+}
+
+/* Map/Globe View Panels */
+.view-panel {
+    position: absolute;
+    background: rgba(50, 50, 50, 0.9);
+    border: 1px solid #555;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    overflow: auto; /* Changed from hidden to allow resize */
+    resize: both; /* Allow resizing */
+    min-width: 50px; /* Allow smaller minimize */
+    min-height: 50px; /* Allow smaller minimize */
+    z-index: 990; /* Default z-index below visible panels */
+    /* Add draggable cursor */
+    cursor: move;
+}
+
+.view-panel.visible-panel {
+    display: block !important; /* Ensure it's visible when class is applied */
+    z-index: 1005 !important; /* Ensure it's on top when visible */
+}
+
+/* Specific positioning for panels */
+#social-panel {
+    bottom: 10px;
+    right: 10px;
+    top: auto;
+    left: auto;
+    width: 250px;
+    height: auto;
+    max-height: 250px;
+    z-index: 1001;
+}
+
+/* Specific positioning for profile panel */
+#profile-panel {
+    top: 60px; /* Position below toolbar */
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    width: 250px; /* Give it a default width */
+    height: auto; /* Allow height to adjust */
+    max-height: 350px; /* Limit max height */
+    z-index: 1001;
+}
+
+/* Specific positioning for XR panel */
+#xr-panel {
+    top: calc(50% - 150px); /* Center vertically */
+    left: calc(50% - 150px); /* Center horizontally */
+    width: 300px;
+    height: 300px;
+    z-index: 1002; /* Above other panels */
+}
+
+/* Specific positioning for map panel when visible */
+#map-panel {
+    left: 10px;
+    width: calc(50% - 15px); /* Take up left half with small margin */
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
+    right: auto;
+}
+
+/* Specific positioning for globe panel when visible */
+#globe-panel {
+    right: 10px; /* Position on the right */
+    width: calc(50% - 15px); /* Take up right half with small margin */
+    left: auto;
+    top: 60px; /* Position below toolbar */
+    bottom: 10px;
+    height: auto;
+}
+
+
+/* Inner Map/Globe Containers */
+#map, #globusContainer {
+   position: absolute; /* Position relative to panel */
+   top: 30px; /* Below panel header */
+   left: 0;
+   bottom: 0;
+   right: 0;
+   width: 100%; /* Fill panel content area */
+   height: calc(100% - 30px); /* Fill panel content area */
+   overflow: hidden;
+   z-index: 1; /* Ensure map is below embedded controls */
+   /* Remove background color if panel has one */
+}
+
+/* Adjust panel header style slightly for view panels */
+.view-panel .panel-header {
+    height: 30px; /* Fixed header height */
+    padding: 0 10px; /* Adjust padding */
+    line-height: 30px; /* Center text vertically */
+}
+
+/* Control Panels */
+.control-panel {
+   position: absolute;
+   width: 220px;
+   min-width: 180px; /* Prevent getting too narrow */
+   min-height: 40px; /* Minimum height for header */
+   background: rgba(50, 50, 50, 0.9); /* Dark background */
+   color: #eee;
+   /* padding: 10px; Moved to panel-content */
+   border-radius: 5px;
+   border: 1px solid #555; /* Lighter border */
+   box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+   font-size: 14px; /* Base font size */
+   box-sizing: border-box;
+   overflow: auto; /* Changed from hidden to allow resize */
+   resize: vertical; /* Allow vertical resizing */
+}
+
+#layer-switcher { top: 60px; /* Moved down below toolbar */ left: 10px; z-index: 1000; }
+
+#user-layers-panel { top: 230px; /* Increased top to ensure it's below layer-switcher */ left: 10px; z-index: 999; } /* Changed right to left */
+#app-controls { bottom: 10px; left: 10px; z-index: 1001; } /* Changed right to left, increased z-index */
+
+/* Remove !important from minimized styles as they might interfere */
+.view-panel.minimized {
+    height: 30px; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+
+/* Panel Headers */
+.panel-header {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+   /* margin-bottom: 5px; Removed, padding handles spacing */
+   padding: 5px 10px; /* Add padding to header */
+   background-color: rgba(60, 60, 60, 0.95); /* Slightly different header background */
+   border-bottom: 1px solid #555; /* Separator */
+   cursor: move; /* Indicate draggable */
+   z-index: 1010; /* Ensure headers are on top for dragging */
+   position: relative; /* Needed for z-index to work */
+}
+.panel-header h4, .panel-header h5, .panel-header h2 { /* Target h2, h4, h5 */
+   margin: 0;
+   color: #eee;
+   font-weight: bold;
+   flex-grow: 1; /* Allow title to take space */
+   font-size: 1em; /* Consistent header font size relative to panel base */
+   line-height: 1.2; /* Adjust line height for headers */
+}
+
+/* Panel Content */
+.panel-content {
+    padding: 10px; /* Original panel padding */
+    display: block; /* Default state */
+}
+.minimized .panel-content {
+    display: none; /* Hide content when minimized */
+}
+/* Ensure minimized view panels shrink and hide content */
+.view-panel.minimized {
+    height: 30px !important; /* Force height to header height */
+    min-height: 30px; /* Override min-height */
+    width: 220px !important; /* Set a fixed minimized width like control panels */
+    min-width: 180px; /* Override min-width */
+    resize: none; /* Disable resize when minimized */
+    overflow: hidden;
+}
+.view-panel.minimized #map,
+.view-panel.minimized #globusContainer {
+    display: none; /* Hide map/globe content */
+}
+
+/* Maximized Panel Style */
+.view-panel.maximized {
+    top: 10px; /* Override top */
+    left: 10px; /* Override left */
+    right: 10px; /* Override right */
+    bottom: 10px; /* Override bottom */
+    width: calc(100% - 20px); /* Full width */
+    height: calc(100% - 20px); /* Full height */
+    z-index: 1010; /* Bring to front */
+    resize: none; /* Disable resize when maximized */
+}
+
+
+/* Buttons */
+button {
+   padding: 5px 8px;
+   cursor: pointer;
+   background-color: #555;
+   color: #eee;
+   border: 1px solid #777;
+   border-radius: 3px;
+   line-height: 1; /* Ensure consistent button height */
+}
+button:hover { background-color: #666; }
+button:disabled { background-color: #444; color: #888; cursor: not-allowed; border-color: #666; }
+
+.add-btn {
+   font-size: 16px;
+   font-weight: bold;
+   padding: 0 6px;
+   /* Inherits dark button styles */
+}
+
+.settings-btn-small {
+   font-size: 10px; /* Smaller font for icons */
+   padding: 1px 2px; /* Reduced padding */
+   vertical-align: middle;
+   line-height: 1; /* Constrain height */
+   /* Inherits dark button styles */
+   /* margin-left is handled dynamically in JS */
+}
+
+.minimize-btn {
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.maximize-btn { /* Style similar to minimize */
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 6px;
+    margin-left: 5px; /* Space from title or other buttons */
+    flex-shrink: 0;
+}
+/* Inputs & Selects */
+select, input[type="text"], input[type="url"], textarea {
+   padding: 4px;
+   margin-bottom: 5px;
+   width: 100%;
+   box-sizing: border-box;
+   background-color: #444;
+   color: #eee;
+   border: 1px solid #666;
+   border-radius: 3px;
+}
+input[type="color"] {
+   padding: 0;
+   border: 1px solid #666;
+   height: 25px;
+   width: 40px; /* Keep specific size */
+   vertical-align: middle;
+   cursor: pointer;
+   background-color: #444; /* Match other inputs */
+}
+input::placeholder, textarea::placeholder { color: #aaa; }
+
+/* User Layer List */
+#user-layer-list {
+   margin-bottom: 10px;
+   max-height: 150px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   padding: 5px;
+   background: #444; /* Match tileset list */
+}
+#user-layer-list .layer-item {
+   padding: 4px 6px;
+   margin-bottom: 2px;
+   /* cursor: pointer; Removed, apply to specific clickable elements */
+   display: flex;
+   align-items: center;
+   /* gap: 5px; Removed global gap */
+}
+#user-layer-list .layer-item:hover { background-color: #555; }
+#user-layer-list .layer-item.selected {
+   background-color: #5a5a5a; /* Darker highlight */
+   /* font-weight: bold; Applied to name span instead */
+}
+/* Style the selection indicator span */
+#user-layer-list .layer-item .selection-indicator {
+    width: 1.2em; /* Keep reserved space */
+    text-align: center;
+    flex-shrink: 0; /* Don't shrink indicator */
+}
+/* Style the visibility button */
+#user-layer-list .layer-item .visibility-btn {
+    flex-shrink: 0; /* Don't shrink button */
+}
+/* Style the name span */
+#user-layer-list .layer-item span { /* This targets nameSpan */
+   margin-left: 5px; /* Add space to the left of the name, after the indicator */
+   flex-grow: 1; /* Allow name to take space */
+   cursor: pointer; /* Make name clickable */
+   overflow: hidden; /* Prevent long names breaking layout */
+   text-overflow: ellipsis; /* Add ellipsis for long names */
+   white-space: nowrap; /* Keep name on one line */
+}
+#user-layer-list .layer-item.selected span {
+    font-weight: bold; /* Bold selected name */
+}
+/* Style the button container */
+#user-layer-list .layer-item .button-container {
+    display: flex; /* Use flex for buttons inside */
+    gap: 3px; /* Small gap between buttons */
+    flex-shrink: 0; /* Prevent container from shrinking */
+    margin-left: auto; /* Push button container to the right */
+}
+
+/* Tileset List */
+#tileset-list {
+   height: 100px;
+   overflow-y: auto;
+   border: 1px solid #555;
+   margin-bottom: 10px;
+   padding: 5px;
+   background: #444;
+}
+#tileset-list div { /* Style for each tileset item */
+   padding: 2px 4px;
+   margin-bottom: 2px;
+   color: #eee;
+   display: flex;
+   align-items: center;
+   cursor: default; /* Default cursor for the row */
+}
+#tileset-list div:hover { background-color: #555; }
+#tileset-list div input[type="checkbox"] { /* Target checkbox specifically */
+     width: auto;
+     cursor: pointer;
+     margin-right: 5px; /* Add margin after checkbox */
+     /* margin-left: 5px; Removed */
+}
+#tileset-list div span { /* Target name span specifically */
+   flex-grow: 1; /* Allow name to take up space */
+   cursor: pointer; /* Make name clickable for zoom */
+}
+#tileset-list div .button-container { /* Container for buttons */
+   margin-left: 5px;
+}
+.tileset-item.highlighted { /* Style for highlighted list item */
+   background-color: #6a6a6a; /* Slightly lighter highlight than layer selection */
+   font-weight: bold;
+}
+
+
+/* Modal Styles */
+/* Modal Styles (Now used for Tileset Details Side Panel) */
+.modal { /* Keep general modal class for show/hide */
+   display: none; /* Initially hidden */
+   /* Base positioning moved to ID selector below */
+}
+
+/* Position the specific details modal */
+#tileset-details-modal {
+    position: absolute;
+    z-index: 1001; /* Above layer switcher */
+    width: 220px; /* Match other control panels */
+    bottom: 90px; /* Position above app-controls */
+    right: 10px;  /* Align with app-controls */
+    /* Inherits .control-panel styles for background, border etc. */
+}
+
+/* Assets Panel Positioning */
+#assets-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as layer switcher */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px); /* Position to the right of layer-switcher */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+}
+
+/* Settings Panel Positioning */
+#settings-panel {
+    position: absolute;
+    z-index: 1002; /* Higher than profile, modal, layer switcher, etc. */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    left: calc(10px + 220px + 10px + 220px + 10px); /* Position to the right of assets-panel */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+}
+
+/* Scene Panel Positioning */
+#scene-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as other control panels */
+    width: 220px; /* Match other control panels */
+    top: 60px; /* Below toolbar */
+    /* Example positioning: to the right of settings panel if it's visible and positioned by JS */
+    /* Or a fixed position: e.g., left: calc(10px + 220px + 10px + 220px + 10px + 220px + 10px); */
+    /* For now, let's place it next to where settings panel *would* be if it were the last one */
+    left: calc(10px + 220px + 10px + 220px + 10px + 220px + 10px); /* Approx next to settings */
+    bottom: auto;
+    right: auto;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    /* It also inherits .control-panel styles for background, border etc. */
+}
+.modal-content {
+   /* Style the content box */
+   /* background: rgba(50, 50, 50, 0.9); Moved to .control-panel */
+   /* color: #eee; Moved to .control-panel */
+   padding: 10px; /* Content padding */
+   /* border: 1px solid #555; Moved to .control-panel */
+   /* border-radius: 5px; Moved to .control-panel */
+
+/* Styles moved from inline */
+#chat-messages {
+   height: 200px;
+   overflow-y: scroll;
+   border: 1px solid #555;
+   margin-bottom: 10px;
+   padding: 5px;
+   background: #333;
+}
+
+#chat-input {
+   width: calc(100% - 70px);
+   margin-right: 5px;
+}
+
+#send-message-btn {
+   width: 60px;
+}
+
+#auth-section {
+   margin-top: 15px;
+}
+
+#username-input {
+   width: calc(50% - 5px);
+   margin-right: 5px;
+}
+
+#password-input {
+   width: calc(50% - 5px);
+}
+
+#signup-btn {
+   width: calc(50% - 5px);
+   margin-top: 5px;
+   margin-right: 5px;
+}
+
+#login-btn {
+   width: calc(50% - 5px);
+   margin-top: 5px;
+}
+
+#logout-btn {
+   width: 100%;
+   margin-top: 5px;
+   display: none; /* Initial state */
+}
+
+#auth-status {
+    margin-top: 5px;
+}
+
+#custom-layer-inputs {
+    display: none; /* Initial state */
+    margin-top: 10px;
+}
+
+#custom-layer-name,
+#custom-layer-url {
+    margin-bottom: 5px;
+    width: 100%; /* Already default for inputs, but explicit */
+}
+
+#add-custom-layer-btn {
+    width: 100%;
+}
+
+/* Style for h4 within user-layers-panel header */
+#user-layers-panel .panel-header h4 {
+    flex-grow: 0;
+    margin-right: 5px;
+}
+
+.flex-spacer { /* Class for the div spacer */
+    flex-grow: 1;
+}
+
+#user-layer-list { /* This already has some styles, appending/overriding */
+    margin-bottom: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #555; /* Existing */
+    padding: 5px; /* Existing */
+    background: #444; /* Existing */
+}
+
+.styled-hr { /* Class for styled HR elements */
+    margin: 10px 0;
+    border: 0;
+    height: 1px;
+    background: #555;
+}
+
+#selected-tile-count-display {
+    margin-bottom: 5px;
+    font-weight: bold;
+    display: none; /* Initial state */
+}
+
+#clear-selection-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    display: none; /* Initial state */
+}
+
+#tileset-name-input {
+    display: none; /* Initial state */
+    margin-bottom: 5px; /* Already default for inputs, but explicit */
+}
+
+#save-selection-btn {
+    width: 100%;
+}
+
+#interaction-mode-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#setting-set-start-location-btn {
+    margin-top: 5px;
+}
+
+#details-tileset-image {
+    max-width: 100%;
+    height: auto;
+    display: none; /* Initial state */
+    margin-top: 5px;
+}
+
+#details-tileset-image-url {
+    margin-top: 5px;
+}
+
+#details-color-picker {
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+/* Styling for labels associated with detail inputs */
+label[for="details-fill-opacity-input"],
+label[for="details-stroke-width-input"] {
+    margin-left: 10px;
+}
+
+#details-fill-opacity-input {
+    width: 50px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+#details-stroke-width-input {
+    width: 50px;
+    vertical-align: middle;
+}
+
+#my-assets-btn {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#asset-market-btn {
+    width: 100%;
+}
+
+#assets-content-area {
+    margin-top: 10px;
+}
+   /* box-shadow: 0 2px 5px rgba(0,0,0,0.5); Moved to .control-panel */
+   box-sizing: border-box;
+   /* Width and positioning are now handled by #tileset-details-modal */
+   /* Add specific styles if needed, different from panel-content */
+}
+.modal-content label { /* Keep specific label style if needed */
+    font-weight: bold;
+    margin-right: 5px;
+    color: #eee;
+}
+/* .modal-content h2 styling removed - now handled by .panel-header h2 */
+.close-btn { /* Style close button like minimize */
+   color: #eee;
+   /* float: right; Handled by flexbox */
+   font-size: 14px;
+   font-weight: bold;
+   line-height: 1;
+   /* margin-top: -5px; */
+   padding: 0 6px;
+   margin-left: 5px;
+   background: none;
+   border: none;
+   cursor: pointer;
+}
+.close-btn:hover {
+   color: #fff;
+   background: none;
+}
+
+/* Specific Modal Elements */
+#settings-color-picker {
+    vertical-align: middle;
+    margin-left: 5px;
+    /* Inherits dark input styles */
+}
+.modal-content small { /* Style small text in modal */
+   color: #bbb;
+}
+.modal-content hr { /* Style horizontal rules in modal */
+   border: 0;
+   border-top: 1px solid #555;
+   margin: 15px 0;
+}
+
+
+/* Tileset Details Modal Specifics */
+.modal-section {
+   margin-bottom: 15px; /* Space between sections */
+}
+.modal-section label {
+   display: block; /* Label on its own line */
+   margin-bottom: 3px;
+   font-weight: bold;
+}
+.modal-section span { /* For displaying data like coords */
+    display: inline-block;
+    margin-left: 5px;
+    color: #ccc; /* Lighter color for displayed data */
+}
+.modal-actions {
+    margin-top: 20px;
+    text-align: left; /* Align label/color picker left */
+}
+.modal-actions label {
+    display: inline-block; /* Keep label inline */
+    margin-right: 5px;
+}
+/* Toolbar styles removed */
+/* --- Top Toolbar Styles (Restored) --- */
+.top-toolbar {
+    background-color: #333; /* Dark grey toolbar background */
+    color: #fff;
+    padding: 0 20px; /* Adjusted padding for vertical alignment */
+    display: flex;
+    justify-content: flex-start; /* Align items to the start */
+    align-items: center;
+    position: fixed; /* Fix toolbar at the top */
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box; /* Include padding in width */
+    z-index: 1000; /* Ensure toolbar is above other content */
+    height: 50px; /* Fixed height for the toolbar */
+}
+
+.toolbar-left { /* New class for grouping title and search */
+    display: flex;
+    align-items: center;
+}
+
+.toolbar-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-right: 20px; /* Add space between title and search */
+}
+
+.toolbar-center { /* Now part of toolbar-left, no longer globally centered */
+    display: flex;
+    align-items: center;
+}
+
+.toolbar-input {
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid #555; /* Darker border */
+    background-color: #2c2c2c; /* Dark input background */
+    color: #e0e0e0; /* Light input text */
+    margin: 0 10px; /* Space around input */
+    font-size: 0.9em;
+    width: 40%; /* Make the input wider */
+    min-width: 300px; /* Ensure a minimum width */
+}
+
+.toolbar-input::placeholder {
+    color: #888; /* Lighter placeholder text */
+}
+
+.toolbar-input:focus {
+    outline: none;
+    border-color: #007bff; /* Highlight focus */
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Removed .toolbar-nav styles */
+
+.toolbar-view-buttons {
+    display: flex;
+    align-items: center;
+}
+
+.toolbar-button {
+    background-color: #555; /* Slightly lighter grey than toolbar */
+    color: #fff;
+    border: none;
+    padding: 6px 12px; /* Smaller padding than dropdown links */
+    margin-left: 10px; /* Space between buttons */
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.toolbar-button:hover {
+    background-color: #777; /* Lighter grey on hover */
+}
+
+.toolbar-button.active { /* Style for the active view button */
+    background-color: #007bff;
+    color: #fff;
+}
+
+.toolbar-spacer { /* New class to push buttons right */
+    flex-grow: 1; /* Takes up available space */
+}
+
+/* Adjust body padding to prevent content from hiding behind fixed toolbar */
+body {
+    padding-top: 50px !important; /* Add padding equal to toolbar height, use !important to override potential conflicts */
+    /* Reset potentially conflicting body styles */
+    display: block;
+    justify-content: initial;
+    align-items: initial;
+    min-height: 100vh;
+    overflow: hidden; /* Prevent body scrollbars if map/panels handle scrolling */
+}
+
+/* Ensure map/globe containers fill the space below the toolbar */
+/* These might need adjustment depending on panel visibility logic */
+/* #map-panel, #globe-panel, #social-panel, #profile-panel {
+    top: 50px;
+    height: calc(100vh - 50px);
+} */
+
+/* Adjust positioning of other panels if they were absolutely positioned relative to body */
+/* .control-panel {
+    top: 60px;
+} */
+/* Hide dynamically added buttons in Maps panel header, except minimize */
+#layer-switcher > .panel-header > button:not(.minimize-btn) {
+    display: none !important;
+}
+/* --- Profile Panel Specific Styles --- */
+.profile-content {
+    /* Inherits padding from .panel-content */
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px; /* Space below header */
+}
+
+.profile-picture-container {
+    width: 80px; /* Adjust size as needed */
+    height: 80px;
+    border-radius: 50%; /* Circular picture */
+    overflow: hidden; /* Clip image to circle */
+    margin-right: 15px;
+    flex-shrink: 0; /* Prevent shrinking */
+    background-color: #555; /* Placeholder background */
+    border: 2px solid #777;
+}
+
+.profile-picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Scale image nicely */
+}
+
+.profile-name {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin: 0; /* Remove default margin */
+    color: #eee;
+}
+
+.profile-details {
+    margin-top: 15px;
+}
+
+.profile-details h6 {
+    margin-bottom: 5px;
+    color: #ccc;
+    font-size: 0.9em;
+    text-transform: uppercase;
+}
+
+.profile-details dl {
+    margin: 0;
+    padding: 0;
+}
+
+.profile-details dt {
+    font-weight: bold;
+    color: #bbb;
+    width: 60px; /* Adjust label width */
+    float: left;
+    clear: left;
+    margin-bottom: 5px;
+}
+
+.profile-details dd {
+    margin-left: 70px; /* Space after label */
+    margin-bottom: 5px;
+    color: #eee;
+}
+#profile-panel {
+    position: absolute;
+    z-index: 1000; /* Same level as layer switcher */
+    width: 220px; /* Match other control panels */
+    top: 60px;  /* Below toolbar */
+    right: 10px; /* Align right */
+    /* Override view-panel styles */
+    bottom: auto; /* Remove bottom constraint */
+    left: auto; /* Remove left constraint */
+    /* Add max-height and overflow if needed */
+    max-height: calc(100vh - 80px); /* Example max height */
+    overflow-y: auto;
+    /* It still uses .view-panel for background, border, etc. */
+}
+#settings-panel {
+    /* Ensure settings panel is positioned and layered correctly */
+    position: absolute; /* Already applied by .control-panel, but explicit */
+    z-index: 1002; /* Higher than profile, modal, layer switcher, etc. */
+    /* Add positioning if needed, e.g., */
+    /* top: 60px; */
+    /* right: 10px; */
+    /* bottom: auto; */
+    /* left: auto; */
+    /* width: 220px; */ /* Already applied by .control-panel */
+}
+/* Styles for Globe Panel and Container */
+#globe-panel {
+    display: block; /* Or controlled by JS */
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    left: 100%; /* Placeholder, JS/CSS should manage layout */
+    border-left: 1px solid #ccc;
+    background: #777; /* Placeholder background */
+    z-index: 5; /* Example z-index, adjust as needed */
+}
+
+#globusContainer {
+    width: 100%;
+    height: 100%;
+}
+/* XR Panel Specific Styles */
+#xr-engine-selector {
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: #333;
+    border-radius: 4px;
+}
+
+#xr-iframe {
+    width: 100%;
+    height: calc(100% - 40px); /* Assumes parent .panel-content has a defined height or xr-engine-selector has fixed height */
+    border: none;
+}
+/* XR Panel Full Page Styling */
+#xr-panel {
+    position: fixed;
+    top: 50px; /* Adjust if top toolbar height is different */
+    left: 0;
+    width: 100vw;
+    height: calc(100vh - 50px); /* Adjust 50px if top toolbar height is different */
+    z-index: 100; 
+    border: none;
+    box-shadow: none;
+    background-color: #000; /* Added a background for visibility if iframe is blank */
+}
+
+#xr-panel .panel-content,
+#xr-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: block; /* Ensure iframe takes up space */
+}
+
+/* Uncomment to hide XR panel header for a more immersive view */
+/*
+#xr-panel .panel-header {
+    display: none;
+}
+*/
+/* XR Panel Full Page Styling */
+#xr-panel {
+    position: fixed;
+    top: 50px; /* Adjust if top toolbar height is different */
+    left: 0;
+    width: 100vw;
+    height: calc(100vh - 50px); /* Adjust 50px if top toolbar height is different */
+    z-index: 10000; /* High z-index to be on top */
+    border: none;
+    box-shadow: none;
+    background-color: #000; /* Background for visibility if iframe is blank */
+}
+
+#xr-panel .panel-content,
+#xr-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: block; /* Ensure iframe takes up space */
+}
+
+/* Uncomment to hide XR panel header for a more immersive view */
+/*
+#xr-panel .panel-header {
+    display: none;
+}
+*/
+/* Styles for OLCesium integration in Map Panel */
+#map { /* Modifying existing #map styles from the #map, #globusContainer rule */
+    /* position, top, left, bottom, right, width, height, overflow are already set */
+    background: #f0f0f0; /* Optional background from original inline style */
+    z-index: 0; /* Base layer, Cesium will be on top */
+}
+
+#cesium-map-container {
+    position: absolute;
+    top: 30px;      /* Consistent with #map and #globusContainer, below panel header */
+    left: 0;
+    width: 100%;
+    height: calc(100% - 30px); /* Consistent with #map and #globusContainer */
+    display: none;  /* Initially hidden */
+    z-index: 1;     /* To overlay #map when active */
+    background-color: #000; /* Background for the Cesium view */
+}
+
+/* Styles for the iframe within the Scene Panel */
+#scene-iframe {
+    display: block; /* Ensure it takes block-level layout */
+    width: 100%;
+    /* Height calculation: 100% of panel-content minus height of .settings-button-group and any margins/paddings.
+       Assuming .settings-button-group is roughly 30-40px high and panel-content has 10px padding.
+       A more robust way is to use flexbox on .panel-content if it only contains buttons and iframe.
+       For now, a calc based on typical heights. The panel-header is ~30px.
+       If .panel-content padding is 10px, and button group is ~30px + 10px margin-top for iframe:
+       Total reduction from 100% of panel-content height: ~50px.
+       If .panel-content itself is 100% of panel minus header:
+       height: calc(100% - 50px); (Approximate)
+    */
+    height: calc(100% - 45px); /* Adjusted: assuming button group + margin is ~35px, +10px padding in panel-content */
+    border: none;
+    /* margin-top: 10px; /* This was in inline, can be added if space needed below buttons */
+}
+
+/* Ensure panel-content in scene-panel can accommodate the iframe height correctly */
+#scene-panel .panel-content {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 30px); /* Full height minus panel header */
+    padding: 10px; /* Keep padding */
+    box-sizing: border-box;
+}
+
+#scene-panel .settings-button-group {
+    margin-bottom: 10px; /* Space between buttons and iframe */
+    flex-shrink: 0; /* Prevent button group from shrinking */
+}
+
+#scene-panel #scene-iframe {
+    flex-grow: 1; /* Allow iframe to take remaining space */
+    width: 100%;
+    border: none;
+}
+
+/* Style for the new toggle button in map-panel header */
+.panel-header-button { /* General class for buttons in panel headers if more are added */
+    padding: 2px 6px;
+    font-size: 0.8em;
+    margin-left: 5px;
+    /* Inherits base button styles */
+}

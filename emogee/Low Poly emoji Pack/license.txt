@@ -1,0 +1,8 @@
+Model Information:
+* title:	Low Poly emoji Pack
+* source:	https://sketchfab.com/3d-models/low-poly-emoji-pack-d824c532bae24bd39192a7058849b21f
+* author:	assetfactory (https://sketchfab.com/assetfactory)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

@@ -1,3 +1,50 @@
+/* Toolbar Styles for Auth Page */
+#toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; 
+    padding: 0 20px; 
+    height: 50px;
+    background-color: #333; 
+    color: #fff;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100; 
+    box-sizing: border-box;
+}
+
+#toolbar #app-title {
+    font-size: 1.6em; 
+    font-weight: bold;
+    color: #fff;
+    margin: 0; 
+    text-transform: uppercase; /* For PLANETIC */
+    /* Add specific font-family here if known and different from body */
+}
+
+#toolbar .toolbar-button.return-btn {
+    /* Base styles to look like main site's .toolbar-button */
+    background-color: #4a4a4a; /* From main site's .toolbar-button */
+    color: #fff;
+    border: 1px solid #666; /* From main site's .toolbar-button */
+    padding: 6px 12px; /* From main site's .toolbar-button */
+    border-radius: 4px; /* From main site's .toolbar-button */
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9em; /* Or match main site's .toolbar-button */
+    font-weight: normal; /* From main site's .toolbar-button */
+    transition: background-color 0.2s ease; /* From main site's .toolbar-button */
+}
+
+#toolbar .toolbar-button.return-btn:hover {
+    background-color: #5a5a5a; /* From main site's .toolbar-button hover */
+}
+
+/* Ensure body padding accounts for the fixed toolbar */
+/* The existing body rule in this file might need adjustment if it doesn't have padding-top */
+/* Or, if mundial/auth.html links to mundial/css/style.css, that body rule will apply */
 body {
     font-family: sans-serif;
     display: flex;

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JanusWeb Inline Room Example</title>
+  <script>
+    // Define polyfills before loading JanusWeb
+    window.extendclass = function(parent, child) {
+      for (var key in parent.prototype) {
+        if (parent.prototype.hasOwnProperty(key)) {
+          child.prototype[key] = parent.prototype[key];
+        }
+      }
+      child.prototype.constructor = child;
+      child.prototype.parent = parent.prototype;
+      return child;
+    };
+  </script>
+  <script src="/packages/janusweb/build/1.5.42/janusweb.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+    }
+    #janusweb {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="janusweb"></div>
+  <script>
+    // Polyfill for THREE.Math.clamp which JanusWeb uses
+    if (typeof THREE !== 'undefined') {
+      console.log('Applying THREE.Math.clamp polyfill');
+      if (!THREE.MathUtils) THREE.MathUtils = {};
+      THREE.MathUtils.clamp = function(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      };
+      if (!THREE.Math) THREE.Math = THREE.MathUtils;
+      else if (!THREE.Math.clamp) THREE.Math.clamp = THREE.MathUtils.clamp;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Initialize JanusWeb with minimal config
+        const config = {
+          el: document.getElementById('janusweb'),
+          networking: false,
+          autoload: false, // Prevent auto-loading a room
+          showchat: false,
+          shownavigation: false
+        };
+
+        // Initialize JanusWeb
+        const janusweb = elation.janusweb.init(config);
+
+        // Once JanusWeb is loaded, create the room directly
+        janusweb.addEventListener('ready', function() {
+          console.log('JanusWeb is ready, loading room from string');
+          
+          // Define a simple room
+          const roomXML = `
+            <FireBoxRoom>
+              <Room>
+                <Object id="cube" pos="0 1.6 3" scale="1 1 1" color="1 0 0" />
+                <Text pos="0 2.5 3" scale="2 2 2" color="1 1 1" fgcolor="1 1 1">Hello JanusVR</Text>
+              </Room>
+            </FireBoxRoom>
+          `;
+          
+          // Parse and load the room directly
+          const roomdata = janusweb.parser.parse(roomXML);
+          janusweb.loadRoom(roomdata);
+        });
+      } catch(e) {
+        console.error('Error initializing JanusWeb:', e);
+      }
+    });
+  </script>
+</body>
+</html>

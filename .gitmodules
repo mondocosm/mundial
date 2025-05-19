@@ -31,3 +31,6 @@
 [submodule "mundial/packages/synapse"]
 	path = mundial/packages/synapse
 	url = https://github.com/matrix-org/synapse.git
+[submodule "mundial/packages/thirdroom"]
+	path = mundial/packages/thirdroom
+	url = https://github.com/matrix-org/thirdroom.git

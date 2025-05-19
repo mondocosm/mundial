@@ -8,13 +8,17 @@
     <!-- Cesium Widgets CSS (Keep for potential future use/comparison, but not needed for OpenGlobus) -->
     <!-- <link href="lib/cesium/Widgets/widgets.css" rel="stylesheet"> -->
     <!-- OpenGlobus CSS -->
-    <link rel="stylesheet" href="../packages/openglobus/lib/@openglobus/og.css" type="text/css">
+    <link rel="stylesheet" href="packages/openglobus/lib/og.css" type="text/css">
+    <!-- MapLibre GL JS -->
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <!-- <link rel="stylesheet" href="packages/Leaflet/dist/leaflet.css"> -->
     <link rel="stylesheet" href="css/style.css"> <!-- Link to external CSS -->
 </head>
 <body>
 <header class="top-toolbar">
         <div class="toolbar-left"> <!-- Group title and search -->
-            <div class="toolbar-title">PLANETIC</div>
+            <div class="toolbar-title">WRLDS</div>
             <div class="toolbar-center"> <!-- Keep class for styling, but it's not centered globally now -->
                 <input type="text" class="toolbar-input" placeholder="Search or enter command...">
             </div>
@@ -27,6 +31,7 @@
             <button type="button" class="toolbar-button active" id="globe-view-btn">Globe</button> <!-- Start active -->
             <button type="button" class="toolbar-button" id="xr-view-btn">XR</button>
             <button type="button" class="toolbar-button" id="scene-btn">Scene</button> <!-- New Scene Button -->
+            <button type="button" class="toolbar-button" id="editor-btn">Editor</button> <!-- New Editor Button -->
             <button type="button" class="toolbar-button" id="layers-btn">Layers</button>
             <button type="button" class="toolbar-button" id="profile-btn">Profile</button>
             <button type="button" class="toolbar-button" id="settings-btn">Settings</button> <!-- Added Settings Button -->
@@ -41,10 +46,17 @@
     <div id="map-panel" class="view-panel" style="display: block;"> <!-- Start visible -->
         <div class="panel-header">
             <h4>2D Map View</h4>
-            <button type="button" class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
-            <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+            <button type="button" id="map-panel-toggle-maps-menu-btn" class="panel-header-btn no-drag" title="Toggle Maps Menu">&#9881;</button> <!-- Placeholder -->
         </div>
         <div id="map"></div> <!-- OpenLayers target -->
+        <div id="ol-map-custom-controls-top-right" class="ol-custom-controls-top-right">
+            <!-- The #layer-switcher will be moved here by OpenLayers if targeted correctly -->
+        </div>
+        <div id="maplibre-map-container" class="map-container" style="display: none;"></div> <!-- MapLibre target, initially hidden -->
+        <!-- <div id="leaflet-map-container" class="map-container" style="display: none;"></div> --> <!-- Leaflet target, initially hidden -->
+        <div id="cesium-map-container" class="map-container"></div> <!-- Cesium target for OLCesium, style to be moved to CSS (initially display:none) -->
+        <button type="button" id="map-view-toggle-btn" class="map-overlay-button" title="Toggle OL/Cesium 3D View">3D</button>
+        <button type="button" id="maplibre-view-toggle-btn" class="map-overlay-button" title="Toggle MapLibre 2D/3D View" style="display: none;">3D</button>
     </div>
 
     <!-- Globe View Panel -->
@@ -52,17 +64,23 @@
          <div class="panel-header">
 <!-- Misplaced button removed -->
             <h4>3D Globe View</h4>
-            <button type="button" class="maximize-btn" title="Maximize/Restore">□</button> <!-- Maximize Button -->
-            <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+            <button type="button" id="globe-panel-toggle-globes-menu-btn" class="panel-header-btn no-drag" title="Toggle Globes Menu">&#9881;</button> <!-- Updated -->
         </div>
-        <div id="globusContainer"></div> <!-- OpenGlobus target -->
+        <div id="globusContainer" class="globe-container" style="display: block;"></div> <!-- OpenGlobus target -->
+        <div id="itowns-container" class="globe-container" style="display: none;">
+            <!-- iTowns will be initialized here by JS -->
+            <p>iTowns View Container</p>
+        </div> <!-- iTowns target, initially hidden -->
+<div id="radiogarden-container" class="globe-container" style="display: none;">
+                <!-- Radio Garden will be initialized here by JS -->
+                <iframe id="radiogarden-iframe" title="Radio Garden"></iframe>
+            </div>
     </div>
 <!-- Social Panel (Initially Hidden) -->
     <div id="social-panel" class="view-panel" style="display: none;">
          <div class="panel-header">
              <h4>Social Feed</h4>
-             <button type="button" class="maximize-btn" title="Maximize/Restore">□</button>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Maximize/Minimize buttons removed -->
          </div>
          <div class="panel-content">
              <!-- Gun.js Chat Interface -->
@@ -87,8 +105,7 @@
     <div id="profile-panel" class="view-panel" style="display: none;">
          <div class="panel-header">
              <h4>Profile</h4>
-             <button type="button" class="maximize-btn" title="Maximize/Restore">□</button>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Maximize/Minimize buttons removed -->
          </div>
          <div class="panel-content profile-content">
              <div class="profile-header">
@@ -113,18 +130,18 @@
              </div>
          </div>
     </div>
-  
     <!-- XR Panel (Standalone) -->
-    <div id="xr-panel" class="view-panel" style="display: none;">
+    <div id="xr-panel" class="view-panel large-centered-modal" style="display: none;">
          <div class="panel-header">
              <h4>XR View</h4>
-             <button type="button" class="maximize-btn" title="Maximize/Restore">□</button>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Maximize/Minimize buttons removed -->
          </div>
          <div class="panel-content">
              <div id="xr-engine-selector">
                  <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb (Hosted, Stable)">Janus</button>
                  <button type="button" class="xr-engine-btn" data-engine="babylonjs" title="BabylonJS + MapLibre">Babylon</button>
+                 <button type="button" class="xr-engine-btn" data-engine="thirdroom" title="Third Room (Matrix-based)">ThirdRoom</button>
+                 <button type="button" class="xr-engine-btn" data-engine="aframe" title="A-Frame">A-Frame</button>
                  <button type="button" class="xr-engine-btn" data-engine="webxr" title="Native WebXR">WebXR</button>
              </div>
              <iframe id="xr-iframe" title="XR Content View"></iframe>
@@ -132,12 +149,22 @@
          </div>
     </div>
 
-    <div id="layer-switcher" class="control-panel">
+    <div id="layer-switcher" class="control-panel centered-menu">
         <div class="panel-header">
              <h4>Maps</h4>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <button type="button" class="minimize-btn" title="Toggle Panel">-</button> <!-- Placeholder, JS needed for functionality -->
         </div>
         <div class="panel-content">
+            <div class="map-library-toggle">
+                <label for="map-library-select">Map Library:</label>
+                <select id="map-library-select">
+                    <option value="openlayers" selected>OpenLayers</option>
+                    <option value="maplibre">MapLibre</option>
+                    <!-- <option value="leaflet">Leaflet</option> -->
+                </select>
+            </div>
+            <hr class="styled-hr">
+            <label for="base-layer-select">Basemap:</label>
             <select id="base-layer-select">
                 <option value="satellite">Satellite</option>
                 <option value="osm">OpenStreetMap</option>
@@ -146,10 +173,27 @@
 
                 <option value="add-custom">Add Custom Layer...</option>
             </select>
-            <div id="custom-layer-inputs">
+            <div id="custom-layer-inputs" style="display: none;">
                 <input type="text" id="custom-layer-name" placeholder="Layer Name"> <!-- Use 100% width -->
                 <input type="text" id="custom-layer-url" placeholder="XYZ URL Template"> <!-- Use 100% width -->
                 <button type="button" id="add-custom-layer-btn">Add Layer</button>
+            </div>
+        </div>
+    </div>
+<!-- New Globes Menu Panel -->
+    <div id="globe-switcher" class="control-panel centered-menu">
+        <div class="panel-header">
+            <h4>Globes</h4>
+            <button type="button" class="minimize-btn" title="Toggle Panel">-</button> <!-- JS needed for functionality -->
+        </div>
+        <div class="panel-content">
+            <div> <!-- Added a div wrapper for consistent styling if needed -->
+                <label for="globe-library-select">Globe Library:</label>
+                <select id="globe-library-select">
+                    <option value="openglobus" selected>OpenGlobus</option>
+                    <option value="radiogarden">Radio Garden</option>
+                    <option value="itowns">iTowns</option>
+                </select>
             </div>
         </div>
     </div>
@@ -160,7 +204,7 @@
             <h4>Layers</h4> <!-- Allow h4 to shrink, add margin -->
             <button type="button" id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
             <div class="flex-spacer"></div> <!-- Spacer -->
-            <!-- Removed minimize button -->
+            <!-- Minimize button already removed or to be ensured removed -->
         </div>
         <div class="panel-content"> <!-- Removed inline style -->
             <div id="user-layer-list"> <!-- Adjusted styles -->
@@ -192,17 +236,18 @@
      <div id="app-controls" class="control-panel">
          <div class="panel-header">
              <h4>Controls</h4>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Minimize button removed -->
          </div>
          <div class="panel-content">
-            <button type="button" id="interaction-mode-btn">Mode: Select Tiles</button>
+          <button type="button" id="interaction-mode-btn">Pan/Select</button>
+          <button type="button" id="master-map-mode-btn" title="Toggle All Maps 2D/3D">2D/3D</button>
          </div>
     </div>
 <!-- Settings Panel -->
-    <div id="settings-panel" class="control-panel" style="display: none;"> <!-- Start hidden -->
-        <div class="panel-header">
+   <div id="settings-panel" class="control-panel" style="display: none;"> <!-- Start hidden -->
+       <div class="panel-header">
             <h4>Settings</h4>
-            <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+            <!-- Minimize button removed -->
         </div>
         <div class="panel-content">
             <h5>Grid System</h5>
@@ -219,6 +264,7 @@
                 <button type="button" id="setting-globe-mars" class="settings-button">Mars</button>
                 <button type="button" id="setting-globe-metaverse" class="settings-button">Metaverse</button>
                 <button type="button" id="setting-globe-custom" class="settings-button">Custom</button>
+                <button type="button" id="setting-globe-itowns" class="settings-button">iTowns</button> <!-- Added iTowns option -->
             </div>
             <hr>
             <h5>Start Location</h5>
@@ -238,7 +284,7 @@
             <hr>
             <h5>Grid Settings</h5>
             <div>
-                <label for="setting-grid-visible">Grid Visible (ZL >= 16):</label>
+                <label for="setting-grid-visible">Grid Visible (ZL &gt;= 16):</label>
                 <input type="checkbox" id="setting-grid-visible" checked>
             </div>
             <div>
@@ -252,7 +298,7 @@
     <div id="tileset-details-modal" class="modal control-panel"> <!-- Added control-panel class -->
          <div class="panel-header"> <!-- Added panel header -->
              <h2>Tileset Details</h2>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Minimize button removed -->
              <span class="close-btn" id="close-tileset-details-modal" title="Close Details">&times;</span>
          </div>
         <div class="modal-content panel-content"> <!-- Added panel-content class -->
@@ -293,19 +339,19 @@
             </div>
 
 <!-- Gun.js and SEA -->
-    <script src="../packages/gun/gun.js"></script>
-    <script src="../packages/gun/sea.js"></script>
+    <script src="packages/gun/gun.js"></script>
+    <script src="packages/gun/sea.js"></script>
             <hr>
 
             <div class="modal-actions">
                  <label for="details-color-picker">Color:</label>
                  <input type="color" id="details-color-picker">
-                 
                  <label for="details-fill-opacity-input">Opacity:</label>
                  <input type="number" id="details-fill-opacity-input" min="0" max="1" step="0.1" title="Fill Opacity (0.0 - 1.0)">
-                 
                  <label for="details-stroke-width-input">Stroke:</label>
                  <input type="number" id="details-stroke-width-input" min="0" max="10" step="0.1" title="Stroke Width (px)">
+                 <button type="button" id="view-tileset-in-babylon-btn">View 3D (Babylon)</button>
+                 <button type="button" id="view-tileset-in-cesium-btn">View in Scene (Cesium)</button>
                  <!-- Save/More Settings buttons removed -->
             </div>
         </div>
@@ -315,7 +361,7 @@
     <div id="assets-panel" class="control-panel" style="display: none;">
          <div class="panel-header">
              <h4>Assets</h4>
-             <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
+             <!-- Minimize button removed -->
          </div>
          <div class="panel-content">
              <button type="button" id="my-assets-btn">My Assets</button>
@@ -325,22 +371,47 @@
                  <p>Select an option above.</p>
              </div>
          </div>
-     
-         <!-- Scene Panel (Initially Hidden) -->
-         <div id="scene-panel" class="control-panel" style="display: none;">
-              <div class="panel-header">
-                  <h4>Scene Options</h4>
-                  <button type="button" class="minimize-btn" title="Minimize/Expand">-</button>
-              </div>
-              <div class="panel-content">
-                  <div class="settings-button-group">
-                      <button type="button" id="scene-type-3dtile" class="settings-button">3D Tile</button>
-                      <button type="button" id="scene-type-usd" class="settings-button">USD</button>
-                      <button type="button" id="scene-type-i3s" class="settings-button">I3S</button>
-                 </div>
-                  <!-- Further scene options can be added here -->
-              </div>
+    </div>
+
+    <!-- Editor Panel (Placeholder - Initially Hidden) -->
+    <div id="editor-panel" class="view-panel large-centered-modal" style="display: none;">
+         <div class="panel-header">
+             <h4>Editor</h4>
          </div>
+         <div class="panel-content"> <!-- Style moved to css/style.css -->
+             <iframe id="polygonjs-iframe" src="http://localhost:8080" title="PolygonJS Editor"></iframe> <!-- Style moved to css/style.css -->
+         </div>
+    </div>
+
+    <!-- Scene Panel (Initially Hidden) -->
+    <div id="scene-panel" class="view-panel" style="display: none;"> /* Layout now controlled by specific CSS ID */
+         <div class="panel-header">
+             <h4>Scene Options</h4>
+             <!-- Minimize button removed -->
+         </div>
+         <div class="panel-content">
+             <div class="settings-button-group">
+                 <button type="button" id="scene-type-3dtile" class="settings-button">3D Tile</button>
+                 <button type="button" id="scene-type-usd" class="settings-button">USD</button>
+                 <button type="button" id="scene-type-i3s" class="settings-button">I3S</button>
+                 <button type="button" id="scene-type-threejs" class="settings-button">Three.js</button>
+            </div>
+            <div class="scene-viewer-container-wrapper">
+                <div id="scene-viewer-3dtile" class="scene-viewer-content" style="display: block;"> <!-- Default view -->
+                    <p>3D Tiles Viewer Area - Content to be loaded here.</p>
+                    <!-- Example: <iframe id="scene-iframe-3dtile" style="width:100%; height:100%; border:none;"></iframe> -->
+                </div>
+                <div id="scene-viewer-usd" class="scene-viewer-content" style="display: none;">
+                    <p>USD Viewer Area - Content to be loaded here.</p>
+                </div>
+                <div id="scene-viewer-i3s" class="scene-viewer-content" style="display: none;">
+                    <p>I3S Viewer Area - Content to be loaded here.</p>
+                </div>
+                <div id="scene-viewer-threejs" class="scene-viewer-content" style="display: none;">
+                    <p>Three.js (GLTF) Viewer Area - Canvas will be initialized here.</p>
+                </div>
+            </div>
+          </div>
     </div>
 
     <!-- Only include OpenLayers script -->
@@ -348,20 +419,33 @@
     <!-- <script src="lib/cesium/Cesium.js"></script> -->
     <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
-    <!-- OlCesium JS (Keep for potential future use/comparison) -->
-    <!-- <script src="lib/olcesium.js"></script> -->
+    <!-- Cesium JS -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Cesium.js"></script>
+    <!-- OLCesium JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol-cesium@2.16/dist/olcesium.js"></script>
     <!-- Define OpenGlobus resource path BEFORE loading the library -->
     <script>
-        var OG_RESOURCES_PATH = "../packages/openglobus/lib/@openglobus/res/"; // Corrected path
+        var OG_RESOURCES_PATH = "packages/openglobus/lib/res/"; // Corrected path
     </script>
-    <!-- OpenGlobus JS (UMD build) -->
-    <script src="../packages/openglobus/lib/@openglobus/og.umd.js"></script>
+    <!-- OpenGlobus JS (ES Module) -->
+    <script type="module" src="packages/openglobus/lib/og.es.js"></script>
+    <!-- MapLibre GL JS -->
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <!-- Leaflet JS -->
+    <!-- <script src="packages/Leaflet/dist/leaflet.js"></script> -->
+    <!-- iTowns JS -->
+    <script src="packages/itowns/dist/itowns.js"></script> <!-- Adjust path if necessary after checking submodule structure -->
 <!-- Explicitly include three.js to ensure it's available globally -->
-    <script src="../packages/ir-engine/packages/client/public/workers/three.min.js"></script>
-    <script src="../packages/janusweb/build/1.5.42/janusweb.assetworker.min.js"></script>
-    <script src="../packages/janusweb/build/1.5.42/service-worker.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <!-- <script src="packages/ir-engine/packages/client/public/workers/three.min.js"></script> -->
+    <!-- THREE.js GLTFExporter for 3D model export -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <!-- Custom tileset export logic -->
+    <script src="js/tilesetExporter.js"></script>
+    <script src="packages/janusweb/build/1.5.42/janusweb.assetworker.min.js"></script>
+    <script src="packages/janusweb/build/1.5.42/service-worker.js"></script>
     <!-- Main Application Logic -->
-    <script src="js/main.js"></script> <!-- Removed type="module" for testing -->
+    <script type="module" src="js/main.js"></script>
 
 </body>
 </html>
