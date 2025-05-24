@@ -1,4 +1,6 @@
 import * as og from '../packages/openglobus/lib/og.es.js';
+// loaders.gl is now loaded via UMD script tags in index.html, exposing a global 'loaders' object.
+// ES module imports for loaders.gl are removed.
 // Ensure 'ol' is available globally if not imported as a module, or import it.
 // For now, assuming OpenLayers (ol) is globally available from its CDN script.
 // console.log("%cMAIN.JS SCRIPT EXECUTION STARTED - VERY TOP LINE", "color: green; font-size: 1.5em; font-weight: bold;");
@@ -44,9 +46,194 @@ const state = {
     masterMapModeIs3D: false // Default to 2D for master control
 };
 // userLayers and selectedLayerId are already on window object from previous steps
+
+// --- Geodetic Helper Functions ---
+const WGS84_A = 6378137.0; // WGS84 semi-major axis (meters)
+const WGS84_E2 = 0.00669437999014; // WGS84 first eccentricity squared
+
+/**
+ * Converts tile ZXY coordinates and normalized pixel coordinates within the tile to latitude/longitude.
+ * @param {number} z Zoom level.
+ * @param {number} x Tile X coordinate.
+ * @param {number} y Tile Y coordinate.
+ * @param {number} px_norm Normalized X pixel coordinate within the tile (0 to 1, left to right).
+ * @param {number} py_norm Normalized Y pixel coordinate within the tile (0 to 1, top to bottom).
+ * @returns {{lat: number, lon: number}} Latitude and Longitude in degrees.
+ */
+function tileZXYToLatLon(z, x, y, px_norm, py_norm) {
+    const n = Math.pow(2, z);
+    const tileXAbsolute = x + px_norm;
+    const tileYAbsolute = y + py_norm;
+
+    const lon_deg = (tileXAbsolute / n) * 360.0 - 180.0;
+    const lat_rad = Math.atan(Math.sinh(Math.PI * (1 - (2 * tileYAbsolute) / n)));
+    const lat_deg = lat_rad * (180.0 / Math.PI);
+    return { lon: lon_deg, lat: lat_deg };
+}
+
+/**
+ * Converts geodetic coordinates (latitude, longitude, height above WGS84 ellipsoid) to ECEF coordinates.
+ * @param {number} lat Latitude in degrees.
+ * @param {number} lon Longitude in degrees.
+ * @param {number} height Height above the WGS84 ellipsoid in meters.
+ * @returns {{x: number, y: number, z: number}} ECEF coordinates (x, y, z) in meters.
+ */
+function latLonHeightToECEF(lat, lon, height) {
+    const latRad = lat * (Math.PI / 180.0);
+    const lonRad = lon * (Math.PI / 180.0);
+    const cosLat = Math.cos(latRad);
+    const sinLat = Math.sin(latRad);
+    const cosLon = Math.cos(lonRad);
+    const sinLon = Math.sin(lonRad);
+
+    const N = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat); // Radius of curvature in prime vertical
+
+    const ecefX = (N + height) * cosLat * cosLon;
+    const ecefY = (N + height) * cosLat * sinLon;
+    const ecefZ = (N * (1 - WGS84_E2) + height) * sinLat;
+
+    return { x: ecefX, y: ecefY, z: ecefZ };
+}
+// --- End Geodetic Helper Functions ---
+
+let cesiumGridDataSource = null; // For Cesium ZL21 grid entities
+const updateCesiumZL21Grid = function(scene, dataSource) {
+    if (!scene || !dataSource || !selectionTileGrid || !state.olMap || !Cesium || !olcsMapPanel) {
+        // console.warn("updateCesiumZL21Grid: Prerequisites not met (early def).");
+        return;
+    }
+    const viewer = olcsMapPanel.getCesiumViewer();
+    if (!viewer || !viewer.scene || !viewer.camera || !viewer.scene.globe || !viewer.scene.canvas) {
+        // console.warn("updateCesiumZL21Grid: Cesium viewer components not ready (early def).");
+        return;
+    }
+
+    const camera = viewer.camera;
+    const canvas = viewer.scene.canvas;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+
+    let currentViewRectangle = camera.computeViewRectangle(ellipsoid);
+    if (!currentViewRectangle) {
+        const corners = [
+            camera.pickEllipsoid(new Cesium.Cartesian2(0, 0), ellipsoid),
+            camera.pickEllipsoid(new Cesium.Cartesian2(canvas.width, 0), ellipsoid),
+            camera.pickEllipsoid(new Cesium.Cartesian2(0, canvas.height), ellipsoid),
+            camera.pickEllipsoid(new Cesium.Cartesian2(canvas.width, canvas.height), ellipsoid),
+            camera.pickEllipsoid(new Cesium.Cartesian2(canvas.width / 2, canvas.height / 2), ellipsoid)
+        ];
+        const validCorners = corners.filter(c => c);
+        if (validCorners.length >= 2) {
+            currentViewRectangle = Cesium.Rectangle.fromCartesianArray(validCorners, ellipsoid);
+        }
+    }
+
+    if (!currentViewRectangle) {
+        // console.warn("updateCesiumZL21Grid: Could not determine view rectangle. Grid not updated (early def).");
+        return;
+    }
+    
+    const west = Cesium.Math.toDegrees(currentViewRectangle.west);
+    const south = Cesium.Math.toDegrees(currentViewRectangle.south);
+    const east = Cesium.Math.toDegrees(currentViewRectangle.east);
+    const north = Cesium.Math.toDegrees(currentViewRectangle.north);
+
+    const bufferFactor = 0.2;
+    const lonBuffer = Math.abs(east - west) * bufferFactor;
+    const latBuffer = Math.abs(north - south) * bufferFactor;
+
+    const minLon = Math.max(-180.0, west - lonBuffer);
+    const maxLon = Math.min(180.0, east + lonBuffer);
+    const minLat = Math.max(-85.05112878, south - latBuffer);
+    const maxLat = Math.min(85.05112878, north + latBuffer);
+    
+    const viewExtentForOL = [minLon, minLat, maxLon, maxLat];
+
+    const zoom = TILE_SELECTION_ZOOM;
+    const olMapProjection = state.olMap.getView().getProjection();
+    let tileRange;
+
+    try {
+        const transformedExtentForGrid = ol.proj.transformExtent(viewExtentForOL, 'EPSG:4326', olMapProjection);
+        tileRange = selectionTileGrid.getTileRangeForExtentAndZ(transformedExtentForGrid, zoom);
+    } catch (e) {
+        // console.error("Error calculating tile range for Cesium grid (early def):", e);
+        return;
+    }
+
+    if (!tileRange) {
+        // console.warn("updateCesiumZL21Grid: No tile range calculated. Grid not updated (early def).");
+        return;
+    }
+    
+    const MAX_GRID_ENTITIES = 350;
+    let currentEntityCount = dataSource.entities.values.length;
+    let tilesToProcess = [];
+
+    for (let x = tileRange.minX; x <= tileRange.maxX; x++) {
+        for (let y = tileRange.minY; y <= tileRange.maxY; y++) {
+            tilesToProcess.push({x: x, y: y});
+        }
+    }
+    
+    // Smart clearing: If the number of tiles to draw is very different from current, or exceeds max, clear all.
+    // Otherwise, we'd ideally update/remove specific entities (more complex, not done here).
+    if (tilesToProcess.length > MAX_GRID_ENTITIES * 1.2 ||
+        (tilesToProcess.length === 0 && currentEntityCount > 0) ||
+        (currentEntityCount > MAX_GRID_ENTITIES && tilesToProcess.length < currentEntityCount * 0.8) ) {
+        dataSource.entities.removeAll();
+    }
+
+    let addedCount = 0;
+    for (const tile of tilesToProcess) {
+        if (dataSource.entities.values.length + addedCount >= MAX_GRID_ENTITIES) break;
+
+        const tileCoord = [zoom, tile.x, tile.y];
+        const tileId = `cesium-grid-${zoom}-${tile.x}-${tile.y}`;
+
+        if (!dataSource.entities.getById(tileId)) {
+            try {
+                const tileOLGeoJsonExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
+                const tileWGS84Extent = ol.proj.transformExtent(tileOLGeoJsonExtent, olMapProjection, 'EPSG:4326');
+                
+                const westDeg = tileWGS84Extent[0];
+                const southDeg = tileWGS84Extent[1];
+                const eastDeg = tileWGS84Extent[2];
+                const northDeg = tileWGS84Extent[3];
+
+                if (westDeg < eastDeg && southDeg < northDeg &&
+                    westDeg >= -180 && eastDeg <= 180 && southDeg >= -89.99 && northDeg <= 89.99) {
+                    
+                    dataSource.entities.add({
+                        id: tileId,
+                        polyline: {
+                            positions: Cesium.Cartesian3.fromDegreesArray([
+                                westDeg, northDeg, eastDeg, northDeg,
+                                eastDeg, southDeg, westDeg, southDeg,
+                                westDeg, northDeg
+                            ]),
+                            width: 0.7,
+                            material: Cesium.Color.DIMGRAY.withAlpha(0.55),
+                            classificationType: Cesium.ClassificationType.TERRAIN
+                        }
+                    });
+                    addedCount++;
+                }
+            } catch (e) { /* console.warn(`Error processing tile ${tileCoord} for Cesium (early def): ${e}`); */ }
+        }
+    }
+    // if (addedCount > 0) { console.log(`Cesium grid: Added ${addedCount} new entities. Total: ${dataSource.entities.values.length}`); }
+};
 // mundial/main.js - Full version with OpenGlobus focus
 
 document.addEventListener('DOMContentLoaded', () => {
+// Roo Test: DOMContentLoaded started
+// Set Cesium Ion default access token
+    if (typeof Cesium !== 'undefined' && Cesium.Ion) {
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3YmNlMDhkNS0xZDYxLTQ0ZjktODZmOS0wMjU0ODg1MDVjYzYiLCJpZCI6OTkwMjQsImlhdCI6MTc0NzY3NjgzNX0.5os4B_GmIeUHxxUWlz8UkG7HJjltQodu_6b2HwF9JQ4';
+        console.log("CESIUM_ION_TOKEN: Default access token set.");
+    } else {
+        console.warn("CESIUM_ION_TOKEN: Cesium or Cesium.Ion object not found. Cannot set default access token.");
+    }
 
     // --- AGGRESSIVE DEBUGGING FOR #user-layers-panel ---
     const userLayersPanelDebugTarget = document.getElementById('user-layers-panel');
@@ -88,23 +275,418 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingGlobeEarthBtn = document.getElementById('setting-globe-earth'); // Renamed var and ID
     const settingGlobeMoonBtn = document.getElementById('setting-globe-moon');   // Renamed var and ID
     const settingGlobeMarsBtn = document.getElementById('setting-globe-mars');   // Renamed var and ID
+console.log("DEBUG_MARS_BTN: settingGlobeMarsBtn DOM element:", settingGlobeMarsBtn);
     const settingGlobeMetaverseBtn = document.getElementById('setting-globe-metaverse'); // Renamed var and ID
     const settingGlobeCustomBtn = document.getElementById('setting-globe-custom'); // Renamed var and ID
     const settingGlobeITownsBtn = document.getElementById('setting-globe-itowns'); // Added for iTowns
+function updateActiveGlobeButton(activeButtonId) {
+        const globeButtons = [
+            settingGlobeEarthBtn,
+            settingGlobeMoonBtn,
+            settingGlobeMarsBtn,
+            settingGlobeMetaverseBtn,
+            settingGlobeCustomBtn,
+            settingGlobeITownsBtn // Added iTowns button to the array
+        ];
+        globeButtons.forEach(button => {
+            if (button) { 
+                if (button.id === activeButtonId) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            }
+        });
+    }
 
+function switchToEarthView() {
+        console.log("Switching to Earth view...");
+        if (!state.olMap) {
+            console.warn("OpenLayers Map not initialized. Cannot switch to Earth.");
+            return;
+        }
+
+        // Restore OpenLayers
+        if (originalOpenLayersBaseLayerSource && originalOpenLayersViewConfig && state.olMap) {
+            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (baseLayer) {
+                baseLayer.setSource(originalOpenLayersBaseLayerSource);
+            }
+            state.olMap.setView(new ol.View({
+                center: originalOpenLayersViewConfig.center,
+                zoom: originalOpenLayersViewConfig.zoom,
+                projection: originalOpenLayersViewConfig.projection || 'EPSG:3857',
+                maxZoom: originalOpenLayersViewConfig.maxZoom,
+                minZoom: originalOpenLayersViewConfig.minZoom
+            }));
+            console.log("OpenLayers switched to Earth.");
+        } else {
+            console.warn("Original OpenLayers Earth configuration not found or olMap not ready. Re-initializing OpenLayers.");
+             if (state.olMap && typeof state.olMap.dispose === 'function') {
+                state.olMap.dispose();
+             }
+             state.olMap = null;
+             initializeOpenLayersMap(); // This function needs to be defined before this point.
+        }
+
+        // Restore OpenGlobus for Earth
+        if (state.globus && typeof state.globus.planet?.remove === 'function') {
+            state.globus.planet.remove();
+            state.globus = null;
+        }
+        initializeOpenGlobus(); // This function needs to be defined before this point.
+        const itownsContainer = document.getElementById('itowns-container');
+        const globusContainer = document.getElementById('globusContainer');
+        if (itownsContainer) itownsContainer.style.display = 'none';
+        if (globusContainer) globusContainer.style.display = 'block'; // Ensure OpenGlobus container is visible
+        state.activeGlobeLibrary = 'openglobus';
+        console.log("OpenGlobus switched to Earth.");
+        updateActiveGlobeButton('setting-globe-earth');
+    }
     // --- Draggable Panels ---
+function switchToMoonView() {
+        console.log("Switching to Moon view (enhanced)...");
+        const itownsContainer = document.getElementById('itowns-container');
+        const globusContainer = document.getElementById('globusContainer');
+        if (itownsContainer) itownsContainer.style.display = 'none';
+        if (globusContainer) globusContainer.style.display = 'block';
+        state.activeGlobeLibrary = 'openglobus';
+
+        if (!state.olMap) {
+            console.warn("OpenLayers Map not initialized. Cannot switch to Moon.");
+            return;
+        }
+        if (typeof og === 'undefined' || typeof ol === 'undefined') {
+            console.error("OpenGlobus (og) or OpenLayers (ol) library not loaded.");
+            return;
+        }
+
+        // Store original OL config if not already stored (same as before)
+        if (!originalOpenLayersBaseLayerSource && state.olMap && state.olMap.getLayers().getArray().length > 0) {
+            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (baseLayer && baseLayer.getSource()) {
+                originalOpenLayersBaseLayerSource = baseLayer.getSource();
+            }
+            const view = state.olMap.getView();
+            if (view) {
+                originalOpenLayersViewConfig = {
+                    center: view.getCenter(), zoom: view.getZoom(), projection: view.getProjection().getCode(),
+                    maxZoom: view.getMaxZoom(), minZoom: view.getMinZoom()
+                };
+            }
+        }
+
+        // OpenLayers Moon Setup (same as before)
+        const moonOLSource = new ol.source.XYZ({
+            url: 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png',
+            attributions: 'Moon basemap © OPM Builder, CartoDB', maxZoom: 10
+        });
+        const olBaseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+        if (olBaseLayer) olBaseLayer.setSource(moonOLSource);
+        state.olMap.setView(new ol.View({ center: ol.proj.fromLonLat([0, 0], 'EPSG:4326'), zoom: 2, projection: 'EPSG:4326', maxZoom: 10 }));
+        console.log("OpenLayers switched to Moon.");
+
+        // OpenGlobus Moon Setup (Enhanced based on user snippet)
+        if (state.globus && typeof state.globus.planet?.remove === 'function') {
+            state.globus.planet.remove();
+            state.globus = null;
+        }
+
+        const boot = new og.layer.GeoImage("appolo11-bootprint", {
+            src: "packages/openglobus/sandbox/moon/Apollo_11_bootprint.jpg", 
+            corners: [[23.472863189869507,0.6741820158147549],[23.472875965256673,0.6742034484125434],[23.47289972371483,0.6741897726836334],[23.47288761783829,0.6741678165041379]],
+            visibility: true, isBaseLayer: false, opacity: 1.0
+        });
+
+        const mountains = new og.layer.Vector("Mountains", { fading: true, minZoom: 4, scaleByDistance: [0, 3500000, 3800000] });
+        const craters = new og.layer.Vector("Craters", { fading: true, scaleByDistance: [0, 15000000, 25000000] });
+        const lacus = new og.layer.Vector("Lakes", { fading: true, minZoom: 4 });
+        const maria = new og.layer.Vector("Seas And Oceans", { fading: true, maxZoom: 8, scaleByDistance: [0, 15000000, 25000000] });
+        const vallis = new og.layer.Vector("Valleys", { fading: true, scaleByDistance: [0, 15000000, 25000000] });
+
+        const sat = new og.layer.XYZ("moon-sat", { 
+            isBaseLayer: true, url: "https://{s}.terrain.openglobus.org/moon/sat/{z}/{x}/{y}.png",
+            visibility: true, maxNativeZoom: 10, attribution: "Lunar Reconnaissance Orbiter - Global Morphology Mosaic 100m",
+            diffuse: [1.1, 1.1, 1.3], ambient: [0.01, 0.01, 0.02]
+        });
+        const sat2 = new og.layer.XYZ("Lunar QuickMap", {
+            isBaseLayer: true, url: "https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/{z}/{x}/{y}.jpg",
+            visibility: false, attribution: `<a href="https://lunar.quickmap.io">Lunar QuickMap</a>, a collaboration between NASA, Arizona State University & Applied Coherent Technology Corp.`,
+            diffuse: [1.1, 1.1, 1.3], ambient: [0.01, 0.01, 0.02],
+            urlRewrite: (s) => `https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/${s.tileZoom + 1}/${s.tileX}/${s.tileY}.jpg`
+        });
+        const appoloSat = new og.layer.XYZ("APPOLO_SAT", { 
+            isBaseLayer: false, url: "https://{s}.terrain.openglobus.org/moon/sat_appolo/{z}/{x}/{y}.png",
+            visibility: true, maxNativeZoom: 12, extent: [[19.9771, 30.4294], [20.3639, 30.9162]] 
+        });
+
+        const highResTerrain = new og.terrain.RgbTerrain(null, { 
+            geoidSrc: null, maxZoom: 7, url: "https://{s}.terrain.openglobus.org/moon/dem/{z}/{x}/{y}.png",
+            heightFactor: 0.5, minHeight: -20000, resolution: 0.1021,
+            gridSizeByZoom: [64, 32, 16, 16, 32, 64, 64, 32, 16, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2]
+        });
+
+        console.log("DEBUG_OG_MOON: Checking 'og' object before Globe creation. Keys:", og ? Object.keys(og) : "og is undefined");
+        console.log("DEBUG_OG_MOON: Checking 'og.ellipsoid' (still expect undefined):", og ? og.ellipsoid : "og is undefined");
+        console.log("DEBUG_OG_MOON: Checking 'og.moon' (direct access attempt):", og ? og.moon : "og is undefined");
+
+        state.globus = new og.Globe({
+            target: "globusContainer",
+            ellipsoid: og.moon, 
+            name: "Moon", 
+            quadTreeStrategyPrototype: og.quadTreeStrategyType.equi,
+            maxAltitude: 5841727,
+            terrain: highResTerrain,
+            layers: [sat, sat2, /* boot, */ /* appoloSat, */ mountains, craters, maria, vallis, lacus], 
+            nightTextureSrc: null, specularTextureSrc: null, atmosphereEnabled: false,
+            gamma: 1.25, exposure: 2.195,
+            fontsSrc: "packages/openglobus/res/fonts" 
+        });
+        
+        function createLabelEntity(lonlat, text, letterSpacing = 0, outline = 0, offsetY = 0, fontFace = "Ephesis-Regular", fontSize = 21, showSpin = true, color = "white", forceHeight) {
+            const ell = state.globus.planet.ellipsoid;
+            let ll = new og.LonLat(lonlat.lon, lonlat.lat, forceHeight != undefined ? forceHeight : 15000);
+            let res = new og.Entity({
+                lonlat: ll,
+                label: {
+                    size: fontSize, face: fontFace, letterSpacing: letterSpacing, outline: outline,
+                    outlineColor: "rgba(0,0,0,0.89)", text: text, align: "center",
+                    offset: [0, offsetY], color: color
+                }
+            });
+            if (!forceHeight) {
+                highResTerrain.getHeightAsync(ll, (h) => {
+                    ll.height = h + 10000;
+                    if (showSpin) {
+                        let ray = new og.Entity({
+                            ray: {
+                                startPosition: ell.lonLatToCartesian(new og.LonLat(ll.lon, ll.lat, h)),
+                                endPosition: ell.lonLatToCartesian(ll),
+                                startColor: "rgba(255,255,255,0.7)", endColor: "rgba(255,255,255,0.0)",
+                                thickness: 3
+                            }
+                        });
+                        res.appendChild(ray);
+                    }
+                    res.setLonLat(ll);
+                });
+            }
+            return res;
+        }
+
+        if (state.globus.planet) {
+            state.globus.planet.addControl(new og.control.TimelineControl());
+            state.globus.planet.addControl(new og.control.LayerSwitcher());
+            state.globus.planet.addControl(new og.control.ElevationProfileControl());
+            state.globus.planet.addControl(new og.control.RulerSwitcher({ ignoreTerrain: false }));
+
+            if (state.globus.planet.renderer && state.globus.planet.renderer.controls.SimpleSkyBackground) {
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorOne = "rgb(0, 0, 0)";
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorTwo = "rgb(0, 0, 0)";
+            }
+
+            const jsonFiles = ["mountains", "craters", "lacus", "mare", "vallis"];
+            const layerObjects = [mountains, craters, lacus, maria, vallis]; 
+            const labelConfigs = [
+                { offsetY: 30 + 3, fontFace: "Ephesis-Regular", fontSize: 30, color: "rgb(255,255,255)" }, 
+                { offsetY: 0.12, fontFace: "Karla-Medium", fontSize: 16, color: "rgba(255,165,48,1.0)", showSpin: false, textSuffixFn: (f) => `${f.properties.name} ${f.properties.diameter} km` }, 
+                { offsetY: 26 + 3, fontFace: "Karla-Light", fontSize: 26, color: "rgba(155,155,255,0.85)", forceHeight: 15000, showSpin: false }, 
+                { offsetY: 35 + 3, fontFace: "Karla-Light", fontSize: 35, color: "rgba(155,155,255,0.65)", forceHeight: 15000, showSpin: false, textTransform: (f) => f.properties.description.toUpperCase() }, 
+                { offsetY: 21 + 3, fontFace: "Karla-Italic", fontSize: 21, color: "rgba(255,196,137,1.0)", forceHeight: 12000, showSpin: false }
+            ];
+
+            jsonFiles.forEach((file, index) => {
+                fetch(`../packages/openglobus/sandbox/moon/${file}.json`) 
+                    .then((r) => r.json())
+                    .then((data) => {
+                        const config = labelConfigs[index];
+                        let entities = data.features.map((f) => {
+                            let text = config.textSuffixFn ? config.textSuffixFn(f) : (config.textTransform ? config.textTransform(f) : f.properties.name);
+                            return createLabelEntity(
+                                new og.LonLat(f.geometry.coordinates[0], f.geometry.coordinates[1]),
+                                text,
+                                config.letterSpacing, config.outline, config.offsetY, config.fontFace,
+                                config.fontSize, config.showSpin !== undefined ? config.showSpin : true, config.color, config.forceHeight
+                            );
+                        });
+                        layerObjects[index].setEntities(entities);
+                    }).catch(err => console.error(`Error loading or processing ${file}.json:`, err));
+            });
+        }
+        
+        console.log("OpenGlobus switched to Moon (enhanced).");
+        updateActiveGlobeButton('setting-globe-moon');
+    }
     function makeDraggable(elmnt) {
       console.log(`DRAG_DEBUG: makeDraggable called for panel:`, elmnt.id);
       let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-      const dragHandle = elmnt.querySelector('.panel-header') || elmnt.querySelector('h2') || elmnt;
+      // Try to find .panel-header, then .modal-header, then h2, then default to the element itself
+function switchToMarsView() {
+        console.log("switchToMarsView: Function called."); 
+        console.log("Switching to Mars view...");
+        const itownsContainer = document.getElementById('itowns-container');
+        const globusContainer = document.getElementById('globusContainer');
+        if (itownsContainer) itownsContainer.style.display = 'none';
+        if (globusContainer) globusContainer.style.display = 'block';
+        state.activeGlobeLibrary = 'openglobus';
+
+        if (!state.olMap) {
+            console.warn("OpenLayers Map not initialized. Cannot switch to Mars.");
+            return;
+        }
+        if (typeof og === 'undefined' || typeof ol === 'undefined') {
+            console.error("OpenGlobus (og) or OpenLayers (ol) library not loaded.");
+            return;
+        }
+
+        if (!originalOpenLayersBaseLayerSource && state.olMap && state.olMap.getLayers().getArray().length > 0) {
+            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (baseLayer && baseLayer.getSource()) {
+                originalOpenLayersBaseLayerSource = baseLayer.getSource();
+            }
+            const view = state.olMap.getView();
+            if (view) {
+                originalOpenLayersViewConfig = {
+                    center: view.getCenter(), zoom: view.getZoom(), projection: view.getProjection().getCode(),
+                    maxZoom: view.getMaxZoom(), minZoom: view.getMinZoom()
+                };
+            }
+        }
+
+        if (state.olMap) {
+            const marsOLSource = new ol.source.XYZ({
+                url: 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png',
+            });
+            const olBaseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
+            if (olBaseLayer) {
+                olBaseLayer.setSource(marsOLSource);
+            } else { 
+                const newBaseLayer = new ol.layer.Tile({ source: marsOLSource, type: 'base' });
+                state.olMap.getLayers().insertAt(0, newBaseLayer);
+            }
+            state.olMap.setView(new ol.View({
+                center: [0,0], 
+                zoom: 2,       
+                projection: 'EPSG:4326', 
+            }));
+            console.log("OpenLayers switched to Mars basemap.");
+        } else {
+            console.warn("state.olMap not available for Mars OL setup.");
+        }
+
+        if (state.globus && typeof state.globus.planet?.remove === 'function') {
+            state.globus.planet.remove();
+            state.globus = null;
+        }
+
+        const marsSatLayer = new og.layer.XYZ("Mars-Viking", {
+            isBaseLayer: true,
+            url: "https://terrain.openglobus.org/mars/sat/{z}/{x}/{y}.png",
+            maxNativeZoom: 8,
+        });
+
+        const marsHighResTerrain = new og.terrain.RgbTerrain("Mars", { 
+            geoidSrc: null,
+            maxZoom: 8,
+            maxNativeZoom: 8,
+            url: "https://{s}.terrain.openglobus.org/mars/dem/{z}/{x}/{y}.png",
+            heightFactor: 2
+        });
+
+        console.log("DEBUG_OG_MARS: Checking 'og' object before Globe creation. Keys:", og ? Object.keys(og) : "og is undefined");
+        console.log("DEBUG_OG_MARS: Checking 'og.ellipsoid' (still expect undefined):", og ? og.ellipsoid : "og is undefined");
+        console.log("DEBUG_OG_MARS: Checking 'og.mars' (direct access attempt):", og ? og.mars : "og is undefined");
+        
+        state.globus = new og.Globe({
+            target: "globusContainer",
+            ellipsoid: og.mars, 
+            name: "Mars", 
+            quadTreeStrategyPrototype: og.quadTreeStrategyType.equi,
+            terrain: marsHighResTerrain,
+            layers: [marsSatLayer],
+            nightTextureSrc: null,
+            specularTextureSrc: null,
+            fontsSrc: "packages/openglobus/res/fonts",
+        });
+
+        if (state.globus.planet) {
+            state.globus.planet.addControls([new og.control.DebugInfo()]); 
+
+            if (state.globus.planet.renderer && state.globus.planet.renderer.controls.SimpleSkyBackground) {
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorOne = "rgb(183, 133, 135)";
+                state.globus.planet.renderer.controls.SimpleSkyBackground.colorTwo = "rgb(41, 41, 41)";
+            }
+        }
+        
+        console.log("OpenGlobus switched to Mars.");
+        updateActiveGlobeButton('setting-globe-mars');
+    }
+      const dragHandle = elmnt.querySelector('.panel-header') ||
+                         elmnt.querySelector('.modal-header') ||
+                         elmnt.querySelector('h2') ||
+                         elmnt;
       console.log(`DRAG_DEBUG: dragHandle for ${elmnt.id}:`, dragHandle);
 
-      if (dragHandle) {
+      // Ensure the draggable element itself is positioned absolutely to allow dragging
+      // The makeDraggable function should ideally handle this, but let's ensure it for modals.
+      if (elmnt.classList.contains('modal-content')) { // Specific to our modal content
+function initITownsView() {
+        console.log("Initializing iTowns view...");
+        if (state.itownsView) return; // Already initialized
+
+        const itownsContainer = document.getElementById('itowns-container');
+        if (!itownsContainer) {
+            console.error("iTowns container 'itowns-container' not found.");
+            return;
+        }
+
+        // Basic iTowns setup (example)
+        // This is a very minimal setup and will need significant expansion
+        // Refer to iTowns documentation for proper setup: https://itowns.github.io/itowns/
+        try {
+            const placement = {
+                coord: new itowns.Coordinates('EPSG:4326', state.currentLon || 0, state.currentLat || 0),
+                range: 25000000, // Initial viewing range
+            };
+            state.itownsView = new itowns.GlobeView(itownsContainer, placement);
+            
+            // Add a basic imagery layer
+            itowns.Fetcher.json('../packages/itowns/examples/layers/JSONLayers/Ortho.json').then(function _(config) {
+                config.source = new itowns.TMSSource(config.source);
+                let layer = new itowns.ColorLayer('Ortho', config);
+                state.itownsView.addLayer(layer);
+            });
+
+            // Add an elevation layer
+            itowns.Fetcher.json('../packages/itowns/examples/layers/JSONLayers/WORLD_DTM.json').then(function _(config) {
+                config.source = new itowns.WMTSSource(config.source);
+                let layer = new itowns.ElevationLayer('DTM', config);
+                state.itownsView.addLayer(layer);
+            });
+
+            console.log("iTowns view initialized (basic).");
+            // Make sure to call view.notifyChange() if layers are added asynchronously after initial render
+            state.itownsView.notifyChange(true);
+
+
+        } catch (e) {
+            console.error("Error initializing iTowns:", e);
+            state.itownsView = null;
+        }
+        // TODO: Add event listeners for map movement to update state.currentLat/Lon/Zoom
+        // TODO: Implement ZL21 grid display for iTowns
+        // TODO: Implement saved tileset display for iTowns
+        // TODO: Implement click listener for tile info
+    }
+          elmnt.style.position = 'absolute'; // Re-enable for draggability
+      }
+
+
+      if (dragHandle && dragHandle !== elmnt) { // If a specific handle is found
         dragHandle.style.cursor = 'move';
         dragHandle.onmousedown = dragMouseDown;
-      } else {
-        // This case should ideally not happen if panels have headers or are meant to be draggable by body
-        console.warn(`DRAG_DEBUG: No .panel-header or h2 found for ${elmnt.id}, making whole element draggable.`);
+      } else { // If no specific handle, or handle is the element itself
+        console.warn(`DRAG_DEBUG: No specific drag handle (.panel-header, .modal-header, h2) found for ${elmnt.id}. Making whole element draggable.`);
         elmnt.style.cursor = 'move';
         elmnt.onmousedown = dragMouseDown;
       }
@@ -186,43 +768,8 @@ console.log("MODE_BTN_INIT_DEBUG: interactionModeBtn element after getElementByI
 
     let currentInteractionMode = 'pan'; // Initial mode is 'pan'
 
-    // --- Interaction Mode Button Setup ---
-    if (interactionModeBtn) {
-        console.log("MODE_BTN_DEBUG: Attaching listener to interactionModeBtn (early setup).");
-        interactionModeBtn.addEventListener('click', () => {
-            console.log("MODE_BTN_DEBUG: interactionModeBtn clicked. Current mode before change:", currentInteractionMode);
-            if (currentInteractionMode === 'pan') {
-                currentInteractionMode = 'selectTiles';
-                if (dragPanInteraction) {
-                    dragPanInteraction.setActive(false);
-                    console.log("MODE_BTN_DEBUG: dragPanInteraction deactivated.");
-                } else { console.warn("MODE_BTN_DEBUG: dragPanInteraction is null/undefined for deactivation."); }
-                if (dragBoxInteraction) {
-                    dragBoxInteraction.setActive(true);
-                    console.log("MODE_BTN_DEBUG: dragBoxInteraction activated.");
-                } else { console.warn("MODE_BTN_DEBUG: dragBoxInteraction is null/undefined for activation."); }
-            } else { // currentInteractionMode was 'selectTiles'
-                currentInteractionMode = 'pan';
-                if (dragBoxInteraction) {
-                    dragBoxInteraction.setActive(false);
-                    console.log("MODE_BTN_DEBUG: dragBoxInteraction deactivated.");
-                } else { console.warn("MODE_BTN_DEBUG: dragBoxInteraction is null/undefined for deactivation."); }
-                if (dragPanInteraction) {
-                    dragPanInteraction.setActive(true);
-                    console.log("MODE_BTN_DEBUG: dragPanInteraction activated.");
-                } else { console.warn("MODE_BTN_DEBUG: dragPanInteraction is null/undefined for activation."); }
-            }
-            updateInteractionModeUI(currentInteractionMode); // Update cursor
-            console.log("MODE_BTN_DEBUG: New currentInteractionMode:", currentInteractionMode);
-        });
-        // Set initial OL map cursor based on default mode
-        if (state.olMap && state.olMap.getTargetElement()) {
-            state.olMap.getTargetElement().style.cursor = (currentInteractionMode === 'selectTiles' || currentInteractionMode === 'boxselect') ? 'crosshair' : 'grab';
-        }
-        // No longer need to set initial button text here as it's static in HTML
-    } else {
-        console.warn("interactionModeBtn not found at early setup. Mode switching will not work.");
-    }
+    // Removed redundant early setup block for interactionModeBtn (previously lines 771-807).
+    // The primary setup and listener for interactionModeBtn is handled later in the script (around line 2112).
     // --- End Interaction Mode Button Setup ---
     const detailsTilesetImage = document.getElementById('details-tileset-image');
     const detailsTilesetImageUrlInput = document.getElementById('details-tileset-image-url');
@@ -234,9 +781,9 @@ const viewTilesetInCesiumBtn = document.getElementById('view-tileset-in-cesium-b
     const sceneIframe = document.getElementById('scene-iframe'); // Added in index.html
     // Scene panel and its type buttons
     // const scenePanel = document.getElementById('scene-panel'); // Already defined at line 134
-    const sceneType3dtileBtn = document.getElementById('scene-type-3dtile');
-    const sceneTypeUsdBtn = document.getElementById('scene-type-usd');
-    const sceneTypeI3sBtn = document.getElementById('scene-type-i3s');
+    // const sceneType3dtileBtn = document.getElementById('scene-type-3dtile'); // Removed, buttons replaced by dropdown
+    // const sceneTypeUsdBtn = document.getElementById('scene-type-usd');       // Removed
+    // const sceneTypeI3sBtn = document.getElementById('scene-type-i3s');       // Removed
 
     // For OLCesium in map panel
     const olCesiumToggleBtn = document.getElementById('map-view-toggle-btn'); // Renamed for clarity
@@ -272,61 +819,122 @@ const viewTilesetInCesiumBtn = document.getElementById('view-tileset-in-cesium-b
     const usernameInputForChat = document.getElementById('username-input'); // Assumes this ID is for chat username
 
     // DEBUG: Check Scene Panel related elements immediately after declaration
-    console.log("%cSCENE_ELEMENT_CHECK:", "color: purple; font-weight: bold;", {
-        sceneType3dtileBtn_Exists: !!sceneType3dtileBtn,
-        sceneTypeUsdBtn_Exists: !!sceneTypeUsdBtn,
-        sceneTypeI3sBtn_Exists: !!sceneTypeI3sBtn,
-        sceneIframe_Exists: !!sceneIframe,
-        scenePanel_Exists: !!scenePanel
-    });
+    // SCENE_ELEMENT_CHECK log block removed as it referred to obsolete variables.
+    // The line "END DEBUG" that followed this block should remain.
     // END DEBUG
 
     // --- Scene Panel Viewer Logic ---
-    const sceneTypeThreejsBtn = document.getElementById('scene-type-threejs');
+    const sceneTypeDropdown = document.getElementById('scene-type-dropdown'); // New dropdown
     const sceneViewer3dtile = document.getElementById('scene-viewer-3dtile');
     const sceneViewerUsd = document.getElementById('scene-viewer-usd');
     const sceneViewerI3s = document.getElementById('scene-viewer-i3s');
-    const sceneViewerThreejs = document.getElementById('scene-viewer-threejs');
+function setupEditorPanelLogic() {
+    const editorTypeDropdown = document.getElementById('editor-type-dropdown');
+    const editorIframe = document.getElementById('editor-iframe');
 
-    const sceneTypeButtons = [sceneType3dtileBtn, sceneTypeUsdBtn, sceneTypeI3sBtn, sceneTypeThreejsBtn];
-    const sceneViewers = [sceneViewer3dtile, sceneViewerUsd, sceneViewerI3s, sceneViewerThreejs];
-    
-    const sceneViewerMap = {
-        'scene-type-3dtile': sceneViewer3dtile,
-        'scene-type-usd': sceneViewerUsd,
-        'scene-type-i3s': sceneViewerI3s,
-        'scene-type-threejs': sceneViewerThreejs
+    if (!editorTypeDropdown || !editorIframe) {
+        console.warn("Editor panel dropdown or iframe not found. Editor switching will not work.");
+        return;
+    }
+
+    const editorUrlMap = {
+        'polygonjs': 'mundial/packages/polygonjs/index.html', // Path to packaged PolygonJS
+        'wings3d': 'mundial/packages/wings3d/html/index.html',   // Path to packaged Wings3D helper/viewer
+        'nodered': 'about:blank#nodered_requires_url',      // Placeholder - requires user-provided URL
+        // 'retejs': 'about:blank#retejs_placeholder'       // Rete.js option removed
     };
 
-    sceneTypeButtons.forEach(button => {
-        if (button) {
-            button.addEventListener('click', () => {
-                // Deactivate all buttons
-                sceneTypeButtons.forEach(btn => btn && btn.classList.remove('active'));
-                // Activate clicked button
-                button.classList.add('active');
-
-                // Hide all viewers
-                sceneViewers.forEach(viewer => viewer && (viewer.style.display = 'none'));
-                
-                // Show corresponding viewer
-                const targetViewerId = button.id; // e.g., "scene-type-3dtile"
-                const targetViewerElement = sceneViewerMap[targetViewerId];
-
-                if (targetViewerElement) {
-                    targetViewerElement.style.display = 'block';
-                    console.log(`Switched to scene viewer: ${targetViewerElement.id}`);
-                    // TODO: Add logic here to initialize/load content for the specific viewer if needed
-                    // For example, if targetViewerElement.id === 'scene-viewer-threejs' and it's the first time, init Three.js
-                }
-            });
+    function updateEditorIframe() {
+        const selectedEditor = editorTypeDropdown.value;
+        const targetUrl = editorUrlMap[selectedEditor];
+// --- Global Keyboard Shortcut for Interaction Mode Toggle (Ctrl Key) ---
+document.addEventListener('keydown', function(event) {
+    console.log(`[DEBUG_CTRL_GLOBAL] Keydown event: key='${event.key}', ctrlKey=${event.ctrlKey}`); // Log all keydown
+    if (event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+            const activeElement = document.activeElement;
+            if (activeElement && (
+                activeElement.tagName === 'INPUT' ||
+                activeElement.tagName === 'TEXTAREA' ||
+                activeElement.isContentEditable
+            )) {
+                return; // Don't interfere with typing in inputs
+            }
+            event.preventDefault(); 
+            if (interactionModeBtn) {
+                console.log("CTRL_KEY_GLOBAL: Ctrl key pressed, simulating click on interactionModeBtn.");
+                interactionModeBtn.click(); 
+            } else {
+                console.warn("CTRL_KEY_GLOBAL: interactionModeBtn not found, cannot toggle mode via Ctrl key.");
+            }
         }
+        // Note: A previous search suggested a 'B' key shortcut might also be intended.
+        // This can be added here if that functionality is still desired.
+        // Example for 'B' key (case-insensitive):
+        // if (event.key.toLowerCase() === 'b') {
+        //     // Similar logic to avoid input interference
+        //     // Simulate click on interactionModeBtn or call a toggle function
+        // }
     });
+    // --- End Global Keyboard Shortcut ---
+        if (targetUrl) {
+            editorIframe.src = targetUrl;
+            console.log(`Editor iframe src set to: ${targetUrl} for editor: ${selectedEditor}`);
+        } else {
+            console.warn(`No URL defined for editor type: ${selectedEditor}`);
+            editorIframe.src = 'about:blank#error_unknown_editor';
+        }
+    }
 
-    // Set initial active button and viewer for Scene Panel
-    if (sceneType3dtileBtn && sceneViewer3dtile) { // Assuming 3D Tile is default
-        sceneType3dtileBtn.classList.add('active');
-        // sceneViewer3dtile.style.display = 'block'; // Already set by inline style in HTML
+    editorTypeDropdown.addEventListener('change', updateEditorIframe);
+
+    // Initial setup: Set iframe src based on the default selected option in the HTML dropdown.
+    updateEditorIframe(); 
+    
+    console.log("Editor panel logic initialized. Default editor:", editorTypeDropdown.value);
+}
+    const sceneViewerThreejs = document.getElementById('scene-viewer-threejs');
+
+    // Array of all viewer elements for easy iteration
+    const sceneViewers = [sceneViewer3dtile, sceneViewerUsd, sceneViewerI3s, sceneViewerThreejs];
+    
+    // Map dropdown option values to their corresponding viewer elements
+    const sceneViewerMap = {
+        '3dtile': sceneViewer3dtile, // Keys match <option value="...">
+        'usd': sceneViewerUsd,
+        'i3s': sceneViewerI3s,
+        'threejs': sceneViewerThreejs
+    };
+
+    if (sceneTypeDropdown) {
+        sceneTypeDropdown.addEventListener('change', () => {
+            const selectedType = sceneTypeDropdown.value;
+
+            // Hide all viewers
+            sceneViewers.forEach(viewer => viewer && (viewer.style.display = 'none'));
+            
+            // Show corresponding viewer
+            const targetViewerElement = sceneViewerMap[selectedType];
+
+            if (targetViewerElement) {
+                targetViewerElement.style.display = 'block';
+                console.log(`Switched to scene viewer: ${targetViewerElement.id} (type: ${selectedType})`);
+                // TODO: Add logic here to initialize/load content for the specific viewer if needed
+            } else {
+                console.warn(`No viewer found for selected scene type: ${selectedType}`);
+            }
+        });
+
+        // Initial setup: Ensure the default selected viewer (from HTML 'selected' attribute) is visible
+        // This replaces the old "Set initial active button" logic
+        const initialSelectedType = sceneTypeDropdown.value;
+        const initialTargetViewer = sceneViewerMap[initialSelectedType];
+        sceneViewers.forEach(viewer => viewer && (viewer.style.display = 'none')); // Hide all first
+        if (initialTargetViewer) {
+            initialTargetViewer.style.display = 'block';
+            console.log(`Initial scene viewer set to: ${initialTargetViewer.id} (type: ${initialSelectedType})`);
+        }
+    } else {
+        console.warn("Scene type dropdown (#scene-type-dropdown) not found.");
     }
     // --- End Scene Panel Viewer Logic ---
 
@@ -365,18 +973,20 @@ function updateInteractionModeUI(mode) { // Now only updates cursor
             selectionSource.removeFeature(existingFeature);
             selectionChanged = true;
             console.log(`toggleTileSelection: Feature ${tileId} removed. selectionSource count: ${selectionSource.getFeatures().length}`);
-        } else if (!isTileSaved) {
-            // Clear any existing group selection before selecting an individual tile
+        } else { // If not in current selectionSource, add it (regardless of saved status)
+            // If a group was highlighted, clicking an individual tile implies moving away from group selection mode.
+            // We should clear the group highlight, but NOT necessarily the features from selectionSource
+            // if the user intends to add individual tiles to a current (potentially mixed) selection.
             if (window.highlightedGlobeGroupId) {
-                console.log(`toggleTileSelection: Clearing group selection ${window.highlightedGlobeGroupId} before individual tile select.`);
+                console.log(`toggleTileSelection: An individual tile was clicked while group ${window.highlightedGlobeGroupId} was highlighted. Clearing group highlight.`);
                 window.highlightedGlobeGroupId = null;
                 if (typeof highlightListItem === 'function') {
-                    highlightListItem(null); // Clear UI list highlight
+                    highlightListItem(null); // Clear UI list highlight for the group
                 }
-                // Remove group features from selectionSource
-                const groupFeaturesInSelection = selectionSource.getFeatures().filter(f => f.get('isGroupSelection'));
-                groupFeaturesInSelection.forEach(f => selectionSource.removeFeature(f));
-                console.log(`toggleTileSelection: Removed ${groupFeaturesInSelection.length} group features from selectionSource.`);
+                // DECISION: Do NOT remove groupFeaturesInSelection from selectionSource here.
+                // This allows users to click a group (selecting all its tiles), then click individual tiles
+                // to add/remove them from that initial set, or add new unrelated tiles.
+                // The selectionSource will now hold a mix, which is fine for creating a new tileset.
             }
 
             const tileExtent = selectionTileGrid.getTileCoordExtent(tileCoord);
@@ -385,6 +995,7 @@ function updateInteractionModeUI(mode) { // Now only updates cursor
             newFeature.set('isIndividualSelection', true); // Mark as temporary selection
             selectionSource.addFeature(newFeature);
             selectionChanged = true;
+            console.log(`toggleTileSelection: Added feature ${tileId} to selectionSource. selectionSource count: ${selectionSource.getFeatures().length}`);
         }
         updateSelectedTileCountDisplay();
 
@@ -415,6 +1026,246 @@ function updateInteractionModeUI(mode) { // Now only updates cursor
             }
         }
     }
+function updateCesiumTerrainProvider(terrainType) {
+    if (!olcsMapPanel) {
+        console.warn("updateCesiumTerrainProvider: OLCesium panel not initialized. Cannot update terrain.");
+        return;
+    }
+    const scene = olcsMapPanel.getCesiumScene();
+    if (!scene) {
+        console.error("updateCesiumTerrainProvider: Cesium scene not available. Cannot update terrain.");
+        return;
+    }
+
+    console.log(`INIT_OLCS: updateCesiumTerrainProvider called with type: '${terrainType}'`);
+
+    // Ensure a base state (Ellipsoid) before attempting to set a new one.
+    if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+        scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+        console.log("INIT_OLCS: Terrain provider temporarily reset to Ellipsoid before switching.");
+    }
+
+    if (terrainType === 'maptiler_quantized_mesh') {
+        console.log("INIT_OLCS: Attempting to set MapTiler Quantized Mesh terrain.");
+        const userMapTilerApiKey = localStorage.getItem('mapTilerApiKey');
+        if (userMapTilerApiKey && userMapTilerApiKey !== 'YOUR_MAPTILER_API_KEY_PLACEHOLDER') {
+            try {
+                const mapTilerTerrainProvider = new Cesium.CesiumTerrainProvider({
+                    url: `https://api.maptiler.com/tiles/terrain-quantized-mesh/tileset.json?key=${userMapTilerApiKey}`,
+                    requestVertexNormals: true // Optional: request lighting for better visual appearance
+                });
+                scene.terrainProvider = mapTilerTerrainProvider;
+                console.log('[OLCESIUM_TERRAIN] Successfully set MapTiler Quantized Mesh terrain provider.');
+            } catch (e) {
+                console.error('[OLCESIUM_TERRAIN] Error creating or setting MapTiler terrain provider:', e);
+                // scene.terrainProvider remains Ellipsoid from the reset above, log confirms this
+                console.log("INIT_OLCS: MapTiler Quantized Mesh failed, terrain remains Ellipsoid (from initial reset).");
+            }
+        } else {
+            console.log('[OLCESIUM_TERRAIN] MapTiler API key not found or is placeholder. Terrain remains Ellipsoid (from initial reset).');
+            // scene.terrainProvider remains Ellipsoid from the reset above
+        }
+    } else if (terrainType === 'cesium_ion_ellipsoid') {
+        console.log("INIT_OLCS: Setting terrain to 'Cesium Ion / Ellipsoid Fallback'.");
+        if (typeof Cesium.createWorldTerrainAsync === 'function') {
+            console.log("INIT_OLCS: Cesium.createWorldTerrainAsync found. Attempting to set Cesium World Terrain.");
+            Cesium.createWorldTerrainAsync({
+                requestWaterMask: true, 
+                requestVertexNormals: true 
+            }).then(function(terrainProvider) {
+                scene.terrainProvider = terrainProvider;
+                console.log("INIT_OLCS: Cesium World Terrain successfully set via createWorldTerrainAsync. Provider:", scene.terrainProvider);
+            }).catch(function(error) {
+                console.error("INIT_OLCS: Error creating Cesium World Terrain with createWorldTerrainAsync:", error);
+                console.log("INIT_OLCS: Falling back to EllipsoidTerrainProvider due to createWorldTerrainAsync error.");
+                if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                    try {
+                        scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                        console.log("INIT_OLCS: Successfully set EllipsoidTerrainProvider as fallback.");
+                    } catch (e) {
+                         console.error("INIT_OLCS: Error instantiating EllipsoidTerrainProvider as fallback:", e);
+                    }
+                } else {
+                    console.error("INIT_OLCS: EllipsoidTerrainProvider class not available for fallback.");
+                }
+            });
+        } else if (typeof Cesium.createWorldTerrain === 'function') { 
+            console.warn("INIT_OLCS: Cesium.createWorldTerrainAsync NOT found. Falling back to synchronous Cesium.createWorldTerrain.");
+            try {
+                scene.terrainProvider = Cesium.createWorldTerrain({
+                     requestWaterMask: true,
+                     requestVertexNormals: true
+                });
+                console.log("INIT_OLCS: Cesium World Terrain set via synchronous createWorldTerrain. Provider:", scene.terrainProvider);
+            } catch (error) {
+                console.error("INIT_OLCS: Error creating Cesium World Terrain (synchronous):", error);
+                if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                   scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                   console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback after sync createWorldTerrain error.");
+                }
+            }
+        } else {
+            console.error("INIT_OLCS: Neither Cesium.createWorldTerrainAsync nor Cesium.createWorldTerrain is available.");
+            if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                console.log("INIT_OLCS: Set EllipsoidTerrainProvider as a final fallback (no createWorldTerrain methods found).");
+            } else {
+                 console.error("INIT_OLCS: CRITICAL - EllipsoidTerrainProvider also not available. No terrain can be set.");
+            }
+        }
+    // Removed 'arcgis_elevation' case as it was problematic
+    } else if (terrainType === 'arcgis_elevation') {
+        console.log("INIT_OLCS: Setting terrain to 'ArcGIS World Elevation'.");
+        if (typeof Cesium.ArcGISTiledElevationTerrainProvider === 'function') {
+            console.log("INIT_OLCS: Cesium.ArcGISTiledElevationTerrainProvider class found.");
+            let arcgisTerrainProviderInstance;
+            try {
+                const arcGisTerrainUrl = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
+                arcgisTerrainProviderInstance = new Cesium.ArcGISTiledElevationTerrainProvider({
+                    url: arcGisTerrainUrl
+                });
+                console.log("INIT_OLCS: ArcGISTiledElevationTerrainProvider instantiated:", arcgisTerrainProviderInstance);
+
+                if (!arcgisTerrainProviderInstance) { // Should not happen if constructor doesn't throw
+                    console.error("INIT_OLCS: ArcGISTiledElevationTerrainProvider instantiation returned null/undefined. Falling back.");
+                    throw new Error("ArcGIS provider instantiation failed silently.");
+                }
+
+                if (arcgisTerrainProviderInstance.ready === true) { // Check synchronous readiness
+                    console.log("INIT_OLCS: ArcGIS Terrain Provider is ALREADY READY. Setting directly.");
+                    scene.terrainProvider = arcgisTerrainProviderInstance;
+                } else if (arcgisTerrainProviderInstance.readyPromise && typeof arcgisTerrainProviderInstance.readyPromise.then === 'function') {
+                    console.log("INIT_OLCS: ArcGIS: readyPromise found and is a promise. Waiting...");
+                    arcgisTerrainProviderInstance.readyPromise.then(() => {
+                        if (arcgisTerrainProviderInstance.ready) {
+                            scene.terrainProvider = arcgisTerrainProviderInstance;
+                            console.log("INIT_OLCS: ArcGIS Terrain Provider is ready (via promise) and set.");
+                        } else {
+                            console.error("INIT_OLCS: ArcGIS Terrain Provider readyPromise resolved, but provider not ready. Falling back.");
+                            if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                                console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback (ArcGIS not ready after promise).");
+                            }
+                        }
+                    }).catch(function(error) {
+                        console.error("INIT_OLCS: ArcGIS Terrain Provider readyPromise failed:", error);
+                        if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                            scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                            console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback after ArcGIS readyPromise error.");
+                        }
+                    });
+                } else {
+                    console.error("INIT_OLCS: ArcGIS: readyPromise not valid or provider not ready sync. Falling back. readyPromise type:", typeof arcgisTerrainProviderInstance.readyPromise, "provider.ready:", arcgisTerrainProviderInstance.ready);
+                    if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                        scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                        console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback (ArcGIS no valid readyPromise/not ready).");
+                    }
+                }
+            } catch (error) {
+                console.error("INIT_OLCS: Error during ArcGISTiledElevationTerrainProvider instantiation or setup:", error);
+                if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                    scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                    console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback after ArcGIS instantiation error.");
+                }
+            }
+        } else {
+            console.error("INIT_OLCS: Cesium.ArcGISTiledElevationTerrainProvider class is not available. Falling back.");
+            if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                console.log("INIT_OLCS: Set EllipsoidTerrainProvider as a final fallback (ArcGIS provider class missing).");
+            }
+        }
+    } else if (terrainType === 'maptiler_terrain') {
+        console.log("INIT_OLCS: Setting terrain to 'MapTiler Terrain'.");
+        if (typeof Cesium.MapTilerTerrainProvider === 'function') {
+            console.log("INIT_OLCS: Cesium.MapTilerTerrainProvider class found.");
+            let mapTilerInstance;
+            try {
+                if (typeof mapTilerKey === 'undefined' || !mapTilerKey) {
+                    console.error("INIT_OLCS: mapTilerKey is not defined or empty. Cannot use MapTilerTerrainProvider. Falling back.");
+                    throw new Error("MapTiler API key not available for terrain.");
+                }
+                mapTilerInstance = new Cesium.MapTilerTerrainProvider({
+                    url: 'https://api.maptiler.com/tiles/terrain-quantized-mesh-v2/',
+                    apiKey: mapTilerKey
+                });
+                console.log("INIT_OLCS: MapTilerTerrainProvider instantiated:", mapTilerInstance);
+
+                if (!mapTilerInstance) {
+                     console.error("INIT_OLCS: MapTilerTerrainProvider instantiation returned null/undefined. Falling back.");
+                     throw new Error("MapTiler provider instantiation failed silently.");
+                }
+
+                if (mapTilerInstance.ready === true) {
+                    console.log("INIT_OLCS: MapTiler Terrain Provider is ALREADY READY. Setting directly.");
+                    scene.terrainProvider = mapTilerInstance;
+                } else if (mapTilerInstance.readyPromise && typeof mapTilerInstance.readyPromise.then === 'function') {
+                    console.log("INIT_OLCS: MapTiler: readyPromise found. Waiting...");
+                    mapTilerInstance.readyPromise.then(() => {
+                        if (mapTilerInstance.ready) {
+                            scene.terrainProvider = mapTilerInstance;
+                            console.log("INIT_OLCS: MapTiler Terrain Provider is ready (via promise) and set.");
+                        } else {
+                            console.error("INIT_OLCS: MapTiler Terrain readyPromise resolved, but provider not ready. Falling back.");
+                            if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                                console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback (MapTiler not ready after promise).");
+                            }
+                        }
+                    }).catch(function(error) {
+                        console.error("INIT_OLCS: MapTiler Terrain readyPromise failed:", error);
+                        if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                            scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                            console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback after MapTiler readyPromise error.");
+                        }
+                    });
+                } else {
+                    console.error("INIT_OLCS: MapTiler: readyPromise not valid or provider not ready sync. Falling back. readyPromise type:", typeof mapTilerInstance.readyPromise, "provider.ready:", mapTilerInstance.ready);
+                    if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                        scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                        console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback (MapTiler no valid readyPromise/not ready).");
+                    }
+                }
+            } catch (error) {
+                console.error("INIT_OLCS: Error during MapTilerTerrainProvider setup:", error);
+                if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                    scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                    console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback after MapTiler error.");
+                }
+            }
+        } else {
+            console.error("INIT_OLCS: Cesium.MapTilerTerrainProvider class is not available. Falling back.");
+            if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                console.log("INIT_OLCS: Set EllipsoidTerrainProvider as fallback (MapTiler class missing).");
+            }
+        }
+    } else if (terrainType === 'custom_terrain') {
+        console.log("INIT_OLCS: 'Custom Terrain URL' selected. This feature is not yet implemented. Defaulting to Ellipsoid.");
+        if (typeof Cesium.EllipsoidTerrainProvider === 'function') { // Ensure Ellipsoid if custom not implemented
+            scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+            console.log("INIT_OLCS: Set EllipsoidTerrainProvider for custom_terrain placeholder.");
+        }
+    } else if (terrainType === 'ellipsoid_only') {
+        console.log("INIT_OLCS: Setting terrain to 'Ellipsoid Only'.");
+        if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+            try {
+                scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                console.log("INIT_OLCS: Successfully set scene.terrainProvider to new EllipsoidTerrainProvider.");
+            } catch (e) {
+                console.error("INIT_OLCS: Error instantiating EllipsoidTerrainProvider for 'ellipsoid_only':", e);
+            }
+        } else {
+            console.error("INIT_OLCS: Cesium.EllipsoidTerrainProvider class is not available. Cannot set any terrain.");
+        }
+    } else {
+        console.warn(`INIT_OLCS: Unknown terrain type: '${terrainType}'. Defaulting to Ellipsoid.`);
+        if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+            scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+            console.log("INIT_OLCS: Set EllipsoidTerrainProvider as default for unknown type.");
+        }
+    }
+}
     
     function updateSelectedTileCountDisplay() {
         if (!selectionSource || !selectedTileCountDisplay) return;
@@ -433,7 +1284,7 @@ function updateInteractionModeUI(mode) { // Now only updates cursor
     }
 
     // Event listener for the save selection button
-    if (saveSelectionBtn) {
+    if (false && saveSelectionBtn) { // Effectively disable this older, conflicting listener
         saveSelectionBtn.addEventListener('click', () => {
             if (!selectionSource || selectionSource.getFeatures().length === 0) {
                 alert("No tiles selected to save.");
@@ -445,8 +1296,9 @@ function updateInteractionModeUI(mode) { // Now only updates cursor
             }
             const name = tilesetNameInput.value.trim();
             if (!name) {
-                alert("Please enter a name for the tileset.");
-                return;
+                // alert("Please enter a name for the tileset."); // Suppressed this alert
+                // return; // Allow to proceed, backend or later logic might handle/default name
+                console.warn("[SAVE_TILESET_OLD_LISTENER] Tileset name was empty. Proceeding, expecting auto-generation or backend handling if this path is still active.");
             }
 
             const targetLayer = window.userLayers[window.selectedLayerId].layer;
@@ -598,6 +1450,8 @@ window.highlightedGlobeGroupId = null; // Clear globe highlight
         updateSelectedTileCountDisplay(); // Reset tile count display
     }
 function loadTestTilesetToLayer0() {
+        // console.log("[DEBUG_LAYER0] loadTestTilesetToLayer0 CALLED."); // Debug log removed
+        // console.log("[DEBUG_LAYER0] Initial status: layer0Source:", layer0Source ? "Exists" : "NULL", "state.olMap:", state.olMap ? "Exists" : "NULL", "selectionTileGrid:", selectionTileGrid ? "Exists" : "NULL"); // Debug log removed
         if (!window.olMap || !layer0Source || !selectionTileGrid) {
             console.error("loadTestTilesetToLayer0: Prerequisites not met (olMap, layer0Source, or selectionTileGrid).");
             return;
@@ -633,7 +1487,12 @@ function loadTestTilesetToLayer0() {
         });
 
         if (featuresToAdd.length > 0) {
+            // console.log(`[DEBUG_LAYER0] Attempting to add ${featuresToAdd.length} features. First feature props:`, featuresToAdd[0] ? JSON.stringify(featuresToAdd[0].getProperties()) : "N/A"); // Debug log removed
+            const featuresBeforeAdd = layer0Source ? layer0Source.getFeatures().length : 'N/A (layer0Source missing)';
+            // console.log(`[DEBUG_LAYER0] Features in layer0Source before addFeatures: ${featuresBeforeAdd}`); // Debug log removed
             layer0Source.addFeatures(featuresToAdd);
+            const featuresAfterAdd = layer0Source ? layer0Source.getFeatures().length : 'N/A (layer0Source missing)';
+            // console.log(`[DEBUG_LAYER0] Features in layer0Source after addFeatures: ${featuresAfterAdd}`); // Debug log removed
             if (window.olMap) { // Ensure map redraws to show new features
                 window.olMap.render();
             }
@@ -692,11 +1551,13 @@ function loadTestTilesetToLayer0() {
 
     // Define style functions BEFORE they are needed by initializeOpenLayersMap
     const createTilesetStyle = (feature) => {
-        const color = feature.get('color') || '#33CCFF'; // Brighter default: Bright Sky Blue
-        const fillOpacity = feature.get('fillOpacity') === undefined ? 0.6 : feature.get('fillOpacity'); // Default fill opacity (more fill)
-        const strokeWidth = feature.get('strokeWidth') === undefined ? 0.5 : feature.get('strokeWidth'); // Default stroke width (less stroke)
-
-        // Convert hex color and opacity to rgba for fill
+        // Reverted to simpler style, similar to Tessellar:
+        // Always use feature's color/opacity for fill and stroke.
+        // 'showTexture' property will only affect GLTF generation.
+        const color = feature.get('color') || '#33CCFF';
+        const fillOpacity = feature.get('fillOpacity') === undefined ? 0.4 : feature.get('fillOpacity'); // Default opacity from previous version
+        const strokeWidth = feature.get('strokeWidth') === undefined ? 0.5 : feature.get('strokeWidth');
+        
         let r = 0, g = 0, b = 0;
         if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(color)) {
             let c = color.substring(1).split('');
@@ -705,18 +1566,18 @@ function loadTestTilesetToLayer0() {
             r = (c >> 16) & 255;
             g = (c >> 8) & 255;
             b = c & 255;
-        } else if (color.startsWith('rgba')) { // Handle if color is already rgba (e.g. from picker with alpha)
+        } else if (color.startsWith('rgba')) {
             const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d\.]+))?\)/);
             if (match) {
                 r = parseInt(match[1]);
                 g = parseInt(match[2]);
                 b = parseInt(match[3]);
-                // If an alpha is in the color string, it's ignored here as fillOpacity is separate
             }
         }
+
         const fillColorRgba = `rgba(${r},${g},${b},${fillOpacity})`;
-        // Use the original color for stroke, but ensure full opacity for the stroke itself
-        const strokeColorRgba = color.startsWith('rgba') ? `rgba(${r},${g},${b},1)` : color;
+        // For stroke, use the base color but ensure it's fully opaque
+        const strokeColorRgba = `rgba(${r},${g},${b},1)`;
 
         return new ol.style.Style({
             stroke: new ol.style.Stroke({
@@ -802,7 +1663,7 @@ function initializeITowns() {
                 })
             });
             console.log("%cDEBUG: ol.Map constructor SUCCEEDED. state.olMap object created.", "color: green; font-weight: bold;", state.olMap);
-
+            window.olMap = state.olMap; // Ensure window.olMap is also set for compatibility
             // ZL21 Grid Setup for OpenLayers
             const gridStyleZ21 = new ol.style.Style({ stroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 1 }) });
             const gridSourceZ21 = new ol.source.Vector();
@@ -859,7 +1720,11 @@ function initializeITowns() {
             layer0Layer.set('userLayerName', layer0Name);
             window.userLayers = { [layer0Id]: { name: layer0Name, layer: layer0Layer, tilesetCount: 0, isPublic: true } }; // Attach to window for broader access if needed
             window.selectedLayerId = layer0Id; // Attach to window
-            
+            if (typeof addLayerToList === 'function') {
+                addLayerToList(layer0Id, layer0Name, true); // Add Layer 0 to the UI list
+            } else {
+                console.error("addLayerToList function is not defined when trying to add Layer 0 to UI list.");
+            }
             state.olMap.addLayer(layer0Layer); // Use state.olMap
             console.log("DEBUG: Added Layer 0 for user tilesets to OpenLayers map.");
 
@@ -899,6 +1764,9 @@ function initializeITowns() {
 
             const clickSelectHandler = function (evt) {
                 console.log(`clickSelectHandler triggered. Current interaction mode: ${currentInteractionMode}`, evt.coordinate);
+                // Click handler logic restored:
+
+                // Original logic below, now bypassed:
                 // Rest of clickSelectHandler logic... (already present from previous diffs, ensure it uses the higher-scoped selectionSource etc.)
                 // For brevity, not repeating the entire function here, but it should be the one defined earlier.
                 // Make sure it correctly calls toggleTileSelection and updateSelectedTileCountDisplay
@@ -967,13 +1835,33 @@ function initializeITowns() {
                     }
                 } else {
                     // This is the path for individual tile selection if no group was clicked
-                    if (selectionSource) {
-                        const isGroupCurrentlySelected = selectionSource.getFeatures().some(f => f.get('isGroupSelection'));
-                        if (isGroupCurrentlySelected) clearMapSelectionAndDetails(); // Clear group selection if selecting individual tile
+                    console.log("[ClickSelect] Path for individual tile selection entered.");
+
+                    // If a tileset group was active in the details modal, deactivate it.
+                    if (currentEditingGroupId) {
+                        console.log(`[ClickSelect] An active tileset group ('${currentEditingGroupId}') was detailed. Deactivating it now.`);
+                        currentEditingGroupId = null;
+                        if (tilesetDetailsModal) {
+                            tilesetDetailsModal.style.display = 'none';
+                        }
+                        if (typeof unhighlightAllListItems === 'function') {
+                            unhighlightAllListItems(); // Deselect from UI list
+                        }
+                        // Note: We are NOT clearing selectionSource here, as the user is starting/continuing an individual tile selection.
                     }
+
+                    // If selectionSource contains features from a previously displayed group, clear those specific features.
+                    if (selectionSource) {
+                        const groupFeaturesInSelection = selectionSource.getFeatures().filter(f => f.get('isGroupSelection') === true);
+                        if (groupFeaturesInSelection.length > 0) {
+                            console.log("[ClickSelect] Removing previously displayed group features from current selectionSource.");
+                            groupFeaturesInSelection.forEach(f => selectionSource.removeFeature(f));
+                        }
+                    }
+                    
                     const tileCoord = selectionTileGrid.getTileCoordForCoordAndZ(coordinate, TILE_SELECTION_ZOOM);
                     if (typeof toggleTileSelection === 'function') {
-                        toggleTileSelection(tileCoord); // This handles individual tile add/remove and calls ogSavedTilesetsLayer.clear()
+                        toggleTileSelection(tileCoord); // This handles individual tile add/remove
                     } else {
                         console.error("clickSelectHandler: toggleTileSelection function is not defined!");
                     }
@@ -1006,15 +1894,15 @@ function initializeITowns() {
                 isShiftKeyPressed = ol.events.condition.shiftKeyOnly(event.mapBrowserEvent);
                 console.log("Shift key pressed:", isShiftKeyPressed);
                 
-                // If shift key is not pressed, clear the existing selection
-                // If shift key is pressed, keep the selection to add to it
-                if (!isShiftKeyPressed) {
-                    const isGroupCurrentlySelected = selectionSource.getFeatures().some(f => f.get('isGroupSelection'));
-                    if (isGroupCurrentlySelected || selectionSource.getFeatures().length > 0) {
-                        console.log("Clearing previous selection since shift key is not pressed.");
-                        clearMapSelectionAndDetails();
-                    }
+                // Modified behavior: Drag-box selection will now always add to the current selection.
+                // The check for isShiftKeyPressed to clear selection has been removed.
+                // Users can clear selection using the "Clear Selection" button or by clicking individual tiles to deselect.
+                if (isShiftKeyPressed) {
+                    console.log("DragBox started with Shift key - will add to selection.");
+                } else {
+                    console.log("DragBox started without Shift key - will also add to selection (new behavior).");
                 }
+                // No longer clearing selection here based on shift key.
             });
 
             dragBoxInteraction.on('boxend', function() {
@@ -1045,22 +1933,8 @@ function initializeITowns() {
                 let tilesAdded = 0;
                 selectionTileGrid.forEachTileCoord(boxExtent, TILE_SELECTION_ZOOM, function (tileCoord) {
                     const tileId = getTileId(tileCoord);
-document.addEventListener('keydown', function(event) {
-        // Toggle interaction mode with Ctrl key (ensure no other modifiers like Alt or Shift are pressed with it)
-        if (event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
-            // Check for common input fields to avoid interference
-            const activeElement = document.activeElement;
-            if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable)) {
-                return; // Don't interfere with typing in inputs
-            }
-
-            event.preventDefault(); // Prevent default Ctrl key actions if any
-            if (interactionModeBtn) {
-                console.log("CTRL_KEY_DEBUG: Ctrl key pressed, simulating click on interactionModeBtn.");
-                interactionModeBtn.click(); // Simulate a click on the button
-            }
-        }
-    });
+                        // Incorrectly nested keydown listener removed from here.
+                        // A correctly placed keydown listener exists elsewhere or will be added.
                     console.log(`DRAGBOX_BOXEND: Iterating for tileCoord: ${tileCoord}, tileId: ${tileId}`);
                     if (!existingTileIdsInLayer.has(tileId)) { // Only add if not already in the saved layer
                         console.log(`DRAGBOX_BOXEND: Tile ${tileId} not in saved layer, calling addTileToSelection.`);
@@ -1168,18 +2042,14 @@ function setupXRPanelLogic() {
     console.log("DEBUG: setupXRPanelLogic called.");
     setTimeout(() => {
         const xrIframe = document.getElementById('xr-iframe');
-        const xrEngineSelector = document.getElementById('xr-engine-selector');
+        const xrEngineDropdown = document.getElementById('xr-engine-dropdown'); // Changed ID
         console.log("%cDEBUG (deferred): xrIframe element:", "color: purple", xrIframe);
-        console.log("%cDEBUG (deferred): xrEngineSelector element:", "color: purple", xrEngineSelector);
+        console.log("%cDEBUG (deferred): xrEngineDropdown element:", "color: purple", xrEngineDropdown); // Changed variable name
 
-        if (xrEngineSelector && xrIframe) {
-            xrEngineSelector.addEventListener('click', (event) => {
-                if (event.target.classList.contains('xr-engine-btn')) {
-                    const engineButtons = xrEngineSelector.querySelectorAll('.xr-engine-btn');
-                    engineButtons.forEach(btn => btn.classList.remove('active'));
-                    event.target.classList.add('active');
-
-                    const engine = event.target.dataset.engine;
+        if (xrEngineDropdown && xrIframe) { // Changed variable name
+            xrEngineDropdown.addEventListener('change', (event) => { // Changed event to 'change' and target
+                // No need to check class or manage active states for a dropdown
+                const engine = event.target.value; // Get value from dropdown
                     let targetUrl = '';
                     console.log(`XR Engine selected: ${engine}`);
 
@@ -1254,10 +2124,9 @@ function setupXRPanelLogic() {
                         xrIframe.src = targetUrl;
                         xrIframe.dataset.currentEngine = engine; // Store current engine
                     }
-                }
             });
         } else {
-            console.error("XR panel elements (xr-engine-selector or xr-iframe) not found (deferred).");
+            console.error("XR panel elements (xr-engine-dropdown or xr-iframe) not found (deferred).");
         }
     }, 0); // setTimeout to ensure DOM elements are likely available
 }
@@ -1269,7 +2138,12 @@ function setupXRPanelLogic() {
         // This should be handled in initializeOpenLayersMap: dragPan active, dragBox inactive.
 
         interactionModeBtn.addEventListener('click', function() {
-            if (!window.olMap) return;
+            console.log("[DEBUG_CTRL_BTN] interactionModeBtn CLICKED.");
+            console.log(`[DEBUG_CTRL_BTN] Status: window.olMap: ${window.olMap ? 'Exists' : 'NULL'}, dragPanInteraction: ${dragPanInteraction ? 'Exists' : 'NULL'}, dragBoxInteraction: ${dragBoxInteraction ? 'Exists' : 'NULL'}`);
+            if (!window.olMap) {
+                console.error("[DEBUG_CTRL_BTN] window.olMap is NULL. Aborting interaction toggle.");
+                return;
+            }
             
             if (currentInteractionMode === 'pan') {
                 // Switch to Box Select mode
@@ -1277,15 +2151,22 @@ function setupXRPanelLogic() {
                 if (dragPanInteraction) dragPanInteraction.setActive(false);
                 if (dragBoxInteraction) dragBoxInteraction.setActive(true);
                 console.log("Switched to Box Select mode (dragPan: off, dragBox: on)");
+                if (dragPanInteraction && dragBoxInteraction) {
+                    console.log(`[DEBUG_CTRL_BTN] Post-setActive (BoxSelect): dragPan.getActive()=${dragPanInteraction.getActive()}, dragBox.getActive()=${dragBoxInteraction.getActive()}`);
+                }
             } else { // currentInteractionMode was 'boxselect'
                 // Switch to Pan mode
                 currentInteractionMode = 'pan';
                 if (dragBoxInteraction) dragBoxInteraction.setActive(false);
                 if (dragPanInteraction) dragPanInteraction.setActive(true);
                 console.log("Switched to Pan Map mode (dragPan: on, dragBox: off)");
+                if (dragPanInteraction && dragBoxInteraction) {
+                    console.log(`[DEBUG_CTRL_BTN] Post-setActive (Pan): dragPan.getActive()=${dragPanInteraction.getActive()}, dragBox.getActive()=${dragBoxInteraction.getActive()}`);
+                }
             }
             
             updateInteractionModeUI(currentInteractionMode);
+            if (state.olMap) { state.olMap.render(); console.log("[DEBUG_CTRL_BTN] Forced OL map render after UI update."); }
         });
     }
     // Attach boxend event handler for dragBoxInteraction
@@ -1336,6 +2217,28 @@ function setupXRPanelLogic() {
     if (window.olMap) {
         window.olMap.on('singleclick', clickSelectHandler);
     }
+// --- Global Keyboard Shortcut for Interaction Mode Toggle ---
+    document.addEventListener('keydown', function(event) {
+        // Toggle interaction mode with Ctrl key (ensure no other modifiers like Alt or Shift are pressed with it)
+        if (event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+            const activeElement = document.activeElement;
+            // Check if focus is on an input element to avoid interfering with text input shortcuts
+            if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable)) {
+                return; // Don't interfere with typing
+            }
+
+            event.preventDefault(); // Prevent default browser actions for Ctrl key if we're handling it
+            
+            if (interactionModeBtn) {
+                console.log("CTRL_KEY_SHORTCUT: Ctrl key pressed, simulating click on interactionModeBtn.");
+                interactionModeBtn.click(); // Simulate a click on the button
+            } else {
+                console.warn("CTRL_KEY_SHORTCUT: interactionModeBtn not found, cannot toggle mode.");
+            }
+        }
+        // TODO: Consider adding 'B' key toggle here as well, as hinted by a previous comment if that functionality is desired.
+    });
+    // --- End Global Keyboard Shortcut ---
 
     // Make sure dragBoxInteraction is properly added to the map
     if (window.olMap && dragBoxInteraction) {
@@ -1926,16 +2829,182 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
         console.warn("DEBUG: tilesetListDiv not found, event listeners not attached.");
     }
 
+let thumbnailRenderer, thumbnailScene, thumbnailCamera, thumbnailControls; // Keep references for potential cleanup/resize
+
+function initThumbnailViewer(containerId, tilesetGroupId) {
+    console.log(`[THUMBNAIL_3D] Initializing for container ${containerId}, tileset ID: ${tilesetGroupId}`);
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error(`[THUMBNAIL_3D] Container element #${containerId} not found.`);
+        return;
+    }
+
+    if (typeof THREE === 'undefined') {
+        console.error("[THUMBNAIL_3D] THREE.js is not loaded.");
+        container.innerHTML = '<p style="color:red;padding:5px;">THREE.js missing</p>';
+        return;
+    }
+    if (typeof THREE.GLTFLoader === 'undefined') { // Check global THREE.GLTFLoader
+        console.error("[THUMBNAIL_3D] THREE.GLTFLoader is not loaded. Ensure it's included via CDN or script tag.");
+        container.innerHTML = '<p style="color:red;padding:5px;">GLTFLoader missing</p>';
+        return;
+    }
+     if (typeof THREE.OrbitControls === 'undefined') { // Check global THREE.OrbitControls
+        console.warn("[THUMBNAIL_3D] THREE.OrbitControls is not loaded. Ensure it's included via CDN or script tag. Navigation will be limited.");
+    }
+
+    // Clear previous content / renderer
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+    if (thumbnailRenderer) {
+        thumbnailRenderer.dispose(); // Dispose of old renderer resources
+    }
+
+    // Scene
+    thumbnailScene = new THREE.Scene();
+    thumbnailScene.background = new THREE.Color(0xf0f0f0); // Match div background
+
+    // Add XYZ axes helper for debugging
+    const axesHelper = new THREE.AxesHelper(2); // Size 2, adjust as needed
+    thumbnailScene.add(axesHelper);
+    console.log("[THUMBNAIL_3D] AxesHelper added to scene.");
+
+    // Camera
+    const aspect = container.clientWidth / container.clientHeight;
+    thumbnailCamera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+    thumbnailCamera.position.set(2, 2, 3); // Adjust as needed
+    thumbnailCamera.lookAt(0, 0, 0);
+
+    // Renderer
+    thumbnailRenderer = new THREE.WebGLRenderer({ antialias: true });
+    // Deferring setSize to ensure container has dimensions after modal display
+    requestAnimationFrame(() => {
+        if (container && thumbnailRenderer) { // Check again in case of race condition
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            if (width > 0 && height > 0) {
+                thumbnailRenderer.setSize(width, height);
+                thumbnailCamera.aspect = width / height;
+                thumbnailCamera.updateProjectionMatrix();
+                console.log(`[THUMBNAIL_3D] Renderer size set to: ${width}x${height}`);
+            } else {
+                console.warn("[THUMBNAIL_3D] Container for renderer still has zero dimensions even after rAF.", {width, height});
+                // Fallback size if needed, or rely on default
+                // thumbnailRenderer.setSize(200, 150); // Example fallback
+            }
+        }
+    });
+    thumbnailRenderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(thumbnailRenderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    thumbnailScene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 10, 7.5);
+    thumbnailScene.add(directionalLight);
+
+    // Controls
+    if (typeof THREE.OrbitControls !== 'undefined') { // Check global THREE.OrbitControls
+        thumbnailControls = new THREE.OrbitControls(thumbnailCamera, thumbnailRenderer.domElement); // Use global THREE.OrbitControls
+        thumbnailControls.enableZoom = true;
+        thumbnailControls.enablePan = true;
+        thumbnailControls.target.set(0, 0, 0);
+        thumbnailControls.update();
+    } else {
+        // console.warn("[THUMBNAIL_3D] THREE.OrbitControls is not loaded. Ensure it's included via CDN or script tag. Navigation will be limited.");
+        thumbnailControls = null;
+    }
+    
+    // Load GLTF model
+    if (window.latestGeneratedGltf && window.latestGeneratedGltf.id === tilesetGroupId && window.latestGeneratedGltf.data) {
+        console.log(`[THUMBNAIL_3D] Found GLTF data for ${tilesetGroupId}. Loading...`);
+        const loader = new THREE.GLTFLoader(); // Use global THREE.GLTFLoader
+        // The data is already a parsed JSON object from GLTFExporter
+        // GLTFLoader.parse needs the raw string or ArrayBuffer if it was from a file.
+        // For now, assuming latestGeneratedGltf.data is the object structure GLTFExporter gives.
+        // If it's a string, it needs JSON.parse. If it's binary, it needs different handling.
+        // GLTFExporter's output (when binary:false) is a JS object. GLTFLoader.parse expects this.
+        
+        loader.parse(JSON.stringify(window.latestGeneratedGltf.data), '', (gltf) => {
+            console.log("[THUMBNAIL_3D] GLTF loaded successfully into thumbnail.", gltf.scene);
+
+            // Auto-center and scale model
+            const box = new THREE.Box3().setFromObject(gltf.scene);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = thumbnailCamera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+            cameraZ *= 1.5; // zoom out a bit
+            
+            thumbnailCamera.position.copy(center);
+            thumbnailCamera.position.x += size.x / 2; // Adjust for better side view
+            thumbnailCamera.position.y += size.y / 2;
+            thumbnailCamera.position.z += cameraZ;
+            thumbnailCamera.lookAt(center);
+            
+            if(thumbnailControls) thumbnailControls.target.copy(center);
+
+            gltf.scene.position.sub(center); // Center the model at origin
+            gltf.scene.scale.set(0.998, 0.998, 0.998); // Slightly scale down to avoid edge clipping
+            thumbnailScene.add(gltf.scene);
+            if(thumbnailControls) thumbnailControls.update();
+        }, (error) => {
+            console.error("[THUMBNAIL_3D] Error parsing GLTF for thumbnail:", error);
+            container.innerHTML = '<p style="color:red;padding:5px;">Error loading 3D model.</p>';
+        });
+    } else {
+        console.log(`[THUMBNAIL_3D] No GLTF data found for tileset ID: ${tilesetGroupId} in window.latestGeneratedGltf.`);
+        container.innerHTML = '<p style="color:grey;padding:5px;text-align:center;">3D Preview N/A</p>';
+    }
+
+    // Animation loop
+    function animateThumbnail() {
+        if (!thumbnailRenderer) return; // Stop if renderer disposed
+        requestAnimationFrame(animateThumbnail);
+        if(thumbnailControls) thumbnailControls.update();
+        
+        // Extended Debugging for Thumbnail Rendering
+        const canvas = thumbnailRenderer.domElement;
+        const context = thumbnailRenderer.getContext();
+        if (canvas.width === 0 || canvas.height === 0) {
+            console.warn("[THUMBNAIL_3D_ANIMATE] Canvas has zero width or height.", {width: canvas.width, height: canvas.height});
+        }
+        if (!context || context.isContextLost()) {
+            console.error("[THUMBNAIL_3D_ANIMATE] WebGL context is lost or unavailable!");
+            return; // Stop animation if context is bad
+        }
+        // console.log("[THUMBNAIL_3D_ANIMATE] Rendering frame. Canvas W/H:", canvas.width, canvas.height, "Context OK:", !context.isContextLost()); // Verbose
+        
+        thumbnailRenderer.render(thumbnailScene, thumbnailCamera);
+    }
+    animateThumbnail();
+
+    // Handle resize
+    // TODO: Add resize observer for robust resizing if modal can change size
+    window.addEventListener('resize', () => {
+        if (container && thumbnailRenderer && thumbnailCamera) {
+            thumbnailCamera.aspect = container.clientWidth / container.clientHeight;
+            thumbnailCamera.updateProjectionMatrix();
+            thumbnailRenderer.setSize(container.clientWidth, container.clientHeight);
+        }
+    });
+}
     function openTilesetDetailsModal(feature) {
         // Ensure detailsFillOpacityInput and detailsStrokeWidthInput are defined, similar to other elements
         const detailsFillOpacityInput = document.getElementById('details-fill-opacity-input');
         const detailsStrokeWidthInput = document.getElementById('details-stroke-width-input');
         const detailsLocationInfoSpan = document.getElementById('details-location-info'); // Define the location info span
+        const detailsTilesetIdSpan = document.getElementById('details-tileset-id'); // Get the new Tileset ID span
 
         if (!feature || !tilesetDetailsModal || !detailsTilesetNameInput || !detailsColorPicker ||
             !detailsFillOpacityInput || !detailsStrokeWidthInput ||
             !detailsTilesetImageUrlInput || !detailsTilesetLinkInput || !detailsTilesetTagsTextarea ||
-            !detailsTilesetImage || !detailsTilesetCoordsSpan || !detailsLocationInfoSpan ) { // Add to check
+            !detailsTilesetImage || !detailsTilesetCoordsSpan || !detailsLocationInfoSpan || !detailsTilesetIdSpan || // Add to check
+            !document.getElementById('details-thumbnail-method-select') || // Check new elements
+            !document.getElementById('raster-dem-options-section') ) {
             console.error("openTilesetDetailsModal: One or more required elements or feature is missing.");
             return;
         }
@@ -1950,6 +3019,49 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
 
         if (!groupId) { return; }
         currentEditingGroupId = groupId;
+
+        // Populate the new Tileset ID field
+        if (detailsTilesetIdSpan) {
+            detailsTilesetIdSpan.textContent = groupId || 'N/A';
+        }
+
+        // Ensure the modal is not minimized when opened
+        if (tilesetDetailsModal) {
+            // FIRST, ensure the modal is set to be visible!
+            tilesetDetailsModal.style.setProperty('display', 'block', 'important');
+            console.log("[DEBUG_MODAL_STATE] Set tilesetDetailsModal display to block !important.");
+
+            console.log("[DEBUG_MODAL_STATE] Opening tilesetDetailsModal. Current classes:", tilesetDetailsModal.className);
+            tilesetDetailsModal.classList.remove('minimized');
+            // Explicitly reset height/min-height that might be set by a minimized style
+            tilesetDetailsModal.style.height = 'auto'; // Try setting to auto
+            tilesetDetailsModal.style.minHeight = '200px'; // Ensure a minimum visible height
+            console.log("[DEBUG_MODAL_STATE] Removed 'minimized' class. New classes:", tilesetDetailsModal.className);
+            console.log("[DEBUG_MODAL_STATE] Set height to auto, minHeight to 200px.");
+
+            const content = tilesetDetailsModal.querySelector('.panel-content');
+            if (content) {
+                content.style.setProperty('display', 'block', 'important');
+                // content.style.setProperty('background-color', 'magenta', 'important'); // Debug style removed
+                // content.style.setProperty('border', '5px dashed yellow', 'important'); // Debug style removed
+                // content.style.setProperty('min-height', '150px', 'important'); // Debug style removed
+                console.log("[DEBUG_MODAL_STATE] Set .panel-content display:block !important. (Debug styles removed)");
+            } else {
+                console.warn("[DEBUG_MODAL_STATE] .panel-content not found in tilesetDetailsModal.");
+            }
+
+            // Log computed styles
+            const computedModalStyle = window.getComputedStyle(tilesetDetailsModal);
+            const computedContentStyle = content ? window.getComputedStyle(content) : null;
+            console.log("[DEBUG_MODAL_COMPUTED_STYLE] Modal - display:", computedModalStyle.display, "height:", computedModalStyle.height, "minHeight:", computedModalStyle.minHeight, "overflow:", computedModalStyle.overflow);
+            if (computedContentStyle) {
+                console.log("[DEBUG_MODAL_COMPUTED_STYLE] Content - display:", computedContentStyle.display, "height:", computedContentStyle.height);
+            }
+
+        } else {
+            console.error("[DEBUG_MODAL_STATE] tilesetDetailsModal element is null when trying to open.");
+        }
+
         detailsTilesetNameInput.value = name;
         detailsColorPicker.value = color;
         detailsFillOpacityInput.value = fillOpacity; // Populate new input
@@ -1985,8 +3097,105 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
         }
         detailsTilesetCoordsSpan.textContent = coordsStr;
         if (detailsLocationInfoSpan) detailsLocationInfoSpan.textContent = 'Loading...'; // Set initial text
+        
+        // Initialize/update the 3D thumbnail viewer
+        initThumbnailViewer('tileset-thumbnail-3d', groupId);
+
+        // --- DEM Source Picker Logic for Details Modal ---
+        const demSourceSelectDetails = document.getElementById('details-dem-source-select');
+        const maptilerApiKeySectionDetails = document.getElementById('details-maptiler-api-key-section');
+        const maptilerApiKeyInputDetails = document.getElementById('details-maptiler-api-key');
+
+        if (demSourceSelectDetails && maptilerApiKeySectionDetails && maptilerApiKeyInputDetails) {
+            // Load saved preferences
+            const savedDemSource = localStorage.getItem('demSourcePreference') || 'terrarium'; // Default to terrarium
+            demSourceSelectDetails.value = savedDemSource;
+            
+            const savedMapTilerKey = localStorage.getItem('mapTilerApiKey') || '';
+            maptilerApiKeyInputDetails.value = savedMapTilerKey;
+
+            // Initial visibility of API key section
+            maptilerApiKeySectionDetails.style.display = (savedDemSource === 'maptiler') ? 'block' : 'none';
+
+            // Event listener for DEM source change
+            demSourceSelectDetails.onchange = function() { // Use onchange to avoid multiple listeners if modal reopens
+                const selectedSource = this.value;
+                localStorage.setItem('demSourcePreference', selectedSource);
+                console.log(`[DETAILS_MODAL_DEM] DEM Source preference saved: ${selectedSource}`);
+                maptilerApiKeySectionDetails.style.display = (selectedSource === 'maptiler') ? 'block' : 'none';
+                // Optionally, trigger thumbnail regeneration if desired:
+                // if (currentEditingGroupId) initThumbnailViewer('tileset-thumbnail-3d', currentEditingGroupId);
+            };
+
+            // Event listener for MapTiler API key input
+            maptilerApiKeyInputDetails.oninput = function() { // Use oninput for live changes
+                localStorage.setItem('mapTilerApiKey', this.value);
+            };
+            maptilerApiKeyInputDetails.onchange = function() { // Save on blur/enter as well
+                 console.log(`[DETAILS_MODAL_DEM] MapTiler API Key saved (on change).`);
+            };
+        } else {
+            console.warn("[DETAILS_MODAL_DEM] DEM source UI elements not found in details modal.");
+        }
+        // --- End DEM Source Picker Logic ---
+
+        // --- Thumbnail Generation Method Picker Logic ---
+        const thumbnailMethodSelect = document.getElementById('details-thumbnail-method-select');
+        const rasterDemOptionsSection = document.getElementById('raster-dem-options-section');
+
+        if (thumbnailMethodSelect && rasterDemOptionsSection) {
+            const savedThumbnailMethod = localStorage.getItem('thumbnailGenerationMethod') || '3d-tiles'; // Default to 3d-tiles
+            thumbnailMethodSelect.value = savedThumbnailMethod;
+            rasterDemOptionsSection.style.display = (savedThumbnailMethod === 'raster-dem') ? 'block' : 'none';
+
+            thumbnailMethodSelect.onchange = function() {
+                const selectedMethod = this.value;
+                localStorage.setItem('thumbnailGenerationMethod', selectedMethod);
+                console.log(`[DETAILS_MODAL_THUMB_METHOD] Thumbnail method preference saved: ${selectedMethod}`);
+                rasterDemOptionsSection.style.display = (selectedMethod === 'raster-dem') ? 'block' : 'none';
+                if (currentEditingGroupId) {
+                    console.log(`[DETAILS_MODAL_THUMB_METHOD] Regenerating thumbnail for ${currentEditingGroupId} due to method change.`);
+                    initThumbnailViewer('tileset-thumbnail-3d', currentEditingGroupId);
+                }
+            };
+        } else {
+            console.warn("[DETAILS_MODAL_THUMB_METHOD] Thumbnail method select or raster DEM options section not found in details modal.");
+        }
+        // --- End of Thumbnail Generation Method Picker Logic ---
+
+        const textureToggleCheckbox = document.getElementById('details-show-texture');
+        if (textureToggleCheckbox) {
+            const currentShowTexture = feature.get('showTexture') === undefined ? true : feature.get('showTexture');
+            textureToggleCheckbox.checked = currentShowTexture;
+
+            // Remove old listener to prevent duplicates if modal is reopened
+            const newTextureToggleCheckbox = textureToggleCheckbox.cloneNode(true);
+            textureToggleCheckbox.parentNode.replaceChild(newTextureToggleCheckbox, textureToggleCheckbox);
+            
+            newTextureToggleCheckbox.addEventListener('change', function() {
+                if (typeof handleShowTextureToggle === 'function') {
+                    handleShowTextureToggle(currentEditingGroupId, this.checked);
+                } else {
+                    console.error("handleShowTextureToggle function is not defined.");
+                }
+            });
+        } else {
+            console.warn("Texture toggle checkbox ('details-show-texture') not found in modal.");
+        }
+
         tilesetDetailsModal.style.setProperty('display', 'block', 'important');
     }
+
+function handleShowTextureToggle(groupId, showTexture) {
+    console.log(`Toggling texture for group ${groupId} to ${showTexture}`);
+    if (applyGroupPropertyChange('showTexture', showTexture, false)) { // false to trigger style update
+        console.log(`Applied 'showTexture: ${showTexture}' to group ${groupId} features and updated OL styles.`);
+        // Future: If a live 3D preview needs updating, trigger it here.
+        // For now, this affects OL display and next GLTF generation.
+    } else {
+        console.warn(`Failed to apply 'showTexture' property for group ${groupId}.`);
+    }
+}
 
     function applyGroupPropertyChange(propertyName, value, skipStyleUpdate = false) {
         if (!currentEditingGroupId || !window.selectedLayerId || !window.userLayers[window.selectedLayerId]) { return false; }
@@ -2013,6 +3222,9 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
         return true;
     }
 
+    // alert("DEBUG: Script is trying to set up modal button listeners NOW."); // Removed
+    // console.log("!!! SCRIPT EXECUTION REACHED DETAILS MODAL LISTENERS SETUP !!!"); // Removed
+
     if (closeTilesetDetailsModalBtn) {
         closeTilesetDetailsModalBtn.addEventListener('click', () => { if(tilesetDetailsModal) tilesetDetailsModal.style.display = 'none'; currentEditingGroupId = null; });
     }
@@ -2035,6 +3247,140 @@ console.log(`UI List Click: Setting highlightedGlobeGroupId to: ${window.highlig
                 else if(detailsTilesetImage) { detailsTilesetImage.style.display = 'none'; detailsTilesetImage.src = ''; }
             }
         });
+    }
+
+    // New Asset Export Dialog logic
+    console.log("[ASSET_EXPORT_DIALOG] Setting up new export dialog listeners.");
+
+    const tilesetFilesBtn = document.getElementById('tileset-files-btn'); // Main button in details modal
+    const assetExportDialog = document.getElementById('asset-export-dialog'); // The new modal
+    const closeAssetExportDialogBtn = document.getElementById('close-asset-export-dialog'); // Close 'x'
+    const cancelAssetExportDialogBtn = document.getElementById('cancel-asset-export-dialog'); // Cancel button
+
+    // console.log("[ASSET_EXPORT_DIALOG] tilesetFilesBtn:", tilesetFilesBtn); // Removed
+    // console.log("[ASSET_EXPORT_DIALOG] assetExportDialog:", assetExportDialog); // Removed
+
+    if (tilesetFilesBtn && assetExportDialog) {
+        tilesetFilesBtn.addEventListener('click', () => {
+            // console.log("[ASSET_EXPORT_DIALOG] 'Files' button clicked."); // Keep this one for now, or remove if too noisy
+            if (window.latestGeneratedGltf && window.latestGeneratedGltf.id === currentEditingGroupId) {
+                assetExportDialog.style.display = 'flex'; // Show the new modal
+                // console.log("[ASSET_EXPORT_DIALOG] Showing new export dialog."); // Keep or remove
+            } else {
+                alert("No 3D model data available for the current tileset. Please save the tileset first.");
+                console.warn("[ASSET_EXPORT_DIALOG] No data for export. currentEditingGroupId:", currentEditingGroupId, "latestGeneratedGltf:", window.latestGeneratedGltf);
+            }
+        });
+        // console.log("[ASSET_EXPORT_DIALOG] Listener attached to 'Files' button."); // Removed
+    } else {
+        if (!tilesetFilesBtn) console.warn("Button '#tileset-files-btn' NOT FOUND.");
+        if (!assetExportDialog) console.warn("Modal '#asset-export-dialog' NOT FOUND.");
+    }
+
+    // Close handlers for the new modal
+    const closeNewModal = () => {
+        if (assetExportDialog) assetExportDialog.style.display = 'none';
+    };
+    if (closeAssetExportDialogBtn) closeAssetExportDialogBtn.addEventListener('click', closeNewModal);
+    else console.warn("[ASSET_EXPORT_DIALOG] '#close-asset-export-dialog' (span) NOT FOUND.");
+
+    if (cancelAssetExportDialogBtn) cancelAssetExportDialogBtn.addEventListener('click', closeNewModal);
+    else console.warn("[ASSET_EXPORT_DIALOG] '#cancel-asset-export-dialog' (button) NOT FOUND.");
+
+    // Placeholder Download Logic (actual conversion/export needs significant work)
+    const setupDownloadListener = (buttonId, formatType, dataType) => {
+        const btn = document.getElementById(buttonId);
+        if (btn) {
+            btn.addEventListener('click', () => {
+                console.log(`[ASSET_EXPORT_DIALOG] Download ${formatType} (${dataType}) clicked.`);
+                const tilesetName = detailsTilesetNameInput.value || 'tileset';
+                let dataToExport = null;
+                let extension = 'txt';
+                let mimeType = 'text/plain';
+
+                if (dataType === 'gltf_model' && window.latestGeneratedGltf && window.latestGeneratedGltf.id === currentEditingGroupId) {
+                    dataToExport = window.latestGeneratedGltf.data;
+                    // Actual conversion to GLB, OBJ, FBX, DXF, 3DS would happen here or server-side
+                    // For now, we'll just offer the base GLTF if that's the selected format.
+                    const selectedFormat = document.getElementById('model-format-select').value;
+                    extension = selectedFormat; // This is simplified; actual extension depends on conversion
+                    mimeType = selectedFormat === 'gltf' ? 'model/gltf+json' : (selectedFormat === 'glb' ? 'model/gltf-binary' : 'application/octet-stream');
+                     if (selectedFormat !== 'gltf' && selectedFormat !== 'glb') {
+                        alert(`Export to ${selectedFormat.toUpperCase()} is not yet implemented. GLTF/GLB available.`);
+                        // return; // Or offer GLTF as fallback
+                    }
+                    if (selectedFormat === 'gltf' || selectedFormat === 'glb') { // Only proceed if GLTF/GLB for now
+                        // If GLB, exporter.parse needs {binary: true}
+                        // This example only handles stringified GLTF.
+                        if (selectedFormat === 'glb' && dataToExport && typeof THREE.GLTFExporter !== 'undefined') {
+                            // Re-export as GLB (simplified, assumes scene is available or can be reconstructed)
+                            // This is complex and needs the original scene. For now, this part is a placeholder.
+                            alert("GLB export from existing JSON GLTF data requires re-exporting. Placeholder.");
+                            return;
+                        }
+                    } else {
+                        // For other formats, just create a placeholder file
+                         dataToExport = `Placeholder for ${tilesetName}.${selectedFormat}`;
+                    }
+
+
+                } else if (dataType === 'point_cloud' && window.latestGeneratedPointCloud && window.latestGeneratedPointCloud.id === currentEditingGroupId) {
+                    dataToExport = window.latestGeneratedPointCloud.data;
+                    const selectedFormat = document.getElementById('pointcloud-format-select').value;
+                    extension = selectedFormat; // pcd or ply
+                    mimeType = 'application/octet-stream'; // Or more specific if known
+                    // Actual conversion to PCD/PLY would happen here
+                    alert(`Export to ${selectedFormat.toUpperCase()} is not yet implemented.`);
+                    dataToExport = `Placeholder for ${tilesetName}.${selectedFormat}`;
+
+                } else if (dataType === 'scene_layer') {
+                    // This would involve packaging GLTF/PointCloud into I3S or 3D Tiles Next
+                    const selectedFormat = document.getElementById('scene-layer-format-select').value;
+                    extension = selectedFormat; // i3s or 3dtilesNext (as a zip or folder structure)
+                    mimeType = 'application/zip'; // Assuming it's a package
+                    alert(`Export to ${selectedFormat.toUpperCase()} is not yet implemented.`);
+                    dataToExport = `Placeholder for ${tilesetName}.${selectedFormat}`;
+                }
+
+                if (dataToExport) {
+                    const filename = `${tilesetName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
+                    try {
+                        const stringData = (typeof dataToExport === 'string') ? dataToExport : JSON.stringify(dataToExport, null, 2);
+                        const blob = new Blob([stringData], { type: mimeType });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(link.href);
+                        console.log(`[ASSET_EXPORT_DIALOG] Offered download for ${filename}`);
+                    } catch (e) {
+                        console.error(`[ASSET_EXPORT_DIALOG] Error creating ${formatType} download:`, e);
+                        alert(`Error preparing ${formatType} file for download.`);
+                    }
+                } else {
+                    alert(`No ${dataType.replace('_', ' ')} data available for the current tileset.`);
+                }
+            });
+            console.log(`[ASSET_EXPORT_DIALOG] Listener attached to ${buttonId}`);
+        } else {
+            console.warn(`[ASSET_EXPORT_DIALOG] Button '${buttonId}' NOT FOUND.`);
+        }
+    };
+
+    setupDownloadListener('download-model-btn', '3D Model', 'gltf_model');
+    setupDownloadListener('download-pointcloud-export-btn', 'Point Cloud', 'point_cloud');
+    setupDownloadListener('download-scene-layer-btn', 'Scene Layer', 'scene_layer');
+
+    // Make the new modal content draggable
+    const assetExportDialogContent = document.getElementById('asset-export-dialog-content');
+    if (assetExportDialogContent && typeof makeDraggable === 'function') {
+        makeDraggable(assetExportDialogContent);
+        console.log("[ASSET_EXPORT_DIALOG] Made new export dialog content draggable.");
+    } else {
+        if(!assetExportDialogContent) console.warn("[ASSET_EXPORT_DIALOG] Could not find 'asset-export-dialog-content' to make draggable.");
+        if(typeof makeDraggable !== 'function') console.warn("[ASSET_EXPORT_DIALOG] makeDraggable function not available.");
     }
     if (detailsTilesetLinkInput) {
         detailsTilesetLinkInput.addEventListener('change', (event) => { applyGroupPropertyChange('linkUrl', event.target.value.trim()); });
@@ -2605,9 +3951,808 @@ END OLD viewTilesetInCesiumBtn LISTENER */
          });
     }
 
+async function generate3DAssetsFromTileset(tilesetGroupId, tilesetName, savedFeatures) {
+    console.log(`[3D_ASSETS] Starting 3D asset generation for ${tilesetName} (ID: ${tilesetGroupId}) with ${savedFeatures.length} features.`);
+
+    // Common THREE.js setup - check at the very beginning
+    if (typeof THREE === 'undefined') {
+        console.error("[3D_ASSETS] CRITICAL: THREE.js is not loaded. Cannot generate any 3D assets.");
+        // Populate global error state if possible, or ensure calling code handles this
+        window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: [], error: "THREE.js missing" };
+        window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "THREE.js missing" };
+        return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+    }
+
+    // const thumbnailGenMethod = localStorage.getItem('thumbnailGenerationMethod') || '3d-tiles';
+    const use3DTilesMethod = false; // FORCE RASTER DEM PATH for debugging
+    console.log(`[3D_ASSETS] Thumbnail generation method: Using Raster DEM / Flat Plane path.`);
+
+    const SAMPLING_RESOLUTION = 17; // Define locally to ensure availability
+    // Constants for per-tile quad mesh generation
+    const TILE_QUAD_SEGMENTS = SAMPLING_RESOLUTION - 1; // e.g., 16 for 17x17 vertices
+    const VERTS_PER_TILE_EDGE = SAMPLING_RESOLUTION;    // e.g., 17
+    const CESIUM_ION_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3YmNlMDhkNS0xZDYxLTQ0ZjktODZmOS0wMjU0ODg1MDVjYzYiLCJpZCI6OTkwMjQsImlhdCI6MTc0NzY3NjgzNX0.5os4B_GmIeUHxxUWlz8UkG7HJjltQodu_6b2HwF9JQ4';
+    const TILESET_URL_CESIUM_WORLD_TERRAIN = 'https://assets.cesium.com/1/tileset.json';
+
+    // Declare variables once
+    let scene, tileMeshesGroup, allPoints;
+    
+    scene = new THREE.Scene();
+    tileMeshesGroup = new THREE.Group();
+    allPoints = [];
+
+    if (use3DTilesMethod) {
+        console.log(`[3D_ASSETS_NEW] Using 3D Tiles method. Target tileset: ${TILESET_URL_CESIUM_WORLD_TERRAIN}`);
+        try {
+            const tileset = await loaders.load(TILESET_URL_CESIUM_WORLD_TERRAIN, loaders.Tiles3DLoader, {
+                cesiumion: { accessToken: CESIUM_ION_TOKEN }
+            });
+            console.log('[3D_ASSETS_NEW] Root tileset.json loaded:', tileset);
+
+            // 1. Calculate geographic bounding box of savedFeatures (selected 2D map tiles)
+            //    Placeholder - this needs actual implementation using tile ZXY to Lat/Lon logic
+            let selectedTilesGeoBounds = null;
+            if (savedFeatures && savedFeatures.length > 0) {
+                 console.warn("[3D_ASSETS_NEW] Geographic extent calculation for savedFeatures not yet implemented. Thumbnail will load more tiles than necessary.");
+                 // Example: { minLon: -80, minLat: 30, maxLon: -70, maxLat: 40 };
+            }
+
+            async function traverseAndLoad(tileNode, parentTransformMatrix) {
+                if (!tileNode) return;
+
+                const localMatrix = tileNode.transform ? new THREE.Matrix4().fromArray(tileNode.transform) : new THREE.Matrix4();
+                const worldMatrix = new THREE.Matrix4().multiplyMatrices(parentTransformMatrix, localMatrix);
+
+                // TODO: Proper intersection check with selectedTilesGeoBounds and tileNode.boundingVolume
+                // TODO: LOD check using tileNode.geometricError
+                let tileIsRelevantForLoad = true; // Simplified: try to load all encountered for now
+
+                if (tileIsRelevantForLoad) {
+                    if (tileNode.content && tileNode.content.uri) {
+                        let contentUri = tileNode.content.uri;
+                        let contentUrl = contentUri;
+                        if (!contentUri.startsWith('http') && !contentUri.startsWith('https') && tileset.basePath) {
+                            contentUrl = new URL(contentUri, tileset.basePath).toString();
+                        }
+                        
+                        console.log(`[3D_ASSETS_NEW] Traversing tile. Path: ${tileNode.path || 'root'}, URI: ${contentUri}, Full URL: ${contentUrl}, GeomError: ${tileNode.geometricError}`);
+                        
+                        try {
+                            if (contentUrl.endsWith('.b3dm') || contentUrl.endsWith('.i3dm')) {
+                                console.log(`[3D_ASSETS_NEW] Attempting to load B3DM/I3DM: ${contentUrl}`);
+                                const tileContent = await loaders.load(contentUrl, loaders.Tiles3DLoader, {
+                                    '3d-tiles': { loadGLTF: true },
+                                    fetch: { headers: { 'Authorization': `Bearer ${CESIUM_ION_TOKEN}` } }
+                                });
+                                if (tileContent && tileContent.gltf) {
+                                    console.log(`[3D_ASSETS_NEW] Loaded B3DM/I3DM, has GLTF data. Parsing with THREE.GLTFLoader.`);
+                                    // THREE.GLTFLoader expects ArrayBuffer or JSON. tileContent.gltf might be an object.
+                                    // If tileContent.gltf is already a parsed GLTF JSON by loaders.gl, need to check its format.
+                                    // If it's raw GLB buffer, it's tileContent.gltf.buffer or similar.
+                                    // For now, assuming tileContent.gltf is something THREE.GLTFLoader can parse (e.g. ArrayBuffer of GLB)
+                                    // This part needs verification of what `tileContent.gltf` actually is from `load` with `Tiles3DLoader`
+                                    
+                                    // Placeholder: Assuming tileContent.gltf is an ArrayBuffer of the GLB
+                                    // This needs to be verified. The `tileContent` from `load` with `Tiles3DLoader`
+                                    // when `loadGLTF` is true, might already be a parsed scene graph or GLTF JSON.
+                                    // For now, let's assume it's an ArrayBuffer that GLTFLoader can take.
+                                    // If `tileContent.gltf` is the GLTF JSON, and embedded buffers are separate, it's more complex.
+                                    // The `Tiles3DTileContent` type has `gltf` as `any`.
+                                    // The `parse-3d-tile.js` in loaders.gl seems to set `tileContent.gltf` to the GLTF scene object.
+                                    // Let's assume `tileContent.gltf` is the GLTF JSON object and `tileContent.glb` might be the binary.
+                                    // The `Tiles3DLoader` with `loadGLTF: true` should ideally give us something easy.
+                                    // The `tileContent` itself might be the GLTF scene structure.
+                                    
+                                    // Safest bet: if tileContent.type is 'scenegraph/gltf', it's a GLTF JSON.
+                                    // If it's a raw b3dm, the `tileContent.gltf` might be the binary part.
+                                    // The `parse3DTile` function in loaders.gl sets `content.gltf` after parsing.
+                                    // Let's assume `tileContent` (the result of `load`) IS the parsed GLTF structure if successful.
+                                    
+                                    // If `tileContent` is the GLTF scene structure from loaders.gl's GLTFLoader:
+                                    if (tileContent.scene) { // Assuming `load` with Tiles3DLoader + loadGLTF returns a GLTF-like object
+                                        const loadedScene = tileContent.scene; // This might be a THREE.Group already if @loaders.gl/gltf was used by Tiles3DLoader
+                                        loadedScene.applyMatrix4(worldMatrix);
+                                        tileMeshesGroup.add(loadedScene);
+                                        console.log(`[3D_ASSETS_NEW] Added GLTF scene from ${contentUrl} to group.`);
+                                    } else if (tileContent.gltf && tileContent.gltf.buffer) { // If it's a raw GLB buffer in tileContent.gltf
+                                        new THREE.GLTFLoader().parse(tileContent.gltf.buffer, '', (loadedGltf) => {
+                                            loadedGltf.scene.applyMatrix4(worldMatrix);
+                                            tileMeshesGroup.add(loadedGltf.scene);
+                                            console.log(`[3D_ASSETS_NEW] Parsed and added GLB from ${contentUrl} to group.`);
+                                        }, (error) => {
+                                            console.error(`[3D_ASSETS_NEW] THREE.GLTFLoader parse error for ${contentUrl}:`, error);
+                                        });
+                                    } else {
+                                         console.warn(`[3D_ASSETS_NEW] Loaded B3DM/I3DM from ${contentUrl}, but GLTF data structure is not as expected.`, tileContent);
+                                    }
+                                } else {
+                                    console.warn(`[3D_ASSETS_NEW] Loaded B3DM/I3DM from ${contentUrl}, but no GLTF data found.`, tileContent);
+                                }
+                            } else if (contentUrl.endsWith('.terrain')) {
+                                console.log(`[3D_ASSETS_NEW] Attempting to load Quantized Mesh: ${contentUrl}`);
+                                const qmData = await loaders.load(contentUrl, loaders.QuantizedMeshLoader, {
+                                    terrain: { workerUrl: './js/libs/loaders.gl-terrain-worker.js' },
+                                    fetch: { headers: { 'Authorization': `Bearer ${CESIUM_ION_TOKEN}` } }
+                                });
+                                if (qmData && qmData.attributes && qmData.attributes.POSITION) {
+                                    console.log(`[3D_ASSETS_NEW] Loaded QM data from ${contentUrl}. Vertices: ${qmData.attributes.POSITION.value.length / qmData.attributes.POSITION.size}`);
+                                    const geometry = new THREE.BufferGeometry();
+                                    geometry.setAttribute('position', new THREE.BufferAttribute(qmData.attributes.POSITION.value, qmData.attributes.POSITION.size));
+                                    if (qmData.indices) {
+                                        geometry.setIndex(new THREE.BufferAttribute(qmData.indices.value, 1));
+                                    }
+                                    if (qmData.attributes.NORMAL) {
+                                        geometry.setAttribute('normal', new THREE.BufferAttribute(qmData.attributes.NORMAL.value, qmData.attributes.NORMAL.size));
+                                    } else {
+                                        geometry.computeVertexNormals();
+                                    }
+                                    if (qmData.attributes.TEXCOORD_0) {
+                                        geometry.setAttribute('uv', new THREE.BufferAttribute(qmData.attributes.TEXCOORD_0.value, qmData.attributes.TEXCOORD_0.size));
+                                    }
+                                    const qmMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, side: THREE.DoubleSide, wireframe: false }); // Green for QM
+                                    const qmThreeMesh = new THREE.Mesh(geometry, qmMaterial);
+                                    qmThreeMesh.applyMatrix4(worldMatrix);
+                                    tileMeshesGroup.add(qmThreeMesh);
+                                    console.log(`[3D_ASSETS_NEW] Added QM mesh from ${contentUrl} to group.`);
+                                } else {
+                                    console.warn(`[3D_ASSETS_NEW] Loaded QM from ${contentUrl}, but data structure not as expected.`, qmData);
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`[3D_ASSETS_NEW] Error loading/processing content ${contentUrl}:`, error);
+                        }
+
+                    } else if (tileNode.contents) { // Handle 3D Tiles 1.1 multiple contents (TODO: implement loading for these too)
+                         console.log(`[3D_ASSETS_NEW] Traversing tile with multiple contents. Path: ${tileNode.path || 'root'}, GeomError: ${tileNode.geometricError}`);
+                         for (const content of tileNode.contents) {
+                            if (content.uri) {
+                                let contentUri = content.uri;
+                                let contentUrl = contentUri;
+                                if (!contentUri.startsWith('http') && !contentUri.startsWith('https') && tileset.basePath) {
+                                    contentUrl = new URL(contentUri, tileset.basePath).toString();
+                                }
+                                console.log(`[3D_ASSETS_NEW]   Multi-content URI: ${contentUri}, Full URL: ${contentUrl}. Type: ${content.type}`);
+                                // TODO: Implement loading logic similar to single content based on content.type or URI
+                            }
+                         }
+                    }
+
+                    if (tileNode.children) {
+                        for (const childNode of tileNode.children) {
+                            await traverseAndLoad(childNode, worldMatrix);
+                        }
+                    }
+                }
+            }
+
+            if (tileset.root) {
+                console.log("[3D_ASSETS_NEW] Starting traversal from tileset root.");
+                await traverseAndLoad(tileset.root, new THREE.Matrix4());
+            } else {
+                console.error("[3D_ASSETS_NEW] Tileset root is undefined. Cannot traverse.");
+            }
+
+            if (tileMeshesGroup.children.length === 0) {
+                 console.warn("[3D_ASSETS_NEW] No meshes loaded from 3D Tiles. Falling back or showing empty.");
+                 // For now, create a placeholder if nothing loaded to avoid errors downstream
+                 const placeholderGeom = new THREE.BoxGeometry(1,0.1,1);
+                 const placeholderMat = new THREE.MeshStandardMaterial({color: 0xff0000});
+                 const placeholderMesh = new THREE.Mesh(placeholderGeom, placeholderMat);
+                 tileMeshesGroup.add(placeholderMesh);
+                 const box = new THREE.Box3().setFromObject(placeholderMesh);
+                 allPoints.push({x:box.min.x, y:box.min.y, z:box.min.z}, {x:box.max.x, y:box.max.y, z:box.max.z});
+            }
+
+        } catch (error) {
+            console.error('[3D_ASSETS_NEW] Error processing 3D Tiles:', error);
+            // Fallback or error state
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "3D Tiles processing failed" };
+            window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: [], error: "3D Tiles processing failed" };
+            return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+        }
+
+        // GLTF Export logic (will use tileMeshesGroup and allPoints)
+        scene.add(tileMeshesGroup);
+        if (allPoints.length > 0) {
+            const groupBox = new THREE.Box3();
+            allPoints.forEach(p => groupBox.expandByPoint(new THREE.Vector3(p.x, p.y, p.z)));
+            if (!groupBox.isEmpty()) {
+                const groupCenter = groupBox.getCenter(new THREE.Vector3());
+                tileMeshesGroup.position.sub(groupCenter);
+            } else {
+                 console.warn("[3D_ASSETS_NEW] Bounding box from allPoints is empty. Cannot center group.");
+            }
+        } else if (tileMeshesGroup.children.length > 0) { // Fallback if allPoints wasn't populated but meshes exist
+            const groupBox = new THREE.Box3().setFromObject(tileMeshesGroup);
+            if (!groupBox.isEmpty()) {
+                const groupCenter = groupBox.getCenter(new THREE.Vector3());
+                tileMeshesGroup.position.sub(groupCenter);
+            }
+        }
+
+
+        if (typeof THREE.GLTFExporter === 'undefined') {
+            console.error("[3D_ASSETS_NEW] THREE.GLTFExporter is not loaded.");
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "GLTFExporter not available" };
+        } else if (tileMeshesGroup.children.length > 0) {
+            const exporter = new THREE.GLTFExporter();
+            try {
+                const gltfData = await new Promise((resolve, reject) => {
+                    exporter.parse(scene, (gltf) => resolve(gltf), (error) => reject(error), { binary: false });
+                });
+                console.log(`[3D_ASSETS_NEW] Successfully generated GLTF data for ${tilesetName} from 3D Tiles.`);
+                window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: gltfData, source: "3D Tiles" };
+            } catch (error) {
+                console.error("[3D_ASSETS_NEW] Failed to export GLTF from 3D Tiles:", error);
+                window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "GLTF Export Failed (3D Tiles)" };
+            }
+        } else {
+            console.warn("[3D_ASSETS_NEW] No meshes in group, skipping GLTF export.");
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "No meshes for GLTF (3D Tiles)" };
+        }
+        // Point cloud from allPoints (if populated)
+        window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: allPoints, source: "3D Tiles" };
+        return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+
+    } else {
+        // --- Existing Raster DEM / Flat Plane Logic Starts Here ---
+        // scene, tileMeshesGroup, allPoints are already initialized from above
+        const demSourcePreference = localStorage.getItem('demSourcePreference') || 'terrarium';
+        const userMapTilerApiKey = localStorage.getItem('mapTilerApiKey') || 'YOUR_MAPTILER_API_KEY_PLACEHOLDER';
+        console.log(`[3D_ASSETS] Using Raster DEM/Flat Plane fallback. DEM source preference: ${demSourcePreference}`);
+        // THREE.js check is now at the top of the function.
+        // Note: demSourceToUse for URL/decoder is determined later based on demSourcePreference or settings.
+    // } <<<< ERRONEOUS CLOSING BRACE REMOVED HERE. The 'else' block continues.
+    
+    // Re-initialize for this path, using variables declared in the function's outer scope
+    // Actually, these are fine to be initialized here as they are specific to this raster path.
+    // The 'let scene, tileMeshesGroup, allPoints;' at the function top is for type hinting / existence.
+    // The re-initializations below are correct for the raster path.
+    scene = new THREE.Scene();
+    tileMeshesGroup = new THREE.Group();
+    allPoints = [];
+    const material = new THREE.MeshBasicMaterial({
+        color: 0xaaaaaa, // Neutral light grey for wireframe
+        wireframe: true,
+        side: THREE.DoubleSide
+    });
+    const TILE_SIZE = 256; // Standard tile size for DEM images
+    const MESH_HEIGHT_SCALE = 0.052; // Current scale for raster DEMs
+    const SAMPLING_RESOLUTION = 17; // For 16x16 polygons per tile
+
+    // Helper to convert tile ZXY and pixel (px, py) within that tile to a local 3D coordinate
+    function tilePixelToLocal3D(px, py, height, tileIndexX, tileIndexY, currentSamplingResolution) {
+        const u = px / (currentSamplingResolution - 1);
+        const v = 1.0 - (py / (currentSamplingResolution - 1)); // Invert v for typical texture/image coords
+        return {
+            x: tileIndexX + u - 0.5,
+            y: tileIndexY + v - 0.5,
+            z: height * MESH_HEIGHT_SCALE
+        };
+    }
+    
+    // const generateFallbackPlane = (i, reason, tileIdFallback = "N/A") => { ... }; // REMOVED
+
+    // Calculate minX, minY, maxX, maxY and prepare tileInfoList
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const tileInfoList = [];
+
+    if (!savedFeatures || savedFeatures.length === 0) {
+        console.warn("[3D_ASSETS_COMPOSITE] No saved features to process.");
+        window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: [], source: demSourcePreference, error: "No features" };
+        if (typeof THREE.GLTFExporter !== 'undefined') {
+            const exporter = new THREE.GLTFExporter();
+            exporter.parse(new THREE.Scene(), (gltf) => { window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: gltf, source: demSourcePreference, error: "No features" }; }, ()=>{}, {onlyVisible:false});
+        } else {
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "GLTFExporter not available, no features", source: demSourcePreference };
+        }
+        return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+    }
+
+    console.log(`[3D_ASSETS_COMPOSITE] Pre-calculating tile data for ${savedFeatures.length} features.`);
+    for (let i = 0; i < savedFeatures.length; i++) {
+        const feature = savedFeatures[i];
+        const tileId = feature.get('tileId');
+        // Initialize tileInfo with defaults for each feature
+        let tileInfo = {
+            x: null, y: null, zLevel: null,
+            originalIndex: i, feature,
+            relX: 0, relY: 0,
+            imageBitmap: null, // For DEM
+            basemapImageBitmap: null, // For Satellite texture
+            zDem: null, demUrl: null, heightDecodeFn: null,
+            basemapUrl: null, zBasemapActual: null, // For Satellite texture
+            fetchError: false, // For DEM
+            basemapFetchError: false // For Satellite texture
+        };
+        if (tileId) {
+            const parts = tileId.split('-').map(Number);
+            if (parts.length === 3) {
+                const [zoom, x, y] = parts;
+                tileInfo.x = x; tileInfo.y = y; tileInfo.zLevel = zoom;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            } else { console.warn(`[3D_ASSETS_COMPOSITE] Could not parse tileId '${tileId}'.`); }
+        } else { console.warn(`[3D_ASSETS_COMPOSITE] Feature index ${i} missing tileId.`); }
+        tileInfoList.push(tileInfo);
+    }
+
+    if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) { // Check all bounds
+        console.warn("[3D_ASSETS_COMPOSITE] No valid tile coordinates found (min/max bounds invalid). Cannot generate composite DEM.");
+        window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: [], source: demSourcePreference, error: "No valid tiles for composite" };
+        // Simplified GLTF error object for this case
+        window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "No valid tiles for composite GLTF", source: demSourcePreference };
+        return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+    }
+    
+    tileInfoList.forEach(ti => {
+        if (ti.x !== null && ti.y !== null) {
+            ti.relX = ti.x - minX;
+            ti.relY = ti.y - minY;
+        }
+    });
+    console.log(`[3D_ASSETS_COMPOSITE] Bounds: minX=${minX}, minY=${minY}, maxX=${maxX}, maxY=${maxY}. NumTilesX: ${maxX - minX + 1}, NumTilesY: ${maxY - minY + 1}`);
+
+    const actualDemSourceToUse = localStorage.getItem('demSourcePreference') || 'terrarium';
+    console.log(`[3D_ASSETS_COMPOSITE] Actual DEM source to use: ${actualDemSourceToUse}`); // Log the actual source being used
+    const skipDemFetching = actualDemSourceToUse === 'flat' ||
+                           (actualDemSourceToUse === 'maptiler' && (userMapTilerApiKey === 'YOUR_MAPTILER_API_KEY_PLACEHOLDER' || !userMapTilerApiKey));
+
+    let demPromises = [];
+    if (!skipDemFetching) {
+        console.log(`[3D_ASSETS_COMPOSITE] Path: Processing DEM source: ${actualDemSourceToUse} for composite.`);
+        tileInfoList.forEach(tileInfo => {
+            if (tileInfo.x === null || tileInfo.y === null) { tileInfo.fetchError = true; return; }
+
+            const { x: xOrig, y: yOrig, zLevel: zOrig } = tileInfo;
+            let demUrl = '', heightDecodeFn = null, zDem = zOrig, MAX_SERVICE_ZOOM = 15;
+
+            if (actualDemSourceToUse === 'terrarium') {
+                MAX_SERVICE_ZOOM = 15;
+                // Fetch Terrarium at its MAX_SERVICE_ZOOM if selection is higher
+                MAX_SERVICE_ZOOM = 15; // Redundant if already set, but ensures it for this block
+                // Fetch Terrarium at its MAX_SERVICE_ZOOM if selection is higher
+                // MAX_SERVICE_ZOOM = 15; is already set at line 4253 for this block
+                zDem = zOrig > MAX_SERVICE_ZOOM ? MAX_SERVICE_ZOOM : zOrig;
+                let xDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(xOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : xOrig;
+                let yDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(yOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : yOrig;
+                console.log(`[3D_ASSETS_COMPOSITE] Terrarium: Fetching at ZL${zDem} (for original ZL${zOrig} tile).`);
+                demUrl = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zDem}/${xDemTile}/${yDemTile}.png`;
+                heightDecodeFn = (r, g, b) => (r * 256 + g + b / 256) - 32768; // LERC decoder (assuming Terrarium ZL15 might be LERC)
+            } else if (actualDemSourceToUse === 'maptiler') {
+                MAX_SERVICE_ZOOM = 15;
+                zDem = zOrig > MAX_SERVICE_ZOOM ? MAX_SERVICE_ZOOM : zOrig;
+                let xDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(xOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : xOrig;
+                let yDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(yOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : yOrig;
+                demUrl = `https://api.maptiler.com/tiles/terrain-rgb-v2/${zDem}/${xDemTile}/${yDemTile}.webp?key=${userMapTilerApiKey}`;
+                heightDecodeFn = (r, g, b) => -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
+            } else if (actualDemSourceToUse === 'arcgis') {
+                MAX_SERVICE_ZOOM = 17;
+                zDem = zOrig > MAX_SERVICE_ZOOM ? MAX_SERVICE_ZOOM : zOrig;
+                let xDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(xOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : xOrig;
+                let yDemTile = zOrig > MAX_SERVICE_ZOOM ? Math.floor(yOrig / (2 ** (zOrig - MAX_SERVICE_ZOOM))) : yOrig;
+                demUrl = `https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer/tile/${zDem}/${yDemTile}/${xDemTile}`;
+                heightDecodeFn = (r, g, b) => (r * 256 + g + b / 256) - 32768;
+            } else { // Should be caught by skipDemFetching, but as a safeguard:
+                console.warn(`[3D_ASSETS_COMPOSITE] DEM source '${actualDemSourceToUse}' not supported for fetching. Tile ${tileInfo.originalIndex} marked as error.`);
+                tileInfo.fetchError = true; return;
+            }
+            
+            tileInfo.demUrl = demUrl; tileInfo.heightDecodeFn = heightDecodeFn; tileInfo.zDem = zDem;
+            
+            // Prepare Basemap Fetch with zoom level fallback
+            const MAX_SAT_SERVICE_ZOOM = 19; // Max zoom for Esri World Imagery (example)
+            const zBasemapFetch = Math.min(zOrig, MAX_SAT_SERVICE_ZOOM);
+            const xBasemapTile = zOrig > zBasemapFetch ? Math.floor(xOrig / (2 ** (zOrig - zBasemapFetch))) : xOrig;
+            const yBasemapTile = zOrig > zBasemapFetch ? Math.floor(yOrig / (2 ** (zOrig - zBasemapFetch))) : yOrig;
+            
+            const basemapUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zBasemapFetch}/${yBasemapTile}/${xBasemapTile}`;
+            tileInfo.basemapUrl = basemapUrl;
+            tileInfo.zBasemapActual = zBasemapFetch; // Store the actual zoom level fetched
+
+            console.log(`[3D_ASSETS_COMPOSITE] DEM Fetch Prep: Tile ${tileInfo.originalIndex} (Z${zOrig}/${xOrig}/${yOrig}), DEM Z${zDem} from ${demUrl.replace(userMapTilerApiKey, '***KEY***')}`);
+            console.log(`[3D_ASSETS_COMPOSITE] Basemap Fetch Prep: Tile ${tileInfo.originalIndex} (TargetZ ${zOrig}), Fetching Basemap Z${zBasemapFetch} from ${basemapUrl}`);
+
+            // DEM Promise
+            demPromises.push(
+                fetch(demUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.warn(`[3D_ASSETS_COMPOSITE] Failed to fetch DEM for tile ${tileInfo.originalIndex}: ${response.status} ${response.statusText}`);
+                            tileInfo.fetchError = true; return null;
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => blob ? createImageBitmap(blob) : null)
+                    .then(imageBitmap => {
+                        if (imageBitmap) { tileInfo.imageBitmap = imageBitmap; }
+                        else if (!tileInfo.fetchError) { tileInfo.fetchError = true; }
+                    })
+                    .catch(error => {
+                        console.error(`[3D_ASSETS_COMPOSITE] Error fetching/processing DEM for tile ${tileInfo.originalIndex}:`, error);
+                        tileInfo.fetchError = true;
+                    })
+            );
+
+            // Basemap Promise (add to same demPromises array for simplicity of waiting)
+            demPromises.push(
+                fetch(basemapUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.warn(`[3D_ASSETS_COMPOSITE] Failed to fetch Basemap for tile ${tileInfo.originalIndex}: ${response.status} ${response.statusText}`);
+                            tileInfo.basemapFetchError = true; return null;
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => blob ? createImageBitmap(blob) : null)
+                    .then(imageBitmap => {
+                        if (imageBitmap) { tileInfo.basemapImageBitmap = imageBitmap; }
+                        else if (!tileInfo.basemapFetchError) { tileInfo.basemapFetchError = true; }
+                    })
+                    .catch(error => {
+                        console.error(`[3D_ASSETS_COMPOSITE] Error fetching/processing Basemap for tile ${tileInfo.originalIndex}:`, error);
+                        tileInfo.basemapFetchError = true;
+                    })
+            );
+        }); // End forEach tileInfoList for DEM/Basemap fetching
+
+        if (demPromises.length > 0) {
+            console.log(`[3D_ASSETS_COMPOSITE] Waiting for ${demPromises.length} DEM fetch promises.`);
+            await Promise.allSettled(demPromises);
+            console.log(`[3D_ASSETS_COMPOSITE] All DEM promises settled.`);
+        } else {
+             console.log(`[3D_ASSETS_COMPOSITE] No DEM promises created (e.g. all tiles invalid or flat source).`);
+        }
+    } // End if (!skipDemFetching)
+
+    // --- Phase 2: Create Composite Canvas and Draw DEMs ---
+    // (To be implemented next)
+    console.log("[3D_ASSETS_COMPOSITE] Phase 1 (Data Collection) complete. tileInfoList (first item):", tileInfoList.length > 0 ? JSON.parse(JSON.stringify({...tileInfoList[0], feature: undefined, imageBitmap: tileInfoList[0].imageBitmap ? 'ImageBitmapPresent' : null})) : 'empty');
+
+    // --- Phase 2: Create Composite Canvas and Draw DEMs ---
+    let compositeImageData = null;
+    const numTilesX = maxX - minX + 1; // These are already calculated from Phase 1
+    const numTilesY = maxY - minY + 1;
+
+    if (!skipDemFetching && tileInfoList.some(ti => ti.imageBitmap && !ti.fetchError)) {
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = numTilesX * TILE_SIZE;
+        compositeCanvas.height = numTilesY * TILE_SIZE;
+        const compositeCtx = compositeCanvas.getContext('2d');
+
+        if (!compositeCtx) {
+            console.error("[3D_ASSETS_COMPOSITE] Could not get 2D context for composite canvas. Result will be flat.");
+        } else {
+            console.log(`[3D_ASSETS_COMPOSITE] Created composite canvas ${compositeCanvas.width}x${compositeCanvas.height}`);
+            tileInfoList.forEach(tileInfo => {
+                if (tileInfo.x === null || tileInfo.y === null) return;
+
+                const canvasX = tileInfo.relX * TILE_SIZE;
+                const canvasY = tileInfo.relY * TILE_SIZE;
+
+                if (tileInfo.imageBitmap && !tileInfo.fetchError) {
+                    let sx = 0, sy = 0, sWidth = tileInfo.imageBitmap.width, sHeight = tileInfo.imageBitmap.height;
+                    let dx = canvasX, dy = canvasY, dWidth = TILE_SIZE, dHeight = TILE_SIZE;
+
+                    if (tileInfo.zLevel > tileInfo.zDem) {
+                        const scaleFactor = 2 ** (tileInfo.zLevel - tileInfo.zDem);
+                        const xOffsetInParent = tileInfo.x % scaleFactor;
+                        const yOffsetInParent = tileInfo.y % scaleFactor;
+                        
+                        sWidth = tileInfo.imageBitmap.width / scaleFactor;
+                        sHeight = tileInfo.imageBitmap.height / scaleFactor;
+                        
+                        sx = xOffsetInParent * sWidth;
+                        sy = yOffsetInParent * sHeight;
+                    }
+                    compositeCtx.drawImage(tileInfo.imageBitmap, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
+                } else {
+                    compositeCtx.fillStyle = 'rgb(128,0,0)';
+                    compositeCtx.fillRect(canvasX, canvasY, TILE_SIZE, TILE_SIZE);
+                }
+            });
+            try {
+                compositeImageData = compositeCtx.getImageData(0, 0, compositeCanvas.width, compositeCanvas.height);
+                console.log(`[3D_ASSETS_COMPOSITE] Generated compositeImageData ${compositeImageData.width}x${compositeImageData.height}`);
+            } catch (e) {
+                console.error("[3D_ASSETS_COMPOSITE] Error getting compositeImageData:", e);
+                compositeImageData = null;
+            }
+        }
+    } else {
+         console.log(`[3D_ASSETS_COMPOSITE] Skipping DEM compositing. skipDemFetching=${skipDemFetching}`);
+    }
+
+    // --- Phase 3: Single Mesh Generation (using compositeImageData) ---
+    tileMeshesGroup.clear();
+
+    if (compositeImageData && tileInfoList.some(ti => !ti.fetchError && ti.heightDecodeFn)) {
+        console.log("[3D_ASSETS_QUAD_MESH] Starting per-tile mesh generation from composite DEM (Test).");
+        const planeWidth = numTilesX;
+        const planeHeight = numTilesY;
+        const segmentsWidth = numTilesX * (SAMPLING_RESOLUTION - 1);
+        const segmentsHeight = numTilesY * (SAMPLING_RESOLUTION - 1);
+
+        if (segmentsWidth <= 0 || segmentsHeight <= 0) { // Check for non-positive segments
+            console.warn(`[3D_ASSETS_COMPOSITE] Invalid segments (${segmentsWidth}x${segmentsHeight}) for composite plane, creating minimal 1x1 segment plane.`);
+            const minimalPlaneGeom = new THREE.PlaneGeometry(planeWidth, planeHeight, 1, 1);
+            const minimalMesh = new THREE.Mesh(minimalPlaneGeom, material);
+            minimalMesh.rotation.x = -Math.PI / 2;
+            minimalMesh.position.set((planeWidth / 2) - 0.5, 0, -((planeHeight / 2) - 0.5));
+            tileMeshesGroup.add(minimalMesh);
+        } else {
+            // New logic: Iterate through tiles and create individual meshes using compositeImageData
+            console.log(`[3D_ASSETS_QUAD_MESH] Iterating ${tileInfoList.length} tiles for DEM mesh generation.`);
+            tileInfoList.forEach((tileInfo, idx) => {
+                console.log(`[3D_ASSETS_QUAD_MESH_DETAIL] Processing tileInfo[${idx}]: X=${tileInfo.x}, Y=${tileInfo.y}, Z=${tileInfo.z}, relX=${tileInfo.relX}, relY=${tileInfo.relY}, fetchError=${tileInfo.fetchError}, hasDecodeFn=${!!tileInfo.heightDecodeFn}`);
+
+                if (tileInfo.x === null || tileInfo.y === null || tileInfo.fetchError || !tileInfo.heightDecodeFn) {
+                    if (tileInfo.x !== null && tileInfo.y !== null && (tileInfo.fetchError || !tileInfo.heightDecodeFn)) {
+                        console.warn(`[3D_ASSETS_QUAD_MESH_DETAIL] Skipping DEM-based mesh for tile index ${tileInfo.originalIndex} (X:${tileInfo.x}, Y:${tileInfo.y}) due to fetchError (${tileInfo.fetchError}) or no decodeFn (${!tileInfo.heightDecodeFn}).`);
+                    } else if (tileInfo.x === null || tileInfo.y === null) {
+                        console.warn(`[3D_ASSETS_QUAD_MESH_DETAIL] Skipping DEM-based mesh for tile index ${tileInfo.originalIndex} due to null X/Y coordinates.`);
+                    }
+                    return;
+                }
+
+                const individualTileGeometry = new THREE.BufferGeometry();
+                const tileVertices = [];
+                const tileUvs = [];
+                const tileIndices = [];
+                
+                const decodeFnForThisTile = tileInfo.heightDecodeFn;
+
+                for (let j_vert = 0; j_vert < VERTS_PER_TILE_EDGE; j_vert++) { // Y-vertex index (rows)
+                    for (let i_vert = 0; i_vert < VERTS_PER_TILE_EDGE; i_vert++) { // X-vertex index (columns)
+                        const u_local = i_vert / TILE_QUAD_SEGMENTS; // Normalized X within this tile (0 to 1)
+                        const v_local = j_vert / TILE_QUAD_SEGMENTS; // Normalized Y within this tile (0 to 1) for geometry plane
+
+                        let height = 0;
+                        // Sample from compositeImageData. relX, relY are 0-indexed tile positions in the composite grid.
+                        // TILE_SIZE_PX is the pixel dimension of one original DEM tile (e.g., 256).
+                        // u_local, v_local are normalized (0-1) within the current tile's area in the composite DEM image.
+                        // We sample (TILE_SIZE_PX - 1) segments, so VERTS_PER_TILE_EDGE points.
+                        const cImgX = Math.min(Math.floor((tileInfo.relX * TILE_SIZE) + (u_local * (TILE_SIZE - 1))), compositeImageData.width - 1);
+                        const cImgY = Math.min(Math.floor((tileInfo.relY * TILE_SIZE) + (v_local * (TILE_SIZE - 1))), compositeImageData.height - 1);
+                        
+                        const rIndex = (cImgY * compositeImageData.width + cImgX) * 4;
+                        const rVal = compositeImageData.data[rIndex];
+                        const gVal = compositeImageData.data[rIndex + 1];
+                        const bVal = compositeImageData.data[rIndex + 2];
+                        height = decodeFnForThisTile(rVal, gVal, bVal);
+                        // if (idx === 0 && j_vert < 2 && i_vert < 2) { // Log first few heights of first tile
+                        //     console.log(`[3D_ASSETS_QUAD_MESH_DETAIL] Tile[0] vert(${i_vert},${j_vert}): cImg(${cImgX},${cImgY}), RGB(${rVal},${gVal},${bVal}), Decoded H: ${height}`);
+                        // }
+
+                        const MAX_EXPECTED_HEIGHT = 9000; // meters
+                        const MIN_EXPECTED_HEIGHT = -11000; // meters (Mariana Trench)
+                        if (!isFinite(height)) {
+                            console.warn(`[3D_ASSETS_QUAD_SPIKE] Tile ${tileInfo.originalIndex} (X:${tileInfo.x},Y:${tileInfo.y}) vert(${i_vert},${j_vert}): Invalid height (NaN/Infinity: ${height}) from RGB(${rVal},${gVal},${bVal}). Clamped to 0.`);
+                            height = 0;
+                        } else if (height > MAX_EXPECTED_HEIGHT || height < MIN_EXPECTED_HEIGHT) {
+                             console.warn(`[3D_ASSETS_QUAD_SPIKE] Tile ${tileInfo.originalIndex} (X:${tileInfo.x},Y:${tileInfo.y}) vert(${i_vert},${j_vert}): Extreme height ${height.toFixed(2)} from RGB(${rVal},${gVal},${bVal}) at composite(${cImgX},${cImgY}). Clamped to 0.`);
+                             height = 0;
+                        }
+                        
+                        tileVertices.push(u_local - 0.5, height * MESH_HEIGHT_SCALE, v_local - 0.5);
+                        tileUvs.push(u_local, 1.0 - v_local);
+                    }
+                }
+                // console.log(`[3D_ASSETS_QUAD_MESH_DETAIL] Tile[${idx}] generated ${tileVertices.length / 3} vertices.`);
+
+                for (let j_quad = 0; j_quad < TILE_QUAD_SEGMENTS; j_quad++) {
+                    for (let i_quad = 0; i_quad < TILE_QUAD_SEGMENTS; i_quad++) {
+                        const row1 = j_quad * VERTS_PER_TILE_EDGE;
+                        const row2 = (j_quad + 1) * VERTS_PER_TILE_EDGE;
+                        // Defines two triangles for each quad: (v0, v1, v2) and (v0, v2, v3)
+                        // v0 = row1 + i_quad; v1 = row2 + i_quad; v2 = row2 + i_quad + 1; v3 = row1 + i_quad + 1;
+                        // Corrected for standard winding order (anti-clockwise when looking at front face)
+                        // Assuming X right, Z into screen, Y up for the mesh before group rotation
+                        tileIndices.push(row1 + i_quad, row2 + i_quad, row1 + i_quad + 1);
+                        tileIndices.push(row1 + i_quad + 1, row2 + i_quad, row2 + i_quad + 1);
+                    }
+                }
+
+                individualTileGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tileVertices, 3));
+                individualTileGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(tileUvs, 2));
+                individualTileGeometry.setIndex(tileIndices);
+                individualTileGeometry.computeVertexNormals();
+
+                // 1. Main mesh for internal wireframes (material has wireframe:true)
+                let meshMaterial = material; // Default to the wireframe material
+                const TILE_SIZE_FOR_TEXTURE = 256; // Assuming TILE_SIZE is defined elsewhere and is 256 for textures
+
+                if (tileInfo.basemapImageBitmap && typeof tileInfo.zLevel === 'number' && typeof tileInfo.zBasemapActual === 'number') {
+                    try {
+                        const zL21 = tileInfo.zLevel;
+                        const zBasemapActual = tileInfo.zBasemapActual;
+                        const basemapBitmap = tileInfo.basemapImageBitmap;
+
+                        const tempSatCanvas = document.createElement('canvas');
+                        tempSatCanvas.width = TILE_SIZE_FOR_TEXTURE;
+                        tempSatCanvas.height = TILE_SIZE_FOR_TEXTURE;
+                        const tempSatCtx = tempSatCanvas.getContext('2d');
+
+                        if (tempSatCtx) {
+                            let sx = 0, sy = 0, sWidth = basemapBitmap.width, sHeight = basemapBitmap.height;
+                            
+                            if (zL21 > zBasemapActual) {
+                                const scaleFactor = 2 ** (zL21 - zBasemapActual);
+                                const xOffsetInParent = tileInfo.x % scaleFactor;
+                                const yOffsetInParent = tileInfo.y % scaleFactor;
+                                
+                                sWidth = basemapBitmap.width / scaleFactor;
+                                sHeight = basemapBitmap.height / scaleFactor;
+                                
+                                sx = xOffsetInParent * sWidth;
+                                sy = yOffsetInParent * sHeight;
+                                // console.log(`[3D_ASSETS_TEXTURE] Scaling basemap: Tile ${tileInfo.originalIndex} (Z${zL21}) from Z${zBasemapActual} image. Src crop: x:${sx}, y:${sy}, w:${sWidth}, h:${sHeight}`);
+                            } else if (zL21 < zBasemapActual) {
+                                console.warn(`[3D_ASSETS_TEXTURE] Basemap Z${zBasemapActual} is higher than mesh Z${zL21}. Texture will be downscaled by drawImage.`);
+                            }
+                            
+                            tempSatCtx.drawImage(basemapBitmap, sx, sy, sWidth, sHeight, 0, 0, TILE_SIZE_FOR_TEXTURE, TILE_SIZE_FOR_TEXTURE);
+                            
+                            const satTexture = new THREE.Texture(tempSatCanvas);
+                            satTexture.needsUpdate = true;
+                            // satTexture.colorSpace = THREE.SRGBColorSpace; // Optional
+                            
+                            // satTexture.colorSpace = THREE.SRGBColorSpace; // Commented out to test default color space handling
+                            meshMaterial = new THREE.MeshBasicMaterial({
+                                map: satTexture,
+                                side: THREE.DoubleSide,
+                            });
+                            // console.log(`[3D_ASSETS_TEXTURE] Applied satellite texture to tile ${tileInfo.originalIndex} (Z${zL21} mesh from Z${zBasemapActual} basemap)`);
+                        } else {
+                            console.error(`[3D_ASSETS_TEXTURE] Could not get 2D context for tempSatCanvas for tile ${tileInfo.originalIndex}`);
+                            // meshMaterial remains the default 'material'
+                        }
+                    } catch (texError) {
+                        console.error(`[3D_ASSETS_TEXTURE] Error creating/sampling texture for tile ${tileInfo.originalIndex}:`, texError);
+                        // meshMaterial remains the default 'material'
+                    }
+                } else {
+                    if (!tileInfo.basemapImageBitmap) {
+                        // console.log(`[3D_ASSETS_TEXTURE] No basemapImageBitmap for tile ${tileInfo.originalIndex}, using default material.`);
+                    } else {
+                        console.warn(`[3D_ASSETS_TEXTURE] Missing zLevel or zBasemapActual for tile ${tileInfo.originalIndex}, cannot scale texture. Using default material. ZL: ${tileInfo.zLevel}, ZBA: ${tileInfo.zBasemapActual}`);
+                    }
+                    // meshMaterial remains the default 'material'
+                }
+                // Now, use meshMaterial for the THREE.Mesh
+                const tileMesh = new THREE.Mesh(individualTileGeometry, meshMaterial);
+                tileMesh.renderOrder = 0; // Ensure textured mesh renders first
+                // Position the tile mesh. Its local origin (0,0,0) is its center.
+                // relX, relY are 0-indexed tile grid positions.
+                // Meshes are built on XZ plane, Y is height.
+                tileMesh.position.set(tileInfo.relX, 0, tileInfo.relY);
+                tileMeshesGroup.add(tileMesh);
+
+                // 2. Explicit perimeter edges using EdgesGeometry
+                // Only add perimeter lines if showTexture is false (i.e., wireframe mode is desired for this tile in the GLTF)
+                const showTextureForThisTile = tileInfo.feature.get('showTexture') === undefined ? true : tileInfo.feature.get('showTexture');
+
+                if (!showTextureForThisTile) {
+                    const edges = new THREE.EdgesGeometry(individualTileGeometry);
+                    const perimeterLineMaterial = new THREE.LineBasicMaterial({
+                        color: material.color, // Use the same color as the main wireframe
+                        // linewidth: 1.5 // Optional: make perimeter slightly thicker if needed
+                        // Note: If you want a different wireframe color/width when texture is off, adjust here.
+                    });
+                    const perimeterLines = new THREE.LineSegments(edges, perimeterLineMaterial);
+                    perimeterLines.renderOrder = 1; // Ensure wireframe renders after (on top of) this specific tile's surface
+                    perimeterLines.position.set(tileInfo.relX, 0, tileInfo.relY); // Position same as the main mesh
+                    tileMeshesGroup.add(perimeterLines);
+                    // console.log(`[3D_ASSETS_WIREFRAME] Added perimeter wireframe for tile ${tileInfo.originalIndex} because showTexture is false.`);
+                } else {
+                    // console.log(`[3D_ASSETS_WIREFRAME] Texture is ON for tile ${tileInfo.originalIndex}, skipping perimeter wireframe in GLTF.`);
+                }
+            });
+        }
+    } else {
+        console.log("[3D_ASSETS_QUAD_MESH] Fallback: Generating per-tile flat quad meshes (no compositeImageData or no valid decoder).");
+        tileInfoList.forEach(tileInfo => {
+            if (tileInfo.x === null || tileInfo.y === null) {
+                 // console.warn(`[3D_ASSETS_QUAD_FLAT] Skipping flat mesh for tile index ${tileInfo.originalIndex} due to null coordinates.`);
+                 return;
+            }
+
+            const individualTileGeometry = new THREE.BufferGeometry();
+            const tileVertices = [];
+            const tileUvs = [];
+            const tileIndices = [];
+
+            for (let j_vert = 0; j_vert < VERTS_PER_TILE_EDGE; j_vert++) {
+                for (let i_vert = 0; i_vert < VERTS_PER_TILE_EDGE; i_vert++) {
+                    const u_local = i_vert / TILE_QUAD_SEGMENTS;
+                    const v_local = j_vert / TILE_QUAD_SEGMENTS;
+                    
+                    // Vertices for a plane on XZ, with Y as height (0 for flat).
+                    tileVertices.push(u_local - 0.5, 0, v_local - 0.5);
+                    tileUvs.push(u_local, 1.0 - v_local); // Standard UV mapping
+                }
+            }
+
+            for (let j_quad = 0; j_quad < TILE_QUAD_SEGMENTS; j_quad++) {
+                for (let i_quad = 0; i_quad < TILE_QUAD_SEGMENTS; i_quad++) {
+                    const row1 = j_quad * VERTS_PER_TILE_EDGE;
+                    const row2 = (j_quad + 1) * VERTS_PER_TILE_EDGE;
+                    tileIndices.push(row1 + i_quad, row2 + i_quad, row1 + i_quad + 1);
+                    tileIndices.push(row1 + i_quad + 1, row2 + i_quad, row2 + i_quad + 1);
+                }
+            }
+
+            individualTileGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tileVertices, 3));
+            individualTileGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(tileUvs, 2));
+            individualTileGeometry.setIndex(tileIndices);
+            individualTileGeometry.computeVertexNormals(); // Good for consistent material behavior
+
+            // 1. Main mesh for internal wireframes (material has wireframe:true)
+            const tileMesh = new THREE.Mesh(individualTileGeometry, material);
+            tileMesh.position.set(tileInfo.relX, 0, tileInfo.relY);
+            tileMeshesGroup.add(tileMesh);
+
+            // 2. Explicit perimeter edges using EdgesGeometry to ensure all 4 sides are drawn
+            const edges = new THREE.EdgesGeometry(individualTileGeometry); // Default threshold angle is 1 degree
+            const perimeterLineMaterial = new THREE.LineBasicMaterial({
+                color: material.color, // Use the same color as the main wireframe
+                // linewidth: 1.5 // Optional: make perimeter slightly thicker if needed
+            });
+            const perimeterLines = new THREE.LineSegments(edges, perimeterLineMaterial);
+            perimeterLines.position.set(tileInfo.relX, 0, tileInfo.relY); // Position same as the main mesh
+            tileMeshesGroup.add(perimeterLines);
+        });
+        
+        // Add a small placeholder if absolutely nothing was generated from tileInfoList but there were features to process.
+        if (tileMeshesGroup.children.length === 0 && savedFeatures && savedFeatures.length > 0) {
+            console.warn("[3D_ASSETS_QUAD_FLAT] No tile meshes generated even in fallback (e.g. all tileInfo had null coords or other issues). Creating a tiny placeholder.");
+            // Use numTilesX and numTilesY which were defined earlier in the raster path.
+            const placeholderWidth = numTilesX > 0 ? 0.1 * numTilesX : 0.1;
+            const placeholderHeight = numTilesY > 0 ? 0.1 * numTilesY : 0.1;
+            const tinyPlaceholderGeom = new THREE.BoxGeometry(placeholderWidth, 0.1, placeholderHeight);
+            const placeholderMesh = new THREE.Mesh(tinyPlaceholderGeom, material);
+            // Center the placeholder within the overall area of the intended tileset
+            placeholderMesh.position.set( (numTilesX > 0 ? (numTilesX -1) / 2 : 0), 0, (numTilesY > 0 ? (numTilesY-1) / 2 : 0));
+            tileMeshesGroup.add(placeholderMesh);
+        }
+    }
+    allPoints = [];
+
+    window.latestGeneratedPointCloud = { id: tilesetGroupId, name: tilesetName, data: allPoints, source: demSourcePreference };
+    console.log(`[3D_ASSETS] Generated point cloud for ${tilesetName} with ${allPoints.length} points (Source: ${demSourcePreference}).`);
+
+    if (typeof THREE.GLTFExporter === 'undefined') { // Check global THREE.GLTFExporter
+        console.error("[3D_ASSETS] THREE.GLTFExporter is not loaded. Ensure it's included via CDN or script tag. Cannot generate GLTF.");
+        window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "GLTFExporter not available", source: demSourcePreference };
+        return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+    }
+
+    if (tileMeshesGroup.children.length > 0) {
+        scene.add(tileMeshesGroup);
+        const exporter = new THREE.GLTFExporter(); // Use global THREE.GLTFExporter
+        try {
+            const gltfData = await new Promise((resolve, reject) => {
+                exporter.parse(scene, (gltf) => resolve(gltf), (error) => reject(error), { binary: false });
+            });
+            console.log(`[3D_ASSETS] Successfully generated GLTF data for ${tilesetName} (Source: ${demSourcePreference}).`);
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: gltfData, source: demSourcePreference };
+        } catch (error) {
+            console.error("[3D_ASSETS] Failed to export GLTF:", error);
+            window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "GLTF Export Failed", source: demSourcePreference };
+        }
+    } else {
+        console.warn("[3D_ASSETS] No meshes were created, skipping GLTF export.");
+        window.latestGeneratedGltf = { id: tilesetGroupId, name: tilesetName, data: null, error: "No meshes for GLTF", source: demSourcePreference };
+    }
+    return { pointCloud: window.latestGeneratedPointCloud, gltf: window.latestGeneratedGltf };
+} // This closes the 'else' block for the raster DEM path.
+} // This closes the async function generate3DAssetsFromTileset.
     if (saveSelectionBtn && !state.saveSelectionListenerAttached) {
         console.log("%cSAVE SELECTION BTN: Attaching listener...", "color: blue; font-weight: bold;");
         saveSelectionBtn.addEventListener('click', () => {
+            console.error("<<<<< DEBUG: SAVE SELECTION BUTTON CLICKED - UNEXPECTED? >>>>>", new Error().stack); // Added prominent log
             console.log("%cSAVE SELECTION BTN CLICKED", "color: red; font-weight: bold; background: yellow;");
             if (!window.selectedLayerId || !window.userLayers[window.selectedLayerId] || !selectionSource || !tilesetNameInput) {
                 alert("Cannot save: Critical components missing."); return;
@@ -2636,7 +4781,9 @@ END OLD viewTilesetInCesiumBtn LISTENER */
                 alert("Cannot save: Selection overlaps with an existing tileset in this layer."); return;
             }
             const featuresToAdd = [];
-            const tilesetGroupId = `tileset-group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+            const tilesetGroupId = (typeof ulidx !== 'undefined' && typeof ulidx.ulid === 'function')
+                ? ulidx.ulid()
+                : `fallback-group-id-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // Use ULID if available
             let tilesetFeatureCounter = 0;
             selectedFeatures.forEach(feature => {
                 const tileId = feature.getId();
@@ -2648,6 +4795,7 @@ END OLD viewTilesetInCesiumBtn LISTENER */
                 clonedFeature.set('tilesetGroupId', tilesetGroupId);
                 clonedFeature.set('tileId', tileId);
                 clonedFeature.set('isVisible', true);
+                clonedFeature.set('showTexture', true); // Default to texture ON for new saves
                 const chosenColor = detailsColorPicker?.value;
                 const lowerChosenColor = chosenColor ? chosenColor.toLowerCase() : "";
                 const isBlack = lowerChosenColor === '#000000' || lowerChosenColor === 'black' || lowerChosenColor === 'rgb(0,0,0)' || lowerChosenColor.startsWith('rgba(0,0,0');
@@ -2663,6 +4811,24 @@ END OLD viewTilesetInCesiumBtn LISTENER */
             if (featuresToAdd.length > 0) {
                 targetSource.addFeatures(featuresToAdd);
                 console.log(`%cSAVE HANDLER: Added ${featuresToAdd.length} features to targetSource.`, "color: green;");
+
+                // Attempt to generate GLTF for the new tileset
+                if (featuresToAdd.length > 0) {
+                    generate3DAssetsFromTileset(tilesetGroupId, tilesetName, featuresToAdd)
+                        .then(assetResults => { // assetResults will be { pointCloud: ..., gltf: ... }
+                            if (assetResults && assetResults.gltf && assetResults.gltf.data) {
+                                console.log(`[SAVE_HANDLER] 3D Asset (GLTF) generation for ${tilesetName} completed.`);
+                                // TODO: Further action with assetResults.gltf (e.g., update UI, trigger thumbnail load)
+                            } else {
+                                console.warn(`[SAVE_HANDLER] 3D Asset (GLTF) generation for ${tilesetName} failed or produced no GLTF data. Error: ${assetResults?.gltf?.error}`);
+                            }
+                            if (assetResults && assetResults.pointCloud && assetResults.pointCloud.data) {
+                                console.log(`[SAVE_HANDLER] 3D Asset (PointCloud) generation for ${tilesetName} completed with ${assetResults.pointCloud.data.length} points.`);
+                            } else {
+                                console.warn(`[SAVE_HANDLER] 3D Asset (PointCloud) generation for ${tilesetName} failed or produced no PointCloud data.`);
+                            }
+                        });
+                }
                 
                 // Explicitly remove original features from temporary selection NOW
                 // Note: selectedFeatures was defined earlier in this function
@@ -2857,20 +5023,35 @@ console.log("%cSAVE HANDLER: populateTilesetList has been called from save handl
                 } else {
                     console.warn("DEBUG: window.OG_RESOURCES_PATH or OpenGlobus handler not available to set resources URL.");
                 }
+// Removing current definition of updateCesiumZL21Grid to redefine it earlier.
+
+                console.log("DEBUG_OG_EARTH: Checking 'og' object before Globe creation. Keys:", og ? Object.keys(og) : "og is undefined");
+                console.log("DEBUG_OG_EARTH: Checking 'og.ellipsoid' (expect undefined if pattern holds):", og ? og.ellipsoid : "og is undefined");
+                // Earth globe typically defaults to WGS84 if ellipsoid is not specified.
+                // Checking for og.WGS84 to see if predefined ellipsoids are direct properties of og.
+                console.log("DEBUG_OG_EARTH: Checking 'og.WGS84' (direct access attempt for Earth ellipsoid):", og ? og.WGS84 : "og is undefined");
 
                 window.globus = new og.Globe({
                     target: globusContainerElement,
-                    name: "OpenGlobus View",
+                    name: "Earth", // Changed name
                     layers: initialOgLayers,
-                    terrain: new og.terrain.EmptyTerrain(), // Initialize with EmptyTerrain directly
+// Misplaced updateCesiumZL21Grid function removed.
+// It was inserted inside the new og.Globe options object.
+                    terrain: new og.terrain.GlobusRgbTerrain(), // Use GlobusRgbTerrain
+                    atmosphereEnabled: true, // Added
                     lon: -74.0445,
                     lat: 40.6892,
-                    alt: 3000, // Initial constructor altitude
-                    resourcesSrc: "/packages/openglobus/res",
-                    fontsSrc: "/packages/openglobus/res/fonts"
-                    // controls: [new og.control.LayerSwitcher()] // Controls will be added later
+                    alt: 3000,
+                    resourcesSrc: "packages/openglobus/res", // Corrected path (removed leading /)
+                    fontsSrc: "packages/openglobus/res/fonts", // Corrected path (removed leading /)
+                    sun: { stopped: true } // Added
                 });
+                    // controls: [new og.control.LayerSwitcher()] // Controls will be added later
 
+if (window.globus.planet && og.control && og.control.TimelineControl) {
+                    window.globus.planet.addControl(new og.control.TimelineControl());
+                    console.log("DEBUG_OG_EARTH: TimelineControl added to Earth globe.");
+                }
             if (window.globus) {
                 console.log("%cDEBUG: og.Globe constructor SUCCEEDED. window.globus object created.", "color: green; font-weight: bold;", window.globus);
                 // LayerSwitcher is now added via constructor options.
@@ -3494,6 +5675,15 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
                 console.error(`DRAG_ERROR: A panel in controlPanels array (at index ${index}) is null. Cannot make draggable.`);
             }
         });
+
+        // Make the new files export modal content draggable
+        const filesExportModalContent = document.getElementById('files-export-modal-content');
+        if (filesExportModalContent) {
+            makeDraggable(filesExportModalContent);
+        } else {
+            console.warn("DRAG_ERROR: Could not find 'files-export-modal-content' to make it draggable.");
+        }
+
         console.log("DEBUG: Draggable behavior applied to panels.");
     }
 
@@ -3671,6 +5861,7 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         layersPanel.style.setProperty('display', 'block', 'important');
         layersPanel.style.setProperty('top', '160px', 'important'); // Position below layer-switcher per CSS
         layersPanel.style.setProperty('left', '10px', 'important');
+setupEditorPanelLogic(); // Initialize Editor Panel logic
         layersPanel.style.setProperty('z-index', '1900', 'important'); // Higher z-index to be above map/globe panels
         console.log("DEBUG: Making layers panel visible below the maps menu but in front of map view");
     } else {
@@ -3684,6 +5875,7 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
     console.log("%cDEBUG: Right after calling initializeOpenGlobus()", "color: red; font-weight: bold;");
     initializeOpenLayersMap(); // Moved here, inside DOMContentLoaded
     applyDraggableToAllPanels();
+setupEditorPanelLogic(); // Initialize Editor Panel logic
     setupXRPanelLogic(); // Initialize XR panel logic
 
     // Check initial state of Scene button and panel
@@ -3971,7 +6163,53 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         if (settingGridWeightInput) {
             settingGridWeightInput.value = gridWeight !== null ? gridWeight : "0.5"; // Default 0.5
         }
+
+        // Load DEM source settings
+        const demSource = localStorage.getItem('demSourcePreference');
+        const mapTilerKey = localStorage.getItem('mapTilerApiKey');
+        const demSourceSelect = document.getElementById('setting-dem-source-select');
+        const maptilerApiKeyInput = document.getElementById('setting-maptiler-api-key');
+        const maptilerApiKeySection = document.getElementById('maptiler-api-key-section');
+
+        if (demSourceSelect) {
+            if (demSource) demSourceSelect.value = demSource;
+            // Trigger change to ensure dependent UI (like API key field) updates
+            demSourceSelect.dispatchEvent(new Event('change'));
+        }
+        if (maptilerApiKeyInput && mapTilerKey) {
+            maptilerApiKeyInput.value = mapTilerKey;
+        }
+        console.log(`DEBUG: Loaded DEM Source: ${demSourceSelect?.value}, MapTiler Key: ${maptilerApiKeyInput?.value ? '***' : 'Not Set'}`);
     }
+
+    // Event listeners for DEM source settings
+    const demSourceSelectGlobal = document.getElementById('setting-dem-source-select');
+    const maptilerApiKeyInputGlobal = document.getElementById('setting-maptiler-api-key');
+    const maptilerApiKeySectionGlobal = document.getElementById('maptiler-api-key-section');
+
+    if (demSourceSelectGlobal && maptilerApiKeySectionGlobal) {
+        demSourceSelectGlobal.addEventListener('change', function() {
+            const selectedSource = this.value;
+            localStorage.setItem('demSourcePreference', selectedSource);
+            console.log(`[SETTINGS] DEM Source preference saved: ${selectedSource}`);
+            if (selectedSource === 'maptiler') {
+                maptilerApiKeySectionGlobal.style.display = 'block';
+            } else {
+                maptilerApiKeySectionGlobal.style.display = 'none';
+            }
+        });
+    }
+
+    if (maptilerApiKeyInputGlobal) {
+        maptilerApiKeyInputGlobal.addEventListener('input', function() {
+            localStorage.setItem('mapTilerApiKey', this.value);
+            // console.log(`[SETTINGS] MapTiler API Key updated (length: ${this.value.length})`); // Avoid logging key
+        });
+         maptilerApiKeyInputGlobal.addEventListener('change', function() { // Also save on blur/enter
+            console.log(`[SETTINGS] MapTiler API Key saved (on change event).`);
+        });
+    }
+
 
     function applyStartLocationSettings() {
         console.log("DEBUG: applyStartLocationSettings called.");
@@ -4058,195 +6296,11 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
     let originalOpenLayersViewConfig = null;
     // For OpenGlobus, initializeOpenGlobus() will be used to restore Earth.
 
-    function updateActiveGlobeButton(activeButtonId) {
-        const globeButtons = [
-            settingGlobeEarthBtn, // Use new var names
-            settingGlobeMoonBtn,
-            settingGlobeMarsBtn,
-            settingGlobeMetaverseBtn,
-            settingGlobeCustomBtn
-        ];
-        globeButtons.forEach(button => {
-            if (button) { // Check if button exists
-                if (button.id === activeButtonId) {
-                    button.classList.add('active');
-                } else {
-                    button.classList.remove('active');
-                }
-            }
-        });
-    }
+    // updateActiveGlobeButton function removed, will be re-inserted earlier in the script.
 
-    function switchToEarthView() {
-        console.log("Switching to Earth view...");
-        if (!state.olMap) {
-            console.warn("OpenLayers Map not initialized. Cannot switch to Earth.");
-            return;
-        }
+    // switchToEarthView function removed, will be re-inserted earlier in the script.
 
-        // Restore OpenLayers
-        if (originalOpenLayersBaseLayerSource && originalOpenLayersViewConfig && state.olMap) {
-            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
-            if (baseLayer) {
-                baseLayer.setSource(originalOpenLayersBaseLayerSource);
-            }
-            state.olMap.setView(new ol.View({
-                center: originalOpenLayersViewConfig.center,
-                zoom: originalOpenLayersViewConfig.zoom,
-                projection: originalOpenLayersViewConfig.projection || 'EPSG:3857',
-                maxZoom: originalOpenLayersViewConfig.maxZoom,
-                minZoom: originalOpenLayersViewConfig.minZoom
-            }));
-            console.log("OpenLayers switched to Earth.");
-        } else {
-            console.warn("Original OpenLayers Earth configuration not found or olMap not ready. Re-initializing OpenLayers.");
-             if (state.olMap && typeof state.olMap.dispose === 'function') {
-                state.olMap.dispose();
-             }
-             state.olMap = null;
-             initializeOpenLayersMap();
-        }
-
-        // Restore OpenGlobus for Earth
-        if (state.globus && typeof state.globus.planet?.remove === 'function') {
-            state.globus.planet.remove();
-            state.globus = null;
-        }
-        initializeOpenGlobus(); // This re-initializes OpenGlobus for Earth
-        const itownsContainer = document.getElementById('itowns-container');
-        const globusContainer = document.getElementById('globusContainer');
-        if (itownsContainer) itownsContainer.style.display = 'none';
-        if (globusContainer) globusContainer.style.display = 'block'; // Ensure OpenGlobus container is visible
-        state.activeGlobeLibrary = 'openglobus';
-        console.log("OpenGlobus switched to Earth.");
-        updateActiveGlobeButton('setting-globe-earth');
-    }
-
-    function switchToMoonView() {
-        console.log("Switching to Moon view...");
-        const itownsContainer = document.getElementById('itowns-container');
-        const globusContainer = document.getElementById('globusContainer');
-        if (itownsContainer) itownsContainer.style.display = 'none';
-        if (globusContainer) globusContainer.style.display = 'block'; // Ensure OpenGlobus container is visible
-        state.activeGlobeLibrary = 'openglobus';
-
-        if (!state.olMap) {
-            console.warn("OpenLayers Map not initialized. Cannot switch to Moon.");
-            return;
-        }
-        if (typeof og === 'undefined' || typeof ol === 'undefined') {
-            console.error("OpenGlobus (og) or OpenLayers (ol) library not loaded.");
-            return;
-        }
-
-        // Store original OL config if not already stored
-        if (!originalOpenLayersBaseLayerSource && state.olMap && state.olMap.getLayers().getArray().length > 0) {
-            const baseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
-            if (baseLayer && baseLayer.getSource()) {
-                originalOpenLayersBaseLayerSource = baseLayer.getSource();
-            }
-            const view = state.olMap.getView();
-            if (view) {
-                originalOpenLayersViewConfig = {
-                    center: view.getCenter(),
-                    zoom: view.getZoom(),
-                    projection: view.getProjection().getCode(),
-                    maxZoom: view.getMaxZoom(),
-                    minZoom: view.getMinZoom()
-                };
-            }
-        }
-
-        // OpenLayers Moon Setup
-        const moonOLSource = new ol.source.XYZ({
-            url: 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png',
-            attributions: 'Moon basemap © OPM Builder, CartoDB',
-            maxZoom: 10
-        });
-        const olBaseLayer = state.olMap.getLayers().getArray().find(layer => layer.get('type') === 'base');
-        if (olBaseLayer) {
-            olBaseLayer.setSource(moonOLSource);
-        }
-        state.olMap.setView(new ol.View({
-            center: ol.proj.fromLonLat([0, 0], 'EPSG:4326'), // Ensure center is in view projection
-            zoom: 2,
-            projection: 'EPSG:4326',
-            maxZoom: 10
-        }));
-        console.log("OpenLayers switched to Moon.");
-
-        // OpenGlobus Moon Setup
-        if (state.globus && typeof state.globus.planet?.remove === 'function') {
-            state.globus.planet.remove();
-            state.globus = null;
-        }
-
-        const moonSatLayer = new og.layer.XYZ("moon-base-sat", {
-            isBaseLayer: true,
-            url: "https://{s}.terrain.openglobus.org/moon/sat/{z}/{x}/{y}.png",
-            visibility: true,
-            maxNativeZoom: 10,
-            attribution: "LRO Global Morphology Mosaic 100m",
-            diffuse: [1.1, 1.1, 1.3],
-            ambient: [0.01, 0.01, 0.02],
-        });
-
-        const lunarQuickMapLayer = new og.layer.XYZ("Lunar QuickMap", {
-            isBaseLayer: true,
-            url: "https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/{z}/{x}/{y}.jpg",
-            visibility: false,
-            attribution: '<a href="https://lunar.quickmap.io">Lunar QuickMap</a>, NASA, ASU & ACT Corp.',
-            diffuse: [1.1, 1.1, 1.3],
-            ambient: [0.01, 0.01, 0.02],
-            urlRewrite: (s) => `https://lroc-tiles.quickmap.io/tiles/wac_nac_nacroi/lunar-fulleqc/${s.tileZoom + 1}/${s.tileX}/${s.tileY}.jpg`
-        });
-        
-        const appoloSatLayer = new og.layer.XYZ("APPOLO_SAT_Moon", {
-            isBaseLayer: false,
-            url: "https://{s}.terrain.openglobus.org/moon/sat_appolo/{z}/{x}/{y}.png",
-            visibility: true,
-            maxNativeZoom: 12,
-            extent: [[19.9771, 30.4294], [20.3639, 30.9162]] // Corrected extent to [minLon, minLat], [maxLon, maxLat]
-        });
-
-        const moonTerrain = new og.terrain.RgbTerrain(null, {
-            geoidSrc: null,
-            maxZoom: 7,
-            url: "https://{s}.terrain.openglobus.org/moon/dem/{z}/{x}/{y}.png",
-            heightFactor: 0.5,
-            minHeight: -20000,
-            resolution: 0.1021,
-            gridSizeByZoom: [64, 32, 16, 16, 32, 64, 64, 32, 16, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2]
-        });
-        
-        state.globus = new og.Globe({
-            target: "globusContainer",
-            name: "Moon",
-            ellipsoid: og.ellipsoid.moon,
-            quadTreeStrategyPrototype: og.quadTreeStrategyType.equi,
-            maxAltitude: 5841727,
-            terrain: moonTerrain,
-            layers: [moonSatLayer, lunarQuickMapLayer, appoloSatLayer],
-            nightTextureSrc: null,
-            specularTextureSrc: null,
-            atmosphereEnabled: false,
-            gamma: 1.25,
-            exposure: 2.195,
-        });
-
-        if (state.globus.planet) {
-            if (og.control && og.control.TimelineControl) state.globus.planet.addControl(new og.control.TimelineControl());
-            if (og.control && og.control.LayerSwitcher) state.globus.planet.addControl(new og.control.LayerSwitcher());
-            
-            if (state.globus.planet.renderer && state.globus.planet.renderer.controls.SimpleSkyBackground) {
-                state.globus.planet.renderer.controls.SimpleSkyBackground.colorOne = "rgb(0, 0, 0)";
-                state.globus.planet.renderer.controls.SimpleSkyBackground.colorTwo = "rgb(0, 0, 0)";
-            }
-        }
-        
-        console.log("OpenGlobus switched to Moon.");
-        updateActiveGlobeButton('setting-globe-moon'); // Use new ID
-    }
+    // switchToMoonView function removed, will be re-inserted earlier in the script.
 
     if (settingSetStartLocationBtn) {
         settingSetStartLocationBtn.addEventListener('click', () => {
@@ -4272,6 +6326,7 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
             
             if (currentLon !== undefined) localStorage.setItem('setting_startLon', currentLon.toFixed(6));
             if (currentLat !== undefined) localStorage.setItem('setting_startLat', currentLat.toFixed(6));
+    // switchToMarsView function removed, will be re-inserted earlier in the script.
             if (currentZoom !== undefined) localStorage.setItem('setting_startZoom', Math.round(currentZoom).toString());
             
             if (currentLon !== undefined) {
@@ -5207,6 +7262,34 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
     const customLayerNameInputElement = document.getElementById('custom-layer-name');
     const customLayerUrlInputElement = document.getElementById('custom-layer-url');
     const addCustomLayerBtnElement = document.getElementById('add-custom-layer-btn');
+// --- Cesium Terrain Selection Logic ---
+    const cesiumTerrainSelectElement = document.getElementById('cesium-terrain-select');
+    if (cesiumTerrainSelectElement) {
+        // Load preference from localStorage
+        const savedTerrainPreference = localStorage.getItem('cesiumTerrainPreference');
+        if (savedTerrainPreference) {
+            cesiumTerrainSelectElement.value = savedTerrainPreference;
+            // Note: This only sets the dropdown. The actual terrain provider is set
+            // during initializeOLCesiumMapPanel or when the 3D view is toggled on.
+        }
+
+        cesiumTerrainSelectElement.addEventListener('change', function() {
+            const selectedTerrainType = this.value;
+            console.log(`Cesium terrain selection changed to: ${selectedTerrainType}`);
+            localStorage.setItem('cesiumTerrainPreference', selectedTerrainType);
+            
+            // Call updateCesiumTerrainProvider if OLCesium is initialized and active
+            // and the active map panel is the main one (not a secondary viewer)
+            if (state.activeMapLibrary === 'openlayers' && olcsMapPanel && olcsMapPanel.getEnabled()) {
+                updateCesiumTerrainProvider(selectedTerrainType);
+            } else if (state.activeMapLibrary === 'openlayers' && olcsMapPanel && !olcsMapPanel.getEnabled()) {
+                // If OLCesium is initialized but not active, the terrain will be applied when it's next enabled.
+                console.log("Cesium view (OLCesium) not active, terrain preference saved and will apply when 3D view is enabled.");
+            }
+            // If another map library is active, this change will be picked up if/when OLCesium is re-initialized or enabled.
+        });
+    }
+    // --- End Cesium Terrain Selection Logic ---
 
     const olBaseLayers = {
         'satellite': { source: () => new ol.source.XYZ({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attributions: 'Tiles © Esri', maxZoom: 19 }) },
@@ -5375,16 +7458,14 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         
         // Load the test tileset (SoL 2x2 grid) after maps are initialized
         if (typeof loadTestTilesetToLayer0 === 'function') {
-            console.log("Attempting to load test tileset on startup...");
-            loadTestTilesetToLayer0();
+            console.log("Attempting to load test tileset on startup... (NOW DISABLED)");
+            // loadTestTilesetToLayer0(); // Disabled as per user request
         } else {
             console.warn("loadTestTilesetToLayer0 function is not defined, cannot load test data.");
         }
         
-        // Load the test tileset after maps are initialized
-        if (typeof loadTestTilesetToLayer0 === "function") {
-            loadTestTilesetToLayer0();
-        }
+        // Redundant call to loadTestTilesetToLayer0 removed (was lines 7185-7188).
+        // The first call (around line 7180) is sufficient.
 
         // Final update for MapLibre tilesets after all initializations
         if (state.mapLibreMap && state.mapLibreMap.isStyleLoaded()) {
@@ -5449,17 +7530,34 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
     }, 1000);
 
     // Initialize maps and globes now that all their functions should be defined
-    if (typeof initializeOpenLayersMap === 'function') {
-        initializeOpenLayersMap();
-    } else {
-        console.error("initializeOpenLayersMap function is not defined! Maps may not work.");
-    }
-    if (typeof initializeOpenGlobus === 'function') {
-        initializeOpenGlobus();
-    } else {
-        console.error("initializeOpenGlobus function is not defined! Globe may not work.");
-    }
+    // MOVED map/globe initialization into the setTimeout after loadSettings() to ensure single init.
+    // if (typeof initializeOpenLayersMap === 'function') {
+    //     initializeOpenLayersMap();
+    // } else {
+    //     console.error("initializeOpenLayersMap function is not defined! Maps may not work.");
+    // }
+    // if (typeof initializeOpenGlobus === 'function') {
+    //     initializeOpenGlobus();
+    // } else {
+    //     console.error("initializeOpenGlobus function is not defined! Globe may not work.");
+    // }
 
+// --- Minimize/Restore Panel Logic ---
+    const minimizeButtons = document.querySelectorAll('.control-panel .minimize-btn');
+    minimizeButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.stopPropagation(); // Prevent click from bubbling to panel drag logic if header is draggable
+            const panel = this.closest('.control-panel');
+            if (panel) {
+                // Hide the entire panel.
+                // The main toolbar buttons for "Maps" or "Globes" will show it again.
+                panel.style.display = 'none';
+                // No need to change button text or class since the button will be hidden.
+                // The title "Toggle Panel" on the button is still generally accurate.
+            }
+        });
+    });
+    // --- End Minimize/Restore Panel Logic ---
     // Event Listeners for Globe Buttons
     if (settingGlobeEarthBtn) { // Use new var name
         settingGlobeEarthBtn.addEventListener('click', switchToEarthView);
@@ -5468,11 +7566,8 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         settingGlobeMoonBtn.addEventListener('click', switchToMoonView);
     }
     if (settingGlobeMarsBtn) { // Use new var name
-        settingGlobeMarsBtn.addEventListener('click', () => {
-            console.log("Mars globe button clicked - functionality not yet implemented.");
-            updateActiveGlobeButton('setting-globe-mars'); // Use new ID
-            // Potentially call switchToMarsView(); in the future
-        });
+        console.log(`[DEBUG_SCOPE] typeof switchToMarsView before listener attachment: ${typeof switchToMarsView}`);
+        // settingGlobeMarsBtn.addEventListener('click', switchToMarsView); // Temporarily commented out to suppress ReferenceError and focus on mesh thumbnail
     }
     if (settingGlobeMetaverseBtn) { // Use new var name
         settingGlobeMetaverseBtn.addEventListener('click', () => {
@@ -5568,32 +7663,26 @@ console.log("%cDEBUG: POST-INSTANTIATION of ogSavedTilesetsLayer & addLayer call
         window.selectedLayerId === layer0Id &&
         window.userLayers[layer0Id] &&
         typeof window.userLayers[layer0Id].name === 'string' &&
-        userLayerList) {
+        document.getElementById('user-layer-list')) { // Assuming userLayerList refers to this element
         
         console.log(`DEBUG: Adding Layer 0 to list. ID: ${layer0Id}, Name: ${window.userLayers[layer0Id].name}`);
-        addLayerToList(layer0Id, window.userLayers[layer0Id].name, true);
-        selectLayerInList(layer0Id);
-        console.log("DEBUG: Layer 0 added and selected in UI list.");
+        // Ensure addLayerToList and selectLayerInList are defined before this block if they are called here
+        if (typeof addLayerToList === 'function' && typeof selectLayerInList === 'function') {
+            // addLayerToList(layer0Id, window.userLayers[layer0Id].name, true); // Layer 0 is already added by initializeOpenLayersMap
+            selectLayerInList(layer0Id);
+            console.log("DEBUG: Layer 0 added and selected in UI list.");
+        } else {
+            console.warn("DEBUG: addLayerToList or selectLayerInList not defined when trying to add Layer 0.");
+        }
     } else {
-        console.warn("DEBUG: Conditions NOT met to add Layer 0 to UI list initially. Check userLayers, selectedLayerId, layer0Id, and userLayerList.");
+        console.warn("DEBUG: Conditions NOT met to add Layer 0 to UI list initially. Check userLayers, selectedLayerId, layer0Id, and 'user-layer-list' element.");
     }
-// Load test tileset for debugging and verification
-console.log("%cENTERED DOMContentLoaded LISTENER - START", "background: orange; color: black; font-size: 1.5em; font-weight: bold;");
-if (typeof loadTestTilesetToLayer0 === 'function') {
-    console.log("DEBUG: Calling loadTestTilesetToLayer0() on startup... (TEMPORARILY COMMENTED OUT FOR DRAG SELECT TEST)");
-    // loadTestTilesetToLayer0();
-} else {
-    console.warn("DEBUG: loadTestTilesetToLayer0 function not found, cannot load test data.");
-}
-
-if (typeof setupXRPanelLogic === 'function') {
-        console.log("DEBUG: Calling setupXRPanelLogic() from DOMContentLoaded.");
-        setupXRPanelLogic();
-    } else {
-        console.warn("DEBUG: setupXRPanelLogic function not found, cannot set up XR panel.");
-    }
-    console.log("DEBUG: End of DOMContentLoaded listener, before MutationObserver.");
-
+// Removed updateCesiumTerrainProvider function for debugging syntax error
+// Erroneous block removed. This logic for adding Layer 0 to UI list
+// should exist elsewhere, typically within the main DOMContentLoaded listener
+// after userLayers and userLayerList are confirmed to be initialized.
+// Misplaced block of DOMContentLoaded code removed.
+// The actual initializeOLCesiumMapPanel function should follow.
 function initializeOLCesiumMapPanel() {
     console.log("INIT_OLCS: Entered initializeOLCesiumMapPanel.");
     if (typeof olcs === 'undefined' || typeof Cesium === 'undefined') {
@@ -5671,6 +7760,12 @@ function initializeOLCesiumMapPanel() {
     }
     console.log("INIT_OLCS: cesiumMapContainer found.");
 
+    // Ensure the Cesium container is visible before OLCesium instantiation
+    if (cesiumMapContainer) {
+        console.log("INIT_OLCS: Temporarily ensuring cesiumMapContainer is display:block for OLCesium init.");
+        cesiumMapContainer.style.display = 'block';
+    }
+
     try {
         console.log("INIT_OLCS: Attempting 'new olcs.OLCesium(...)'");
         olcsMapPanel = new olcs.OLCesium({
@@ -5681,30 +7776,27 @@ function initializeOLCesiumMapPanel() {
         
         const scene = olcsMapPanel.getCesiumScene();
         if (scene) {
-            if (typeof Cesium.createWorldTerrain === 'function') {
-                if (scene.terrainProvider instanceof Cesium.EllipsoidTerrainProvider) {
-                    console.log("INIT_OLCS: Default EllipsoidTerrainProvider found, switching to Cesium.createWorldTerrain.");
-                    console.log("INIT_OLCS: Re-checking typeof Cesium.createWorldTerrain immediately before call:", typeof Cesium.createWorldTerrain);
-                    scene.terrainProvider = Cesium.createWorldTerrain({
-                        // requestWaterMask: true,
-                        // requestVertexNormals: true
-                    });
-                } else if (!scene.terrainProvider) {
-                    console.warn("INIT_OLCS: scene.terrainProvider is initially null/undefined. Attempting to set Cesium.createWorldTerrain.");
-                    console.log("INIT_OLCS: Re-checking typeof Cesium.createWorldTerrain immediately before call (for null provider case):", typeof Cesium.createWorldTerrain);
-                    scene.terrainProvider = Cesium.createWorldTerrain({});
-                } else {
-                    console.log("INIT_OLCS: A custom terrainProvider already exists:", scene.terrainProvider);
-                }
+            // Terrain provider logic moved to updateCesiumTerrainProvider function
+            const savedTerrainPreference = localStorage.getItem('cesiumTerrainPreference') || 'cesium_ion_ellipsoid'; // Default
+            console.log(`INIT_OLCS: Initial terrain preference: ${savedTerrainPreference}`);
+            if (typeof updateCesiumTerrainProvider === 'function') {
+                updateCesiumTerrainProvider(savedTerrainPreference);
             } else {
-                console.warn("INIT_OLCS: Cesium.createWorldTerrain is not a function. Skipping custom terrain setup. Defaulting to EllipsoidTerrainProvider if present.");
-                if (!scene.terrainProvider && typeof Cesium.EllipsoidTerrainProvider === 'function') {
-                    scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
-                    console.log("INIT_OLCS: Set scene.terrainProvider to new EllipsoidTerrainProvider as fallback.");
-                } else if (!scene.terrainProvider) {
-                    console.error("INIT_OLCS: Could not set a fallback terrain provider (EllipsoidTerrainProvider also missing?).");
+                console.error("INIT_OLCS: updateCesiumTerrainProvider function is not defined. Cannot set initial terrain.");
+                // Fallback to simple ellipsoid if update function is missing
+                if (typeof Cesium.EllipsoidTerrainProvider === 'function') {
+                    try {
+                        scene.terrainProvider = new Cesium.EllipsoidTerrainProvider({});
+                        console.log("INIT_OLCS: Set EllipsoidTerrainProvider as emergency fallback (update function missing).");
+                    } catch (e) {
+                        console.error("INIT_OLCS: Error setting emergency EllipsoidTerrainProvider:", e);
+                    }
                 }
             }
+            console.log("INIT_OLCS: CHECKPOINT XYZ - Immediately before scene.globe.enableLighting log. Terrain provider status should have been logged before this.");
+
+            // Cesium ZL21 Grid logic temporarily removed to ensure stability.
+// Removing orphaned catch block
 
             if (scene.globe) {
                 scene.globe.enableLighting = true;
@@ -5715,7 +7807,7 @@ function initializeOLCesiumMapPanel() {
         } else {
             console.error("INIT_OLCS_ERROR: olcsMapPanel.getCesiumScene() returned null or undefined.");
         }
-
+        // Cesium.GridImageryProvider removed as per user request.
         olcsMapPanel.setEnabled(false);
         cesiumMapContainer.style.display = 'none';
         if (mapElementForOL) mapElementForOL.style.display = 'block';
@@ -5756,16 +7848,40 @@ function initializeOLCesiumMapPanel() {
                     olCesiumToggleBtn.textContent = "2D View";
                     if (cesiumMapContainer) cesiumMapContainer.style.display = 'block';
                     if (mapElementForOL) mapElementForOL.style.display = 'none';
-                    try {
-                        if (olcsMapPanel.getCesiumScene() && olcsMapPanel.getCesiumScene().canvas) {
-                            const viewer = olcsMapPanel.getCesiumViewer();
-                            if (viewer && typeof viewer.resize === 'function') {
-                                viewer.resize();
-                            } else if (viewer && viewer.scene && typeof viewer.scene.canvas.dispatchEvent === 'function') {
-                                viewer.scene.canvas.dispatchEvent(new Event('resize'));
-                            }
+
+                    // Set initial camera view for Cesium when enabling
+                    const scene = olcsMapPanel.getCesiumScene();
+                    if (scene) {
+                        // Fly Cesium camera to a fixed, very high overview to ensure "globe view"
+                        const camera = scene.camera;
+                        // Use stored start lat/lon if available, otherwise a global default. Altitude is fixed high.
+                        const initialLon = parseFloat(localStorage.getItem('setting_startLon')) || 0; // Default to 0 longitude
+                        const initialLat = parseFloat(localStorage.getItem('setting_startLat')) || 0;  // Default to 0 latitude
+                        const overviewAltitude = 25000000; // 25,000 km altitude
+
+                        camera.flyTo({
+                            destination: Cesium.Cartesian3.fromDegrees(initialLon, initialLat, overviewAltitude),
+                            orientation: {
+                                heading: Cesium.Math.toRadians(0.0),
+                                pitch: Cesium.Math.toRadians(-90.0), // Look straight down
+                                roll: 0.0
+                            },
+                            duration: 0 // Fly immediately
+                        });
+                        console.log(`OLCESIUM_TOGGLE: Flown Cesium camera to fixed overview (Alt: ${overviewAltitude}m).`);
+                    }
+
+                    // Attempt to refresh the Cesium view after enabling
+                    if (olcsMapPanel && typeof olcsMapPanel.render === 'function') {
+                        try {
+                            olcsMapPanel.render();
+                            console.log("OLCESIUM_TOGGLE: Called olcsMapPanel.render() to refresh view.");
+                        } catch (renderError) {
+                            console.warn("OLCESIUM_TOGGLE: Error calling olcsMapPanel.render()", renderError);
                         }
-                    } catch(e) { console.warn("OLCESIUM_TOGGLE: Error trying to resize Cesium viewer", e); }
+                    } else {
+                        console.warn("OLCESIUM_TOGGLE: olcsMapPanel.render is not a function or olcsMapPanel is null.");
+                    }
                 } else { // Means we are DISABLING Cesium (going to 2D OL mode)
                     olCesiumToggleBtn.textContent = "3D View";
                     if (cesiumMapContainer) cesiumMapContainer.style.display = 'none';
@@ -6010,72 +8126,12 @@ function initializeOLCesiumMapPanel() {
     // --- End GunDB Chat Client Logic ---
 
 // Placeholder for iTowns View Initialization
-    function initITownsView() {
-        console.log("Initializing iTowns view...");
-        if (state.itownsView) return; // Already initialized
+    // initITownsView function removed, will be re-inserted earlier in the script.
+    // The mapPanelToggleMapsMenuBtn logic that was inside it has been moved out
+    // and will remain in its current position or be re-evaluated.
+    // For now, assuming it stays here.
 
-        const itownsContainer = document.getElementById('itowns-container');
-        if (!itownsContainer) {
-            console.error("iTowns container 'itowns-container' not found.");
-            return;
-        }
-
-        // Basic iTowns setup (example)
-        // This is a very minimal setup and will need significant expansion
-        // Refer to iTowns documentation for proper setup: https://itowns.github.io/itowns/
-        try {
-            const placement = {
-                coord: new itowns.Coordinates('EPSG:4326', state.currentLon || 0, state.currentLat || 0),
-                range: 25000000, // Initial viewing range
-            };
-            state.itownsView = new itowns.GlobeView(itownsContainer, placement);
-            
-            // Add a basic imagery layer
-            itowns.Fetcher.json('../packages/itowns/examples/layers/JSONLayers/Ortho.json').then(function _(config) {
-                config.source = new itowns.TMSSource(config.source);
-                let layer = new itowns.ColorLayer('Ortho', config);
-                state.itownsView.addLayer(layer);
-            });
-
-            // Add an elevation layer
-            itowns.Fetcher.json('../packages/itowns/examples/layers/JSONLayers/WORLD_DTM.json').then(function _(config) {
-                config.source = new itowns.WMTSSource(config.source);
-                let layer = new itowns.ElevationLayer('DTM', config);
-                state.itownsView.addLayer(layer);
-            });
-
-            console.log("iTowns view initialized (basic).");
-            // Make sure to call view.notifyChange() if layers are added asynchronously after initial render
-            state.itownsView.notifyChange(true);
-
-
-        } catch (e) {
-            console.error("Error initializing iTowns:", e);
-            state.itownsView = null;
-        }
-        // TODO: Add event listeners for map movement to update state.currentLat/Lon/Zoom
-        // TODO: Implement ZL21 grid display for iTowns
-// --- Toggle for Maps Menu (#layer-switcher) via button in #map-panel header ---
-    const mapPanelToggleMapsMenuBtn = document.getElementById('map-panel-toggle-maps-menu-btn');
-    const layerSwitcherPanelForToggle = document.getElementById('layer-switcher');
-
-    if (mapPanelToggleMapsMenuBtn && layerSwitcherPanelForToggle) {
-        mapPanelToggleMapsMenuBtn.addEventListener('click', () => {
-            const isVisible = layerSwitcherPanelForToggle.style.display === 'block';
-            layerSwitcherPanelForToggle.style.display = isVisible ? 'none' : 'block';
-            console.log(`Maps menu (#layer-switcher) visibility toggled to: ${layerSwitcherPanelForToggle.style.display}`);
-        });
-        console.log("DEBUG: Event listener for map panel's maps menu toggle button attached.");
-    } else {
-        console.warn("DEBUG: Could not find button or panel for map panel's maps menu toggle.", {
-            btnExists: !!mapPanelToggleMapsMenuBtn,
-            panelExists: !!layerSwitcherPanelForToggle
-        });
-    }
-    // --- End Toggle for Maps Menu ---
-        // TODO: Implement saved tileset display for iTowns
-        // TODO: Implement click listener for tile info
-    }
+// Duplicated "Toggle for Maps Menu" block removed.
 
 }); // End of DOMContentLoaded listener
 

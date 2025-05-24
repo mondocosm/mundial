@@ -1,130 +1,72 @@
-# Mundial Map Application TODO List
+# TODO List for Mundial App
 
-## Tileset Selection & Details
--   [ ] **Deselect on Click / Hide Details:**
-    -   [X] Clicking a selected tileset on the map deselects it and hides details.
-    -   [X] Clicking a selected tileset in the list deselects it and hides details.
-    -   [ ] Ensure `tilesetDetailsModal` hides if `selectionSource` is cleared by other means (e.g., "Clear Selection" button, new box select).
--   [ ] **Zoom to Tileset Level:** Adjust "zoom to tileset" to ZL19 or ZL20 for OpenLayers map. (Globe fly-to behavior to be reviewed).
--   [ ] **Globe goes black when zooming to a tileset.** (May be related to terrain issues or if ZL21 tiles aren't rendering due to overview logic errors).
--   [ ] **Color Picker Type:** Change the color picker to swatches.
--   [ ] **Independent Stroke/Fill Color:** Allow stroke and fill colors to be set separately.
--   [ ] **Color Picker Default Color:** The default color *shown in the color picker itself* could be different from selected tile/tileset colors.
--   [X] **Tilesets on Globe (ZL21):** Tilesets are visible and render correctly on the globe at ZL21 (when overview logic doesn't interfere).
--   [ ] **Tilesets on Globe (Overview ZL15-ZL20):**
-    -   [ ] **FIX:** Current attempt at complex rendering (scaled ZL21 tiles) for ZL15-ZL20 causes `TypeError: overviewTileGeoExtent.intersects is not a function`. This prevents overview tiles from drawing and might affect ZL21 rendering if not handled.
-    -   [ ] (If fix is too complex now) Revert to stable placeholder rendering (e.g., faint tint if layer has features) for ZL15-ZL20.
-    -   [ ] (Lower Priority, after fix/revert) Implement performant and accurate complex rendering (scaled ZL21 tiles) for ZL15-ZL20.
--   [ ] **Globe Tile Selection:** Make tiles on the OpenGlobus globe selectable (e.g., via click) to show details, similar to OpenLayers map.
+## High Priority / Blocking Issues
 
-## General UI & Functionality
--   [X] **Toggle in Top Buttons (Map/Globe Independent Visibility):** Map and globe panels toggle independently.
--   [ ] **Panel Width Consistency:** Profile, Tileset Details, Social panels same width.
--   [ ] **Map Options Not Changing Style:** Base map options in "Maps" panel don't change map style.
--   [ ] **Terrain Loading:** OpenGlobus `GlobusRgbTerrain` shows many 404 errors and has a low `maxNativeZoom` (6). Investigate if a better terrain source or configuration is needed for improved globe appearance.
+1.  **Layers Not Saving/Displaying in List:**
+    *   Debug why newly created layers do not appear in the `#user-layer-list`.
+    *   Use console logs added to `addLayerToList` and layer creation logic in `main.js`.
+    *   Investigate `saveUserLayersToGun()` and `loadSavedLayers()` for persistence issues with Gun.js.
+    *   Ensure Layer 0 and its default tileset (if any, like `loadTestTilesetToLayer0`) display correctly.
 
-## XR Panel Integration
--   [ ] Add XR panel HTML structure to `index.html`.
--   [ ] Add JavaScript logic for XR panel button and functionality to `main.js`.
--   [ ] Integrate glTF models (derived from 3D Tiles) as terrain/rooms in XR views (e.g., for Babylon.js or JanusWeb).
--   [ ] **Third Room Integration:**
-    -   [ ] Add "Third Room" as an XR view option in the XR panel.
-    -   [ ] Implement logic to launch/embed Third Room, potentially passing context (e.g., room ID based on selected tileset or Matrix room associated with it).
-    -   [ ] Ensure Third Room can connect to the project's Matrix Synapse server.
+2.  **Tileset List Duplication:**
+    *   Debug why tilesets are appearing doubled in the `#tileset-list` when a layer is selected or a new tileset is saved.
+    *   Analyze console logs from `populateTilesetList` (especially `[POPULATE_DEBUG] Grouped tilesets...`) to see if the source OpenLayers features are duplicated or if the grouping logic is flawed on subsequent calls.
+    *   Verify the fix that removed one `populateTilesetList` call was sufficient or if the underlying data in the OL layer source is the issue.
 
-## 3D Tiles to Multi-Format Conversion Pipeline & Asset Integration
--   [ ] **Data Source:**
-    -   [ ] Define how ZL21 tile selections map to specific 3D Tilesets (e.g., service, configuration for sourcing 3D Tiles).
-    -   [ ] Implement fetching of 3D Tiles data based on ZL21 selection.
--   [ ] **Conversion Pipeline (3D Tiles to glTF, I3S, USD):**
-    -   [ ] Research and select/implement libraries for parsing 3D Tile formats (b3dm, i3dm, etc.).
-    -   [ ] Develop logic to extract geometry and textures from 3D Tiles.
-    -   [ ] Implement mesh reconstruction for the selected tileset footprint.
-    -   [ ] **glTF Export:** Implement glTF export of the reconstructed mesh.
-    -   [ ] **I3S Export/Packaging:**
-        -   [ ] Research and implement conversion/packaging of 3D Tiles/glTF data into I3S format.
-        -   [ ] Define I3S as a container for the glTF terrain and other potential assets.
-    -   [ ] **USD Export:**
-        -   [ ] Research and implement conversion of 3D Tiles/glTF data into USD format.
--   [ ] **Assets Page & Scene Window:**
-    -   [ ] Create HTML structure for the "Assets" page/panel.
-    -   [ ] Implement listing of saved tileset assets (likely represented by their I3S container or primary glTF).
-    -   [ ] Integrate a viewer (e.g., Three.js, or a dedicated I3S/glTF viewer) for asset previews on the Assets page.
-    -   [ ] Implement logic to update the viewer when a different asset is selected.
-    -   [ ] **Scene Window:** Ensure this window can display the selected tileset (I3S/glTF) as an isolated piece of land/model.
--   [ ] **View Integration:**
-    -   [ ] **JanusWeb:**
-        -   [ ] Implement dynamic loading of the *contents* of an I3S layer (including its glTF terrain and other assets) as a custom JanusWeb room.
-        -   [ ] Develop a system for defining/managing portals between adjacent tileset rooms.
-    -   [ ] **Babylon.js View:**
-        -   [ ] Implement loading and display of generated glTF tileset models (or models extracted from I3S).
-    -   [ ] **Main Scene Panel:**
-        -   [ ] Update to load and display generated I3S/glTF tileset assets.
--   [ ] **Synchronization & State Management:**
-    -   [ ] Ensure selection/loading of a tileset asset updates all relevant views (Assets, Babylon, Janus, Scene Window).
--   [ ] **Persistence & Kart Integration:**
-    -   [ ] Implement saving of source tile data (ZL21 selection, 3D Tiles references) and the generated I3S file (containing glTF) to Kart.
-    -   [ ] Ensure saved tilesets (from Kart) are listed on the Assets page.
+3.  **OLCesium Globe View Issues:**
+    *   Investigate why saved tilesets (vector features) are not appearing on the OLCesium globe view. Check how features are synchronized or added to the Cesium scene by OLCesium.
+    *   Investigate why the ZL21 grid is not showing in the OLCesium globe view. Check the `updateCesiumZL21Grid` function and Cesium data source management.
 
-## Visual Coding (Rete.js)
--   [ ] **Core Setup:**
-    -   [ ] Integrate Rete.js library (and `rete-engine`, `rete-render-utils` or alternatives like `rete-react-render` if preferred).
-    -   [ ] Create a dedicated panel/window for the Rete.js editor.
-    -   [ ] Basic node definitions (e.g., input, output, simple math).
--   [ ] **Mundial Integration Nodes:**
-    -   [ ] Develop Rete nodes to interact with Mundial state (e.g., get selected tileset, access map view properties).
-    -   [ ] Nodes for geospatial operations (potentially wrapping Turf.js).
-    -   [ ] Nodes for triggering actions (e.g., change layer style, load data).
--   [ ] **Example Use Cases:**
-    -   [ ] Simple graph to change a layer's style based on a property.
-    -   [ ] Graph to filter or process tileset data.
+4.  **Pan/Select & Ctrl-Toggle for Map Interactions:**
+    *   Debug why OpenLayers map interactions (pan, single-click select, drag-box select) are not working correctly in `wrlds/js/main.js`.
+    *   Console logs indicate mode switching logic is firing, but visual map behavior doesn't match.
+    *   Compare interaction setup (`dragPanInteraction`, `dragBoxInteraction`, event listeners for `interaction-mode-btn`, Ctrl key, `singleclick`, `boxstart`, `boxend`) with the working version in `/home/jeome/mondocosm/mundial517/js/main.js`.
+    *   Ensure OpenLayers interaction instances are correctly initialized, added to the map, and that their `setActive()` calls are effective.
 
-## Leaflet Integration
--   [ ] **Core Setup:**
-    -   [ ] Integrate Leaflet library.
-    -   [ ] Add "Leaflet" to the map library selection dropdown.
-    -   [ ] Implement basic map initialization for Leaflet in the map panel.
--   [ ] **Feature Parity (MVP):**
-    -   [ ] Base map layer display and switching.
-    -   [ ] Display of ZL21 tile selections.
-    -   [ ] Display of saved tileset boundaries.
-    -   [ ] Basic ZL21 tile click/info display.
+5.  **PolygonJS Editor Integration:**
+    *   Resolve issues loading PolygonJS library (`all.js` or `example.js`) in `wrlds/index.html` and `wrlds/js/main.js`.
+    *   Ensure `POLYGONJS.Editor` is correctly initialized and accessible.
+    *   Investigate `SyntaxError: Unexpected token 'export'` if it reappears, potentially related to server MIME types or the PolygonJS build itself.
+    *   Address `THREE is not defined` errors for OrbitControls/GLTFExporter after PolygonJS is working, possibly by using PolygonJS's internal Three.js instance or re-introducing a global Three.js if necessary and compatible.
 
-## iTowns Integration
--   [ ] **Core Setup:**
-    -   [ ] Integrate iTowns library.
-    -   [ ] Add "iTowns" to the globe/3D view selection options.
-    -   [ ] Implement basic iTowns view initialization in the globe panel.
--   [ ] **Feature Parity (MVP):**
-    -   [ ] Global view rendering.
-    -   [ ] Display of ZL21 tile selections.
-    -   [ ] Display of saved tileset boundaries (as 3D extents or features).
-    -   [ ] Basic navigation and interaction.
--   [ ] **Advanced Features (Post-MVP):**
-    -   [ ] Loading and rendering of 3D Tilesets directly in iTowns.
-    -   [ ] Point cloud rendering.
-    -   [ ] Oblique imagery.
+6.  **Scene Panel - Verify Functionality:**
+    *   Confirm the main "Scene" toolbar button (`#scene-btn`) correctly opens/closes the `#scene-panel`.
+    *   Confirm the `#scene-panel` is correctly centered and responsively sized as per CSS.
+    *   Confirm the Three.js viewer initializes within the panel.
+    *   Test if clicking the "3D Tile" button (inside `#scene-panel`, now using feature's `glbUrl` or heightmap fallback) successfully loads a model.
 
-## Backend Services Integration
--   [ ] **IPFS Integration:**
-    -   [ ] Integrate js-ipfs library for client-side interactions or set up a dedicated IPFS node.
-    -   [ ] Implement logic for storing and retrieving large assets (glTF, USD, 3D Tiles) on IPFS.
-    -   [ ] Manage IPFS CIDs in Kart or GunDB records.
--   [ ] **Matrix Synapse Integration:**
-    -   [ ] Document setup and configuration for a standalone Matrix Synapse homeserver.
-    -   [ ] Integrate a Matrix client SDK into the backend or client for communication.
-    -   [ ] Implement basic chat/messaging features using Matrix.
-    -   [ ] Explore using Matrix for real-time collaboration or signaling.
--   [ ] **GunDB & Kart:**
-    -   [ ] Continue integration of GunDB for decentralized data.
-    -   [ ] Refine Kart integration for versioning geospatial assets (I3S, source data).
--   [ ] **Central API Server:**
-    -   [ ] Develop/enhance API endpoints to orchestrate interactions between these backend services.
+## UI/UX & Feature Enhancements
 
-## Resolved
--   <span style="text-decoration: line-through;">**Tileset Save Color:** Tilesets are being saved with a black color, which is too dark.</span> (Now uses selected color)
--   <span style="text-decoration: line-through;">**Globe Not Loading / Layer 0 Not Showing.**</span> (Initial loading seems fixed)
--   <span style="text-decoration: line-through;">**Tileset List Duplication:** Tileset list items were duplicated.</span> (Fixed)
--   <span style="text-decoration: line-through;">**Syntax Errors in `main.js`:** Resolved various parsing errors, including for `ogSavedTilesetsLayer` definition.</span>
+5.  **Scene Panel - Auto-load Selected Tileset (New UX):**
+    *   Per-tileset "View 3D", "Edit", and "Delete" buttons have been removed from the tileset list items in `populateTilesetList` (main.js).
+    *   **Implement:** When a tileset item in the `#tileset-list` is clicked:
+        *   The Scene Panel (`#scene-panel`) should open automatically if it's closed.
+        *   The 3D representation of the selected tileset should load into the Three.js viewer within the Scene Panel. (Initially, this can use the test path in `generateAndShowTilesetInThreeJS` which calls `initiateTilesetConversionToGltf` with a sample `tileset.json`. Later, it will use the actual selected tileset's data, potentially involving I3S or on-the-fly `tileset.json` generation).
 
-*(This list will be updated as we proceed.)*
+6.  **Basemap Switch for OLCesium:**
+    *   Implement JavaScript logic to show the `#cesium-basemap-select` dropdown (in "Maps" menu / `#layer-switcher`) only when "OL-Cesium" is the active globe library.
+    *   Implement JavaScript to handle the `change` event on `#cesium-basemap-select` to update the active OLCesium instance's imagery provider.
+
+7.  **WRLDS.ID Link Format:**
+    *   Review and update the `updateTilesetDetailsModal` function in `main.js` to ensure the `tileset-wrlds-link` href is formatted as `wrlds.id/ULID` (e.g., `wrlds.id/01ARZ3NDEKTSV4RRFFQ69G5FAV`) instead of `wrlds.id/...` when a ULID is available.
+
+8.  **Implement JS for New Settings Panel Options:**
+    *   **Default Globe View:** Implement JS for the "Set as Default" button in the Globes menu. Save the selected globe library (from `#globe-library-select`) to `localStorage` and load this preference on startup. Update the `default-globe-set-indicator` paragraph.
+    *   **3D Model Data Source Switch:** Implement JS for the "Terrain Sampling vs. Direct Mesh" radio buttons in the Settings panel. Save the preference (e.g., to `localStorage`) and use this setting in `main.js` (within `sceneType3dtileBtn` listener / `generateAndShowTilesetInThreeJS`) to determine the default `dataSourceType` if not overridden by feature-specific data.
+
+## Technical Debt / Future Enhancements
+
+9.  **Multiple Three.js Instances Warning:**
+    *   Investigate the "WARNING: Multiple instances of Three.js being imported" (from JanusWeb). Determine if JanusWeb can use the globally provided Three.js instance or if a strategy to manage/isolate instances is needed to prevent potential conflicts.
+
+10. **HTML Validator Warnings (Inline Styles):**
+    *   Perform a pass over `mundial/index.html` to move inline styles identified by `html-validate` into appropriate CSS classes in `mundial/css/style.css` to improve maintainability and adherence to best practices.
+
+11. **3D Tiles Direct Rendering (NASA 3DTilesRendererJS):**
+    *   Evaluate integrating `NASA-AMMOS/3DTilesRendererJS` as suggested by the user for direct rendering of 3D Tilesets within the Three.js view in the Scene Panel. This would be an alternative or enhancement to the current GLB loading / heightmap generation.
+
+12. **Download Options (OBJ/FBX):**
+    *   Implement OBJ and FBX export functionality for the Download modal. This will require integrating `THREE.OBJExporter` and potentially an FBX exporter library if one is suitable for client-side use, or a server-side conversion step.
+
+---
+*Self-correction: The user mentioned "3d tile usd and i3s buttons need to be removed" again. I applied a CSS fix for this. If they are still visible, the HTML structure or CSS selectors need re-verification.*

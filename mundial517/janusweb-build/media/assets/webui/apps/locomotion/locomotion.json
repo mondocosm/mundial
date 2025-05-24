@@ -1,9 +1,0 @@
-{
-  "templates": {
-  },
-  "scripts":  ["./teleporter.js"],
-  "css":      [],
-  "components": [
-  ]
-}
-

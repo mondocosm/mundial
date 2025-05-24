@@ -1,3 +1,4 @@
+console.log("SERVER.JS LATEST VERSION CHECKPOINT CHARLIE - PACKAGES ROUTE IS PRESENT");
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -14,6 +15,8 @@ const server = http.createServer(app); // Use Express app for HTTP server
 app.use(cors());
 app.use(express.json()); // For parsing application/json
 app.use(Gun.serve); // Serve Gun's '/gun' endpoint
+app.use(express.static(path.join(__dirname, '..', 'mundial'))); // Serve static files from the 'mundial' directory
+app.use('/packages', express.static(path.join(__dirname, '..', 'packages'))); // Serve static files from the 'packages' directory at /packages route
 
 // Initialize Gun on the server
 const gun = Gun({

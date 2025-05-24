@@ -1,147 +1,103 @@
-# Mondocosm - Minimum Viable Product (MVP) Scope V1.0
+# Mundial Map - Minimum Viable Product (MVP) Scope V1.1 (I3S Focused)
 
-This document defines the initial scope for the Mondocosm MVP, focusing on demonstrating the core value proposition: a collaborative, versioned geospatial platform.
+This document defines the initial scope for the Mondocosm MVP, focusing on demonstrating the core value proposition: a collaborative, versioned geospatial platform where users can define geographic areas (from ZL21 tiles) and see them as basic 3D scenes, with a clear path towards richer I3S integration.
 
-## Overarching Goal
+## Overarching Goal (MVP)
 
-Deliver a functional baseline demonstrating the ability for users to view a shared geospatial world, claim/save personal "Sites" within it using basic persistence and versioning, and view these creations. Provide a glimpse into unique interaction paradigms (AR on mobile).
+Deliver a functional baseline demonstrating the ability for users to:
+1.  Select ZL21 tiles on a 2D map to define a "Tileset Footprint."
+2.  Generate a 3D terrain GLTF model for this footprint using client-side processing and an available heightmap source.
+3.  Preview this generated GLTF in an integrated THREE.js viewer.
+4.  Register this as a "Scene" with a backend system (Kart), including metadata like a ULID and an IPFS link to the GLTF.
+5.  View a list of these registered Scenes in a simple "Scene Menu."
 
-## 1. Backend MVP (Terrallax)
+## 1. Backend MVP (Terrallax - Supporting Scene Management)
 
-*   **Technology:** Node.js/Express.js (Central Orchestration API), Kart (Geospatial Asset Versioning), GunDB (Decentralized Graph Data), js-ipfs (Client-side IPFS interactions or for a dedicated IPFS node), Matrix Synapse (Federated Communication - run as a separate service).
+*   **Technology:** Node.js/Express.js (Central API), Kart (Scene Metadata & Asset Versioning), IPFS (Asset Storage). (GunDB & Matrix Synapse setup are for broader, partially post-MVP goals).
 *   **Features:**
-    *   **Central API Server:** Basic REST API for core operations.
+    *   **Central API Server:**
+        *   Endpoint for client to register a new "Scene":
+            *   Input: ZL21 footprint data, user-defined name/description, client-generated ULID (or Kart assigns one), IPFS CID for the terrain GLTF, IPFS CID/URL for a thumbnail.
+            *   Action: Stores this metadata in Kart.
+        *   Endpoint to list available Scenes from Kart (providing name, ULID, thumbnail CID/URL, GLTF CID for the Scene Menu).
+        *   Endpoint to retrieve full metadata for a specific Scene (by ULID).
     *   **Kart Integration:**
-        *   Basic Kart repository setup.
-        *   API endpoints for storing/retrieving I3S assets and related metadata in Kart.
-    *   **GunDB Integration (PoC):**
-        *   Basic setup for P2P data sharing (e.g., simple shared state or asset discovery).
-    *   **IPFS Integration (PoC):**
-        *   Client-side (via js-ipfs) or server-side interaction with an IPFS node for storing/retrieving large assets (glTF, USD). CIDs managed via Kart/GunDB.
-    *   **Matrix Synapse Setup (External):**
-        *   Documentation and guidelines for setting up a separate Synapse homeserver.
-        *   Central API may provide endpoints for basic interaction with Synapse (e.g., creating a room for a new tileset discussion), or client directly interacts.
+        *   Schema/structure in Kart for storing Scene metadata as described above.
+        *   Basic versioning for scene metadata (if Kart supports it easily for MVP).
+    *   **IPFS Integration (Conceptual for Client, Direct for Backend if applicable):**
+        *   The client will need a way to get the GLTF onto IPFS. This could be:
+            *   Client-side `js-ipfs` upload (more complex for MVP).
+            *   Client uploads GLTF to a backend API endpoint, which then pins it to IPFS and returns the CID. (Simpler for client MVP).
+        *   Kart will store these IPFS CIDs.
     *   Placeholder user authentication.
-*   **Out of Scope for MVP Backend:** Advanced Kart features (branching, merging, popularity-based metrics), full production-ready Synapse federation and complex bot/service integrations, deep Nodesque backend integration, full cryptocurrency integration.
+*   **Out of Scope for Backend MVP:** Direct I3S SLPK generation/hosting by Kart (Kart's role is metadata management; I3S generation is external or a future Kart feature); advanced Kart features (branching, merging); full GunDB/Matrix integration for scene data.
 
-## 2. Desktop MVP (Mundial - Web)
+## 2. Desktop MVP (Mundial - Web Client)
 
-*   **Prerequisite:** ~~Fixed `mundial/main.js`~~. **DONE**
-*   **Technology:** JavaScript Modules, OpenLayers (2D View), OpenGlobus (3D Globe View).
+*   **Technology:** JavaScript Modules, OpenLayers (2D View), OpenGlobus (3D Globe View), THREE.js (for GLTF preview).
 *   **Features:**
-    *   **Core View:** OpenLayers for 2D map view and OpenGlobus for 3D globe view. Basic base map layers. Terrain rendering via OpenGlobus.
-    *   **Site Display:** Fetch site list from `GET /api/sites` and display boundaries as vector outlines in OpenLayers and OpenGlobus views.
-    *   **Site Creation:**
-        *   Map interaction (e.g., click or drag-select) in OpenLayers/OpenGlobus to select one or more Z21 tiles.
-        *   Simple UI form (e.g., in a panel) to name the selection.
-        *   "Save Site" button triggers `POST /api/sites` with selected tile data/boundary and placeholder owner ID.
-    *   **Basic UI Panels:** Draggable/minimizable panels for:
-        *   Layer Switcher (functional base map toggle for OpenLayers/OpenGlobus).
-        *   Site List (read-only display of site names fetched from backend).
-    *   **View Toggling:** Functional switching between OpenLayers (2D map) and OpenGlobus (3D globe) views. Basic camera state synchronization (location/zoom) between views.
-*   **Out of Scope:** iTowns, Babylon.js/Other engines (unless chosen for GLTF generation), advanced rendering (NeRF, Splats, Voxels), Building/Voxel/Mesh Editors, Nodesque editor integration, Avatars, VR, Stereoscopy, advanced UI (docking, scaling fix, chat), advanced gameplay (Strata, merging, popularity), MapLibre/DeckGL/Leaflet (unless chosen for specific ZL21 texture fetching), detailed Site management tools, full user authentication.
+    *   **Core Map/Globe Views:**
+        *   OpenLayers: Base maps, ZL21 tile selection tools.
+        *   OpenGlobus: Base maps, basic terrain.
+        *   View toggling between 2D/3D.
+    *   **ZL21 Tileset Footprint Definition:**
+        *   [X] User selects ZL21 tiles on OpenLayers map.
+        *   [X] UI to name and save this selection locally (current "Save Tileset" to a layer).
+    *   **[NEW] 3D Terrain GLTF Generation (Client-Side):**
+        *   **`tilesetExporter.js` (`exportTilesetToGLTF`):**
+            *   [X] Takes ZL21 tile features (from a saved tileset group) as input.
+            *   [X] Sources height data from a configured URL template (e.g., OpenGlobus terrain).
+            *   [X] Sources texture data from current 2D basemap.
+            *   [X] Generates a `THREE.Group` object representing the 3D terrain.
+            *   [X] Can export this `THREE.Group` as GLTF data (JSON string or Blob).
+    *   **[NEW] THREE.js Previewer Modal:**
+        *   [X] HTML structure for modal exists.
+        -   [ ] **CSS Styling:** Move inline styles for modal to `style.css`.
+        *   [ ] Implement JS for THREE.js renderer, scene, camera, lights, orbit controls.
+        *   [ ] "View in 3D" button (on saved tileset list items):
+            *   Retrieves ZL21 features for the selected saved tileset.
+            *   Calls `exportTilesetToGLTF` to get the `THREE.Group`.
+            *   Displays this `THREE.Group` in the modal.
+            *   Handles modal show/hide.
+    *   **[NEW] Scene Registration Workflow (Client-Side Orchestration):**
+        *   UI element (e.g., "Register Scene" button in Tileset Details or after GLTF preview).
+        *   **ULID Generation:** Client generates a ULID (e.g., based on location/timestamp).
+        *   **Thumbnail Generation:** Client captures a simple thumbnail from the OL map canvas for the tileset's extent.
+        *   **GLTF to IPFS:**
+            *   Option A (MVP simpler): User downloads GLTF, manually uploads to an IPFS gateway/node, pastes CID.
+            *   Option B (MVP advanced): Client uploads GLTF blob to a backend endpoint that handles IPFS pinning and returns CID.
+        *   **Kart API Call:** Client sends all metadata (name, ZL21 footprint, ULID, GLTF IPFS CID, thumbnail IPFS CID/URL) to the backend API for Kart registration.
+    *   **[NEW] Scene Menu (Read-Only):**
+        *   UI panel to list Scenes.
+        *   Fetches scene list (name, ULID, thumbnail) from Kart API.
+        *   Displays items. Clicking an item:
+            *   Shows its details (name, ULID).
+            *   Enables "View in 3D" button, which would fetch its GLTF (via IPFS CID from Kart metadata) and show in the THREE.js previewer.
+    *   **Basic UI Panels:**
+        *   [X] Layer Switcher (Maps panel).
+        *   [X] Globe Switcher (Globes panel).
+        *   [X] Hide/Show functionality for these panels.
+*   **Out of Scope for Desktop MVP:** Direct I3S/USD viewing client-side (preview is GLTF only); editing I3S scenes; adding multiple assets to a scene; full ULID search-to-navigate; advanced 3D Tiles processing as a source; iTowns/OLCesium full functionality (focus on OpenLayers/OpenGlobus for core views, THREE.js for preview); PolygonJS integration; XR integration; advanced backend interactions beyond scene registration/listing.
 
-## 3. Tileset Definition and 3D Tiles to Multi-Format Conversion Pipeline
+## 3. Mobile MVP (Mundial - Web Responsive / PWA) - Deferred
 
-*   **Goal:** Enable users to define a "tileset" based on a ZL21 tile selection. For this selected area, fetch corresponding 3D Tiles data to serve as the terrain/geometry source. Convert this 3D Tiles data into glTF, I3S, and USD formats for download, use in other 3D environments, and display within the application.
-*   **Tileset Definition:**
-    *   Users select a group of ZL21 tiles using the existing map selection tools. This defines the "tileset footprint."
-*   **Data Acquisition (3D Tiles as Primary Geometry Source):**
-    *   For the selected ZL21 footprint, identify and fetch the corresponding 3D Tiles data. (This assumes a source/service for 3D Tiles mapped to geographic areas is available or will be mocked).
-    *   This 3D Tiles data will provide the detailed geometry for the tileset area.
-*   **Processing & Conversion Pipeline (3D Tiles to glTF, I3S, USD):**
-    *   Parse the fetched 3D Tiles (e.g., `b3dm`, `i3dm`, `cmpt`).
-    *   Extract and consolidate geometry, materials, and texture information.
-    *   Construct a unified 3D representation for the tileset footprint.
-    *   **glTF Conversion:** Convert this representation into a standard glTF format.
-    *   **I3S Conversion/Packaging:** Convert/package the 3D Tiles/glTF data into I3S format. I3S will serve as an editable scene layer and a container for the glTF-derived terrain and other assets.
-    *   **USD Conversion:** Convert the 3D Tiles/glTF data into USD format.
-*   **User Interface for Export:**
-    *   Button/option: "Generate & Download Tileset (glTF, I3S, USD)".
-*   **Technology Considerations:**
-    *   Identify/mock a source for 3D Tiles data.
-    *   Select/integrate libraries for parsing 3D Tiles and for glTF, I3S, and USD generation (e.g., loaders.gl, THREE.js, Babylon.js, potentially server-side tools for I3S/USD if client-side is too complex).
-    *   Initial PoC: Focus on 3D Tiles -> glTF for a single ZL21 tile. Subsequent PoCs for I3S and USD.
+*   Focus on Desktop Web MVP first. Mobile adaptation and specific AR features will be post-Desktop MVP.
 
-## 4. Asset Integration (glTF, I3S, USD) & Multi-View Display
+## Next Steps for MVP Development
 
-*   **Goal:** Integrate the generated/converted tileset assets (primarily I3S containing glTF, and standalone glTF/USD) into various application views and create an "Assets" page for browsing.
-*   **Scene Window:**
-    *   This dedicated view will display the selected tileset (rendered from its I3S or glTF representation) as an isolated piece of land/model.
-*   **JanusWeb Integration:**
-    *   Load the *contents* of an I3S layer (which includes the glTF terrain and any associated assets) as a custom room in JanusWeb.
-    *   Implement portal system for navigation between adjacent tileset rooms.
-*   **Babylon.js View Integration:**
-    *   Load and display generated glTF tileset models (or models extracted from I3S).
-*   **Main Scene Panel Integration:**
-    *   Update to support loading and viewing of generated I3S assets (and potentially glTF/USD directly).
-*   **Assets Page:**
-    *   Create a new "Assets" page/panel.
-    *   List saved tileset assets (represented by their I3S container stored in Kart).
-    *   For each asset, display a preview (e.g., using Three.js for glTF, or a suitable I3S viewer if available).
-    *   Selecting an asset updates its display in the Scene Window and potentially other linked views.
-*   **Synchronization & State Management:**
-    *   Ensure selection of a tileset asset updates all relevant views.
-*   **Persistence & Kart Integration:**
-    *   **Kart:** Store source tile data (ZL21 selection, 3D Tiles references) and the generated I3S file (containing the glTF and other assets).
-    *   Saved tilesets (I3S from Kart) populate the Assets page.
-*   **Technology:** THREE.js for Assets page glTF preview, Kart for I3S storage.
+1.  **Backend:**
+    *   Define and implement Kart schema for Scene metadata.
+    *   Develop Central API endpoints for Scene registration and listing.
+    *   Set up mechanism for GLTF-to-IPFS (either backend endpoint or documented manual process for user).
+2.  **Client (Desktop Web):**
+    *   Finalize `tilesetExporter.js` for robust GLTF generation from ZL21 selections + heightmap source.
+    *   Implement the THREE.js previewer modal (JS rendering logic, controls, loading the `THREE.Group`).
+    *   Implement the "View in 3D" button functionality on saved tileset list items.
+    *   Implement the client-side workflow for "Scene Registration" (ULID, thumbnail, GLTF to IPFS, Kart API call).
+    *   Implement the basic "Scene Menu" to list and preview scenes from Kart.
+    *   Address critical OLCesium/iTowns initialization issues if they block core OpenGlobus/OpenLayers work or are simple fixes. (Currently, these are secondary to the GLTF/Scene MVP).
+    *   Refine initial Cesium camera view.
+3.  **Documentation:**
+    *   [X] Update `TODO.md`, `CONCEPT_DESIGN.md`, `MVP_SCOPE.md` with this I3S-focused vision.
 
-## 5. Mobile MVP (Mundial - Web Responsive / PWA)
-
-*   **Prerequisite:** ~~Fixed `mundial/main.js`~~. **DONE**
-*   **Technology:** Responsive HTML/CSS, OpenLayers/OpenGlobus (adapted from Desktop), WebXR Device API, (Third Room for XR social view).
-*   **Features:**
-    *   **Core View:** OpenLayers/OpenGlobus view displaying globe/map, adapted for mobile screens.
-    *   **Site Display:** View existing Site boundaries fetched from backend.
-    *   **AR Mode (Geogesture PoC):**
-        *   Button to request/enter AR session (WebXR).
-        *   Display device camera feed as background.
-        *   Allow user to draw simple 3D lines by moving the device (using WebXR pose tracking). Lines exist only within the AR session.
-    *   **XR Window View Options (PoC):**
-        *   Basic integration of JanusWeb as an XR view.
-        *   Basic integration of Babylon.js as an XR view.
-        *   Basic integration of Third Room as an XR view (leveraging the Synapse server).
-*   **Out of Scope:** Saving AR drawings, placing assets in AR (Geoscope), advanced AR tracking (SLAM/ARToolKit), deep integration of desktop state into XR views beyond basic context, full feature parity for Third Room within MVP.
-
-## Next Steps Post-MVP Definition
-
-1.  ~~**Fix `mundial/main.js`:** Resolve the syntax errors to enable development.~~ **DONE**
-2.  **Implement Backend MVP:** Set up API endpoints and basic Kart interaction.
-3.  **Implement Desktop MVP:** Integrate OpenLayers/OpenGlobus, site display/creation UI, view toggling.
-4.  **Begin PoC for 3D Tiles to glTF/I3S/USD Pipeline:**
-    *   Focus on fetching/mocking 3D Tiles for a *single* ZL21 tile.
-    *   Implement basic client-side parsing and conversion to glTF.
-    *   Investigate and PoC I3S packaging (containing the glTF).
-    *   Investigate and PoC USD conversion.
-5.  **Develop Assets Page & Scene Window:**
-    *   Basic structure for Assets page and Scene Window.
-    *   Integrate viewer for glTF/I3S on Assets page and Scene Window.
-6.  **Integrate I3S/glTF into JanusWeb and Babylon.js views as PoC.**
-7.  **Kart Integration for I3S Storage PoC.**
-8.  **Basic Leaflet Integration PoC:** Add Leaflet as a map view option with base map and ZL21 display.
-9.  **Backend Services PoC:**
-    *   Basic GunDB setup and data sync.
-    *   Basic IPFS (js-ipfs) asset storage/retrieval.
-    *   Document Synapse setup.
-10. **Implement Mobile MVP:** Adapt UI, implement basic AR drawing feature.
-
-
-## Future Enhancements / Post-MVP Considerations
-
-*   **iTowns Integration:** Introduce iTowns as an advanced 3D globe/scene view option, leveraging its capabilities for 3D Tiles, point clouds, oblique imagery, etc.
-*   **Rete.js Visual Coding Environment:**
-    *   Implement a full visual coding window using Rete.js.
-    *   Develop a comprehensive set of nodes for interacting with Mundial's data, views, and functionalities.
-    *   Enable users to create complex custom behaviors, data processing pipelines, and interactive experiences.
-*   **Third Room (Full Integration):** Full-featured integration of Third Room, including custom room creation based on tilesets, avatar customization, and advanced social features.
-*   **Advanced Kart Features:** Full branching, merging, history, and popularity-based metrics for tilesets/sites.
-*   **Full User Authentication & Authorization.**
-*   **Full-Scale GunDB / Synapse / IPFS Integration:** Robust P2P data layers, real-time collaboration, federated communication, and decentralized storage solutions.
-*   **Nodesque Backend & Editor Integration.**
-*   **Advanced Rendering Techniques:** NeRF, Gaussian Splatting, Voxel rendering.
-*   **In-World Building/Voxel/Mesh Editors.**
-*   **Avatars & Social Features (Chat, Presence).**
-*   **VR & Stereoscopy for immersive experiences.**
-*   **Advanced UI/UX:** Docking panel system, comprehensive settings, theming.
-*   **Gamification & Economy:** Strata, merging mechanics, expanded asset market.
+*(This MVP scope prioritizes establishing the core pipeline of user ZL21 selection -> client-generated 3D terrain GLTF -> preview -> registration as a "Scene" in a backend system (Kart) with IPFS storage for the GLTF -> and a basic menu to list/re-preview these scenes. Full I3S packaging and advanced features are subsequent phases.)*

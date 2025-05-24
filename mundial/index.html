@@ -18,7 +18,7 @@
 <body>
 <header class="top-toolbar">
         <div class="toolbar-left"> <!-- Group title and search -->
-            <div class="toolbar-title">WRLDS</div>
+            <div class="toolbar-title">Orbitile</div>
             <div class="toolbar-center"> <!-- Keep class for styling, but it's not centered globally now -->
                 <input type="text" class="toolbar-input" placeholder="Search or enter command...">
             </div>
@@ -134,16 +134,18 @@
     <div id="xr-panel" class="view-panel large-centered-modal" style="display: none;">
          <div class="panel-header">
              <h4>XR View</h4>
+             <div id="xr-engine-selector">
+                 <select id="xr-engine-dropdown" class="xr-engine-dropdown"> <!-- Added a class for styling -->
+                     <option value="janusweb" selected title="JanusWeb (Hosted, Stable)">JanusWeb</option>
+                     <option value="babylonjs" title="BabylonJS + MapLibre">BabylonJS</option>
+                     <option value="thirdroom" title="Third Room (Matrix-based)">ThirdRoom</option>
+                     <option value="aframe" title="A-Frame">A-Frame</option>
+                     <option value="webxr" title="Native WebXR">WebXR</option>
+                 </select>
+             </div>
              <!-- Maximize/Minimize buttons removed -->
          </div>
          <div class="panel-content">
-             <div id="xr-engine-selector">
-                 <button type="button" class="xr-engine-btn" data-engine="janusweb" title="JanusWeb (Hosted, Stable)">Janus</button>
-                 <button type="button" class="xr-engine-btn" data-engine="babylonjs" title="BabylonJS + MapLibre">Babylon</button>
-                 <button type="button" class="xr-engine-btn" data-engine="thirdroom" title="Third Room (Matrix-based)">ThirdRoom</button>
-                 <button type="button" class="xr-engine-btn" data-engine="aframe" title="A-Frame">A-Frame</button>
-                 <button type="button" class="xr-engine-btn" data-engine="webxr" title="Native WebXR">WebXR</button>
-             </div>
              <iframe id="xr-iframe" title="XR Content View"></iframe>
              <!-- Placeholder text removed -->
          </div>
@@ -173,6 +175,22 @@
 
                 <option value="add-custom">Add Custom Layer...</option>
             </select>
+<hr class="styled-hr">
+            <label for="cesium-terrain-select">Cesium Terrain:</label>
+            <select id="cesium-terrain-select">
+                <option value="cesium_ion_ellipsoid" selected>Default (Cesium Ion / Ellipsoid Fallback)</option>
+                <option value="arcgis_elevation">ArcGIS World Elevation</option>
+                <option value="maptiler_terrain">MapTiler Terrain</option>
+                <option value="ellipsoid_only">Ellipsoid Only</option>
+                <option value="custom_terrain">Custom Terrain URL...</option>
+                <!-- <option value="maptiler_terrain">MapTiler Terrain</option> -->
+                <!-- <option value="custom_terrain">Custom Terrain URL...</option> -->
+            </select>
+            <!-- Placeholder for custom terrain URL input if needed later -->
+            <!-- <div id="custom-terrain-inputs" style="display: none;">
+                <input type="text" id="custom-terrain-url" placeholder="Terrain URL">
+                <button type="button" id="set-custom-terrain-btn">Set Terrain</button>
+            </div> -->
             <div id="custom-layer-inputs" style="display: none;">
                 <input type="text" id="custom-layer-name" placeholder="Layer Name"> <!-- Use 100% width -->
                 <input type="text" id="custom-layer-url" placeholder="XYZ URL Template"> <!-- Use 100% width -->
@@ -202,8 +220,8 @@
     <div id="user-layers-panel" class="control-panel"> <!-- Removed 'minimized' class -->
         <div class="panel-header">
             <h4>Layers</h4> <!-- Allow h4 to shrink, add margin -->
-            <button type="button" id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
             <div class="flex-spacer"></div> <!-- Spacer -->
+            <button type="button" id="create-layer-btn" class="add-btn" title="Create New Layer">+</button> <!-- Button next to title -->
             <!-- Minimize button already removed or to be ensured removed -->
         </div>
         <div class="panel-content"> <!-- Removed inline style -->
@@ -264,7 +282,7 @@
                 <button type="button" id="setting-globe-mars" class="settings-button">Mars</button>
                 <button type="button" id="setting-globe-metaverse" class="settings-button">Metaverse</button>
                 <button type="button" id="setting-globe-custom" class="settings-button">Custom</button>
-                <button type="button" id="setting-globe-itowns" class="settings-button">iTowns</button> <!-- Added iTowns option -->
+                <!-- iTowns button removed from settings panel -->
             </div>
             <hr>
             <h5>Start Location</h5>
@@ -284,7 +302,7 @@
             <hr>
             <h5>Grid Settings</h5>
             <div>
-                <label for="setting-grid-visible">Grid Visible (ZL &gt;= 16):</label>
+                <label for="setting-grid-visible">Grid Visible (ZL &amp;gt;= 16):</label>
                 <input type="checkbox" id="setting-grid-visible" checked>
             </div>
             <div>
@@ -303,8 +321,49 @@
          </div>
         <div class="modal-content panel-content"> <!-- Added panel-content class -->
             <div class="modal-section">
+                <label>3D Thumbnail:</label>
+                <div id="tileset-thumbnail-3d" class="thumbnail-container"> <!-- Style moved to CSS -->
+                    <!-- Three.js canvas will be inserted here by JS -->
+                </div>
+            </div>
+            <div class="modal-section">
+                <hr class="styled-hr">
+                <h5>Thumbnail Generation Method</h5>
+                <div>
+                    <label for="details-thumbnail-method-select">Method:</label>
+                    <select id="details-thumbnail-method-select">
+                        <option value="3d-tiles" selected>3D Tiles (Mesh - Recommended)</option>
+                        <option value="raster-dem">Raster DEM (Scanned)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-section" id="raster-dem-options-section"> <!-- ID to show/hide this section -->
+                <hr class="styled-hr">
+                <h5>Raster DEM Source (if method is 'Raster DEM')</h5>
+                <div>
+                    <label for="details-dem-source-select">Source:</label>
+                    <select id="details-dem-source-select">
+                        <option value="flat" selected>Flat Plane (No Elevation)</option>
+                        <option value="terrarium">Terrarium/SRTM (Free, Global)</option>
+                        <option value="maptiler">MapTiler TerrainRGB (Requires API Key)</option>
+                        <option value="arcgis">ArcGIS World Elevation (Experimental - PNG RGB assumed)</option>
+                        <!-- <option value="cesium_ion">Cesium Ion World Terrain (Experimental - Not Implemented)</option> -->
+                        <!-- <option value="custom">Custom DEM URL (Not Implemented)</option> -->
+                    </select>
+                </div>
+                <div id="details-maptiler-api-key-section"> <!-- Style moved to CSS -->
+                    <label for="details-maptiler-api-key">MapTiler API Key:</label>
+                    <input type="text" id="details-maptiler-api-key" placeholder="Enter your MapTiler API Key">
+                </div>
+            </div>
+            <div class="modal-section">
                 <label for="details-tileset-name">Name:</label>
                 <input type="text" id="details-tileset-name" placeholder="Tileset Name">
+            </div>
+
+            <div class="modal-section">
+                <label>Tileset ID:</label>
+                <span id="details-tileset-id" class="code-like">N/A</span>
             </div>
 
             <div class="modal-section">
@@ -337,6 +396,10 @@
                 <label for="details-tileset-tags">Tags/Metadata:</label>
                 <textarea id="details-tileset-tags" rows="3" placeholder="Enter hashtags or other semantic metadata..."></textarea>
             </div>
+<div class="modal-section texture-toggle-section">
+    <label for="details-show-texture" id="details-show-texture-label">Show Texture (3D):</label>
+    <input type="checkbox" id="details-show-texture">
+</div>
 
 <!-- Gun.js and SEA -->
     <script src="packages/gun/gun.js"></script>
@@ -350,12 +413,60 @@
                  <input type="number" id="details-fill-opacity-input" min="0" max="1" step="0.1" title="Fill Opacity (0.0 - 1.0)">
                  <label for="details-stroke-width-input">Stroke:</label>
                  <input type="number" id="details-stroke-width-input" min="0" max="10" step="0.1" title="Stroke Width (px)">
-                 <button type="button" id="view-tileset-in-babylon-btn">View 3D (Babylon)</button>
-                 <button type="button" id="view-tileset-in-cesium-btn">View in Scene (Cesium)</button>
+                 <button type="button" id="tileset-files-btn" class="settings-btn">Files</button>
+                 <button type="button" id="view-tileset-in-babylon-btn">View in XR</button>
+                 <button type="button" id="view-tileset-in-cesium-btn">View in Scene</button>
                  <!-- Save/More Settings buttons removed -->
             </div>
         </div>
     </div>
+<!-- New Asset Export Dialog (Initially Hidden) -->
+<div id="asset-export-dialog" class="modal" style="display: none;"> <!-- control-panel class removed, will be styled by ID -->
+    <div id="asset-export-dialog-content" class="modal-content panel-content control-panel"> <!-- Added control-panel for full panel styling -->
+        <div class="modal-header panel-header"> <!-- Added panel-header for draggability and style -->
+            <h3>Export Assets</h3>
+            <span class="close-btn" id="close-asset-export-dialog" title="Close">&times;</span>
+        </div>
+        <div class="modal-body"> <!-- Use modal-body for content area -->
+            <!-- Scene Layer Section -->
+            <div class="export-category modal-section"> <!-- Added modal-section -->
+                <h4>Scene Layer</h4>
+                <select id="scene-layer-format-select">
+                    <option value="i3s">I3S</option>
+                    <option value="3dtilesNext">3D Tiles Next</option>
+                </select>
+                <button type="button" id="download-scene-layer-btn" class="download-btn settings-btn">Download Scene Layer</button>
+            </div>
+
+            <!-- 3D Model Section -->
+            <div class="export-category modal-section"> <!-- Added modal-section -->
+                <h4>3D Model (from GLTF)</h4>
+                <select id="model-format-select">
+                    <option value="gltf">GLTF (.gltf)</option>
+                    <option value="glb">GLB (.glb)</option>
+                    <option value="obj">OBJ (.obj)</option>
+                    <option value="fbx">FBX (.fbx)</option>
+                    <option value="dxf">DXF (.dxf)</option>
+                    <option value="3ds">3DS (.3ds)</option>
+                </select>
+                <button type="button" id="download-model-btn" class="download-btn settings-btn">Download 3D Model</button>
+            </div>
+
+            <!-- Point Cloud Section -->
+            <div class="export-category modal-section"> <!-- Added modal-section -->
+                <h4>Point Cloud</h4>
+                <select id="pointcloud-format-select">
+                    <option value="pcd">PCD (.pcd)</option>
+                    <option value="ply">PLY (.ply)</option>
+                </select>
+                <button type="button" id="download-pointcloud-export-btn" class="download-btn settings-btn">Download Point Cloud</button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" id="cancel-asset-export-dialog" class="cancel-btn settings-btn">Cancel</button>
+        </div>
+    </div>
+</div>
 
     <!-- Assets Panel (Initially Hidden) -->
     <div id="assets-panel" class="control-panel" style="display: none;">
@@ -377,9 +488,17 @@
     <div id="editor-panel" class="view-panel large-centered-modal" style="display: none;">
          <div class="panel-header">
              <h4>Editor</h4>
+             <div id="editor-type-selector"> <!-- New div for the dropdown -->
+                 <select id="editor-type-dropdown" class="editor-type-dropdown">
+                     <option value="polygonjs" selected>PolygonJS</option>
+                     <option value="wings3d">Wings3D</option>
+                     <option value="nodered">Node-RED</option>
+                     <!-- Rete.js option removed -->
+                 </select>
+             </div>
          </div>
          <div class="panel-content"> <!-- Style moved to css/style.css -->
-             <iframe id="polygonjs-iframe" src="http://localhost:8080" title="PolygonJS Editor"></iframe> <!-- Style moved to css/style.css -->
+             <iframe id="editor-iframe" src="http://localhost:8080" title="Editor View"></iframe> <!-- Changed ID and title -->
          </div>
     </div>
 
@@ -387,15 +506,18 @@
     <div id="scene-panel" class="view-panel" style="display: none;"> /* Layout now controlled by specific CSS ID */
          <div class="panel-header">
              <h4>Scene Options</h4>
+             <div id="scene-type-selector"> <!-- New div for the dropdown -->
+                 <select id="scene-type-dropdown" class="scene-type-dropdown">
+                     <option value="3dtile" selected>3D Tile</option>
+                     <option value="usd">USD</option>
+                     <option value="i3s">I3S</option>
+                     <option value="threejs">Three.js</option>
+                 </select>
+             </div>
              <!-- Minimize button removed -->
          </div>
          <div class="panel-content">
-             <div class="settings-button-group">
-                 <button type="button" id="scene-type-3dtile" class="settings-button">3D Tile</button>
-                 <button type="button" id="scene-type-usd" class="settings-button">USD</button>
-                 <button type="button" id="scene-type-i3s" class="settings-button">I3S</button>
-                 <button type="button" id="scene-type-threejs" class="settings-button">Three.js</button>
-            </div>
+             <!-- The settings-button-group is now removed from here -->
             <div class="scene-viewer-container-wrapper">
                 <div id="scene-viewer-3dtile" class="scene-viewer-content" style="display: block;"> <!-- Default view -->
                     <p>3D Tiles Viewer Area - Content to be loaded here.</p>
@@ -429,21 +551,47 @@
     </script>
     <!-- OpenGlobus JS (ES Module) -->
     <script type="module" src="packages/openglobus/lib/og.es.js"></script>
+
+    <!-- loaders.gl Single UMD Bundle (version 2.3.10) -->
+    <script src="https://unpkg.com/deck.gl@8.7.0/dist.min.js"></script> <!-- Includes @loaders.gl/core v3.1.3 -->
+    <script src="https://unpkg.com/@loaders.gl/tiles@3.1.3/dist/dist.min.js"></script> <!-- For Tiles3DLoader -->
+    <script src="https://unpkg.com/@loaders.gl/terrain@3.1.3/dist/dist.min.js"></script> <!-- For QuantizedMeshLoader -->
+    <script>
+        // Debug: Check if loaders.gl UMD has created the global 'loaders' object
+        if (window.loaders) {
+            console.log('[DEBUG_LOADERS_GLOBAL] window.loaders object IS defined after UMD script.', window.loaders);
+            if (window.loaders.Tiles3DLoader) { // Check if specific loaders are part of the main 'loaders' global
+                 console.log('[DEBUG_LOADERS_GLOBAL] window.loaders.Tiles3DLoader IS available.');
+            } else {
+                 console.warn('[DEBUG_LOADERS_GLOBAL] window.loaders.Tiles3DLoader is NOT available on the main loaders object.');
+            }
+            if (window.loaders.QuantizedMeshLoader) {
+                 console.log('[DEBUG_LOADERS_GLOBAL] window.loaders.QuantizedMeshLoader IS available.');
+            } else {
+                 console.warn('[DEBUG_LOADERS_GLOBAL] window.loaders.QuantizedMeshLoader is NOT available on the main loaders object.');
+            }
+        } else {
+            console.error('[DEBUG_LOADERS_GLOBAL] window.loaders object is UNDEFINED after UMD script.');
+        }
+    </script>
     <!-- MapLibre GL JS -->
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <!-- Leaflet JS -->
     <!-- <script src="packages/Leaflet/dist/leaflet.js"></script> -->
-    <!-- iTowns JS -->
-    <script src="packages/itowns/dist/itowns.js"></script> <!-- Adjust path if necessary after checking submodule structure -->
+    <!-- iTowns JS (Commented out due to missing file) -->
+    <!-- <script src="packages/itowns/dist/itowns.js"></script> --><!-- Adjust path if necessary after checking submodule structure -->
 <!-- Explicitly include three.js to ensure it's available globally -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-    <!-- <script src="packages/ir-engine/packages/client/public/workers/three.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <!-- THREE.js GLTFExporter for 3D model export -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
     <!-- Custom tileset export logic -->
+    <script src="packages/javascript/dist/browser/index.js"></script> <!-- ULID Library -->
     <script src="js/tilesetExporter.js"></script>
-    <script src="packages/janusweb/build/1.5.42/janusweb.assetworker.min.js"></script>
-    <script src="packages/janusweb/build/1.5.42/service-worker.js"></script>
+    <!-- JanusWeb scripts (Commented out due to missing files) -->
+    <!-- <script src="packages/janusweb/build/1.5.42/janusweb.assetworker.min.js"></script> -->
+    <!-- <script src="packages/janusweb/build/1.5.42/service-worker.js"></script> -->
     <!-- Main Application Logic -->
     <script type="module" src="js/main.js"></script>
 
