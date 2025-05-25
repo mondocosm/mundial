@@ -1,0 +1,17 @@
+.IconButton {
+  line-height: 0;
+  cursor: pointer;
+  transition: transform 100ms ease-in-out;
+
+  &:hover,
+  &:focus {
+    transform: scale(1.1);
+  }
+  &:active {
+    transform: scale(1);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}

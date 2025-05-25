@@ -1,0 +1,17 @@
+{
+  "name": "Default UI",
+  "version": "1.0.0",
+  "description": "Default UI configuration for JanusWeb",
+  "apps": [
+    {
+      "name": "Home",
+      "path": "apps/home/index.html"
+    }
+  ],
+  "themes": [
+    {
+      "name": "Default Theme",
+      "path": "themes/default/index.css"
+    }
+  ]
+}

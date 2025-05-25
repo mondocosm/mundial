@@ -1,0 +1,32 @@
+.ChatTimeline {
+  height: 100%;
+  & .Timeline {
+    width: 100%;
+  }
+}
+.ChatTimeline .Timeline_scroller {
+  height: 100%;
+
+  & > ul {
+    list-style: none;
+    padding: var(--sp-xs) 0;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    & > li {
+      width: 100%;
+      padding: var(--sp-xxs) var(--sp-md);
+      &.ChatAnnouncement {
+        padding: var(--sp-xxs) var(--sp-md);
+      }
+    }
+    & > li + li:not(.ChatBaseMessage--contentOnly) {
+      margin-top: var(--sp-xxs);
+    }
+    & .ChatBaseMessage--contentOnly {
+      padding: var(--sp-xxs) var(--sp-md);
+    }
+  }
+}

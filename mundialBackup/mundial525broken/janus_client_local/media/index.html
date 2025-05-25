@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>JanusWeb - Local Media Client</title>
+    <link rel="manifest" href="manifest.json">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, maximum-scale=1.0, width=device-width">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2f363b">
+
+    <meta http-equiv="origin-trial" data-feature="WebVR" data-expires="2017-06-12" content="Avy/Fo2QM5trR+WVHnaVz0t3LVltGxx3yvpSYSCC2oklwuDEYUEK6YdnxYv4p687MJGB61q//htZUvSIZPg93goAAABOeyJvcmlnaW4iOiJodHRwczovL3dlYi5qYW51c3ZyLmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViVlIiLCJleHBpcnkiOjE0OTczMTIwMDB9">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@bai0">
+    <meta name="twitter:title" content="JanusWeb">
+    <meta name="twitter:description" content="The World Within The Web">
+    <meta name="twitter:image" content="https://janusxr.org/backgrounds/wallpapers/generic.png">
+    <meta name="twitter:image:alt" content="JanusWeb">
+    <meta property="og:app_id"             content="1197654320349894">
+    <meta property="og:url"                content="https://web.janusxr.org/">
+    <meta property="og:type"               content="website">
+    <meta property="og:title"              content="JanusWeb">
+    <meta property="og:description"        content="The World Within The Web">
+    <meta property="og:image"              content="https://janusxr.com/backgrounds/wallpapers/generic.png">
+
+    <style>
+      body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+      #janus_web_content_area { width:100%; height:100%; }
+    </style>
+    <!-- The built janusweb.js should be self-contained with elation, client, and base -->
+<script>
+      // Polyfill from janus-minimal.html: extendclass
+      console.log('[JanusDirectGLTFTest] Applying extendclass polyfill.');
+      window.extendclass = function(parent, child) {
+        if (!parent || !parent.prototype) {
+          console.error('extendclass: Parent or parent.prototype is undefined:', parent);
+          return child;
+        }
+        for (var key in parent.prototype) {
+          if (parent.prototype.hasOwnProperty(key)) {
+            child.prototype[key] = parent.prototype[key];
+          }
+        }
+        child.prototype.constructor = child;
+        child.prototype.parent = parent.prototype;
+        return child;
+      };
+
+      // Polyfill for THREE.MathUtils.clamp (and THREE.Math.clamp)
+      // This needs to be defined before janusweb.js executes, as it seems to rely on it.
+      console.log('[JanusDirectGLTFTest] Attempting to apply THREE.MathUtils.clamp polyfill.');
+      if (typeof window.THREE === 'undefined') {
+        console.log('[JanusDirectGLTFTest] window.THREE is undefined, creating placeholder THREE object.');
+        window.THREE = {};
+      }
+      if (!window.THREE.MathUtils) {
+        console.log('[JanusDirectGLTFTest] window.THREE.MathUtils is undefined, creating placeholder.');
+        window.THREE.MathUtils = {};
+      }
+      if (typeof window.THREE.MathUtils.clamp !== 'function') {
+        console.log('[JanusDirectGLTFTest] Defining THREE.MathUtils.clamp.');
+        window.THREE.MathUtils.clamp = function(value, min, max) {
+          return Math.max(min, Math.min(max, value));
+        };
+      } else {
+        console.log('[JanusDirectGLTFTest] THREE.MathUtils.clamp already exists.');
+      }
+
+      // Ensure THREE.Math.clamp also points to it, as some versions/parts of code might use that path.
+      if (!window.THREE.Math) {
+        console.log('[JanusDirectGLTFTest] window.THREE.Math is undefined, aliasing to THREE.MathUtils.');
+         window.THREE.Math = window.THREE.MathUtils;
+      } else if (typeof window.THREE.Math.clamp !== 'function') {
+        console.log('[JanusDirectGLTFTest] Defining THREE.Math.clamp.');
+        window.THREE.Math.clamp = window.THREE.MathUtils.clamp;
+      } else {
+        console.log('[JanusDirectGLTFTest] THREE.Math.clamp already exists.');
+      }
+    </script>
+    <script src="../../../packages/janusweb/build/1.5.42/janusweb.js"></script> <!-- Reverted to relative path for existing non-minified JanusWeb -->
+  </head>
+  <body>
+    <div id="janus_web_content_area"></div>
+
+    <script>
+        // Script content adapted from mundial/janus-minimal.html and existing polling logic
+        console.log('[JanusDirectGLTFTest] Script block started in media/index.html (programmatic init).');
+        
+        let janusObjectPollAttempts = 0;
+        const maxJanusObjectPollAttempts = 300; // Increased to 30s for janus object
+        let janusRoomPollAttempts = 0;
+        const maxJanusRoomPollAttempts = 300; // Increased to 30s for janus.room
+        let janusReadyPollAttempts = 0;
+        const maxJanusReadyPollAttempts = 300; // Increased to 30s for janus.ready
+
+        let listenerAndStatusSetupDone = false;
+
+        function setupListenerAndStatus() {
+            if (listenerAndStatusSetupDone) return;
+            
+            console.log('[JanusDirectGLTFTest] Attempting to set up listener and initial status.');
+            
+            if (!window.janus) {
+                console.error('[JanusDirectGLTFTest] setupListenerAndStatus: window.janus is not defined. Cannot proceed.');
+                return;
+            }
+            if (!window.janus.id) {
+                 console.warn('[JanusDirectGLTFTest] setupListenerAndStatus: window.janus.id is not defined yet.');
+                 // We might need to wait for janus.id to be populated if room objects are needed immediately.
+            }
+
+            listenerAndStatusSetupDone = true; // Set early to prevent re-entry from polls
+            console.log('[JanusDirectGLTFTest] Janus sufficiently initialized (or timed out, proceeding anyway). Setting up listener and initial status.');
+
+            const statusText = window.janus.id ? window.janus.id.status_text_obj : null;
+            if (statusText) {
+                statusText.text = "Select tileset to load.";
+                console.log('[JanusDirectGLTFTest] Initial status text set.');
+            } else {
+                console.warn('[JanusDirectGLTFTest] status_text_obj not found in janus.id, cannot set initial prompt. janus.id:', window.janus.id);
+            }
+
+            window.addEventListener('message', function(event) {
+                console.log('[JanusDirectGLTFTest] Message received in media/index.html:', event);
+                if (event.data && event.data.type === 'loadGLTFAsRoom') {
+                    console.log('[JanusDirectGLTFTest] Received loadGLTFAsRoom message in media/index.html:', event.data);
+                    const gltfString = event.data.gltfString;
+                    const tilesetName = event.data.tilesetName || 'LoadedGLTF';
+                    const currentStatusText = window.janus && window.janus.id ? window.janus.id.status_text_obj : null;
+
+                    if (!window.janus || !window.janus.room || typeof window.janus.room.createAsset !== 'function' || typeof window.janus.room.createObject !== 'function') {
+                        console.error('[JanusDirectGLTFTest] Janus room or createAsset/createObject not available for GLTF loading. Janus:', window.janus, 'janus.room:', window.janus ? window.janus.room : 'N/A');
+                        if (currentStatusText) currentStatusText.text = "Error: Janus API missing.";
+                        return;
+                    }
+                    
+                    if (currentStatusText) currentStatusText.text = "GLTF Data Received. Loading...";
+
+                    if (gltfString) {
+                        try {
+                            const gltfBlob = new Blob([gltfString], { type: 'model/gltf+json' });
+                            const blobURL = URL.createObjectURL(gltfBlob);
+                            console.log('[JanusDirectGLTFTest] Created Blob URL for GLTF:', blobURL);
+
+                            const assetId = "dynamicGltfAssetInProgrammatic";
+                            const objectId = "dynamicGltfObjectInProgrammatic";
+
+                            if (window.janus.room.assets && window.janus.room.assets[assetId]) {
+                                console.log('[JanusDirectGLTFTest] Removing existing asset:', assetId);
+                                window.janus.room.removeAsset(assetId);
+                            }
+                            if (window.janus.room.objects && window.janus.room.objects[objectId]) {
+                                console.log('[JanusDirectGLTFTest] Removing existing object:', objectId);
+                                window.janus.room.removeObject(objectId);
+                            }
+                           
+                            window.janus.room.createAsset({ tag: 'AssetObject', id: assetId, src: blobURL });
+                            console.log('[JanusDirectGLTFTest] Called createAsset:', assetId);
+                            
+                            window.janus.room.createObject('Object', {
+                                id: objectId,
+                                js_id: objectId,
+                                asset_id: assetId,
+                                pos: "0 0 0",
+                                scale: "1 1 1",
+                                col: "1 1 1"
+                            });
+                            console.log('[JanusDirectGLTFTest] Called createObject:', objectId, `(${tilesetName})`);
+                            if (currentStatusText) currentStatusText.text = `${tilesetName} loaded!`;
+
+                        } catch (e) {
+                            console.error('[JanusDirectGLTFTest] Error processing GLTF message:', e);
+                            if (currentStatusText) currentStatusText.text = "Error loading GLTF.";
+                        }
+                    } else {
+                        console.warn('[JanusDirectGLTFTest] GLTF string was empty.');
+                        if (currentStatusText) currentStatusText.text = "Received empty GLTF data.";
+                    }
+                }
+            });
+            console.log('[JanusDirectGLTFTest] GLTF Message listener is NOW ACTIVE in media/index.html.');
+        }
+
+        function pollForJanusReady() {
+            if (window.janus && window.janus.ready && !listenerAndStatusSetupDone) {
+                 console.log(`[JanusDirectGLTFTest] POLL: janus.ready is TRUE (attempt ${janusReadyPollAttempts}). Setting up listener.`);
+                 setupListenerAndStatus();
+                 return;
+            }
+            if (listenerAndStatusSetupDone) return; // Already handled or timed out
+
+            janusReadyPollAttempts++;
+            if (janusReadyPollAttempts < maxJanusReadyPollAttempts) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.ready is still ${window.janus ? window.janus.ready : 'N/A'} (attempt ${janusReadyPollAttempts}). Retrying for janus.ready...`);
+                setTimeout(pollForJanusReady, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for janus.ready to become true. Attempting setup anyway.');
+                setupListenerAndStatus(); // Attempt setup even on timeout
+            }
+        }
+
+        function pollForJanusRoom() {
+            if (window.janus && window.janus.room &&
+                typeof window.janus.room.createAsset === 'function' &&
+                typeof window.janus.room.createObject === 'function' &&
+                window.janus.id && window.janus.id.status_text_obj &&
+                !listenerAndStatusSetupDone) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.room (with methods) AND status_text_obj ARE available (attempt ${janusRoomPollAttempts}). Setting up listener.`);
+                setupListenerAndStatus();
+                pollForJanusReady(); // Continue polling for janus.ready as it might be separate
+                return;
+            }
+            if (listenerAndStatusSetupDone) return;
+
+            janusRoomPollAttempts++;
+            if (janusRoomPollAttempts < maxJanusRoomPollAttempts) {
+                const janusRoomMethodsReady = !!(window.janus && window.janus.room && typeof window.janus.room.createAsset === 'function');
+                const statusObjExists = !!(window.janus && window.janus.id && window.janus.id.status_text_obj);
+                console.log(`[JanusDirectGLTFTest] POLL: janus.room methods (${janusRoomMethodsReady}) or status_text_obj (${statusObjExists}) not yet fully available (attempt ${janusRoomPollAttempts}). Retrying...`);
+                setTimeout(pollForJanusRoom, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for janus.room (with methods) and status_text_obj. Proceeding to pollForJanusReady.');
+                pollForJanusReady();
+            }
+        }
+        
+        function pollForJanusObject() {
+            if (window.janus && !listenerAndStatusSetupDone) { // Check if janus object exists and we haven't set up yet
+                console.log(`[JanusDirectGLTFTest] POLL: window.janus object IS defined (attempt ${janusObjectPollAttempts}). Proceeding to poll for room/ready.`);
+                pollForJanusRoom(); // Start polling for room details
+                return;
+            }
+            if (listenerAndStatusSetupDone) return; // Already handled or timed out
+
+            janusObjectPollAttempts++;
+            if (janusObjectPollAttempts < maxJanusObjectPollAttempts) {
+                console.log(`[JanusDirectGLTFTest] POLL: window.janus object NOT YET defined (attempt ${janusObjectPollAttempts}). Retrying...`);
+                setTimeout(pollForJanusObject, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for window.janus object. Cannot initialize JanusWeb programmatically.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+          console.log('[JanusDirectGLTFTest] DOMContentLoaded. Attempting programmatic JanusWeb initialization.');
+          try {
+            const config = {
+              el: document.getElementById('janus_web_content_area'),
+              url: '/mundial/empty_janus_room.html', // Start with the empty room
+              datapath: '/packages/janusweb/build/1.5.42/media/', // Absolute path from server root
+              networking: false,
+              permissions_auto_accept: true, // Kept for simplicity during test
+              nostats: true,                 // Kept for simplicity
+              novr: true,                    // Kept for simplicity
+              // Additional minimal config from janus-minimal.html example
+              fullscreen: false, // Set to false if it's embedded in a panel
+              useWebVR: false,
+              showchat: false,
+              shownavigation: false,
+              usevoip: false,
+              resolution: 1.0,
+              rendermode: 'automatic',
+              uiconfig: {}, // Explicitly set UI config
+              // homepage: '/mundial/empty_janus_room.html' // 'url' takes precedence if both are present
+            };
+            
+            console.log('[JanusDirectGLTFTest] Initializing JanusWeb programmatically with config:', config);
+            if (window.elation && window.elation.janusweb && typeof window.elation.janusweb.init === 'function') {
+                window.elation.janusweb.init(config);
+                console.log('[JanusDirectGLTFTest] elation.janusweb.init() called.');
+                // Start polling for janus object now that init has been called.
+                pollForJanusObject();
+            } else {
+                console.error('[JanusDirectGLTFTest] elation.janusweb.init is not available. Ensure janusweb.js loaded correctly.');
+                // Fallback: if elation.janusweb.init isn't there, the custom element might still try to init if it was parsed.
+                // However, we removed the custom element, so this path is unlikely.
+                // If janusweb.js failed to load, THREE might also be undefined, causing clamp issues.
+                if (typeof THREE === 'undefined' || !THREE.MathUtils || !THREE.MathUtils.clamp) {
+                     console.error("[JanusDirectGLTFTest] THREE.MathUtils.clamp is still not defined after janusweb.js should have loaded. This is likely the root cause of the 'clamp' error.");
+                }
+            }
+          } catch(e) {
+            console.error('[JanusDirectGLTFTest] Error initializing JanusWeb programmatically:', e);
+          }
+        });
+    </script>
+  </body>
+</html>

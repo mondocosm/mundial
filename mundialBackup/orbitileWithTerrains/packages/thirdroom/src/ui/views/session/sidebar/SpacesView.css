@@ -1,0 +1,10 @@
+.SpacesView {
+  width: 60px;
+  border-radius: var(--br-xs);
+  background-color: var(--bg-surface);
+  box-shadow: var(--bs-surface);
+}
+
+.SpacesView > * {
+  padding: var(--sp-xs) 0;
+}

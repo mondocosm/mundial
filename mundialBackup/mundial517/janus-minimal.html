@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JanusWeb Minimal</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #janusweb {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="janusweb"></div>
+  <script>
+    // Define polyfills before loading JanusWeb
+    window.extendclass = function(parent, child) {
+      if (!parent || !parent.prototype) {
+        console.error('extendclass: Parent or parent.prototype is undefined:', parent);
+        return child;
+      }
+      for (var key in parent.prototype) {
+        if (parent.prototype.hasOwnProperty(key)) {
+          child.prototype[key] = parent.prototype[key];
+        }
+      }
+      child.prototype.constructor = child;
+      child.prototype.parent = parent.prototype;
+      return child;
+    };
+  </script>
+  <script src="/packages/janusweb/build/1.5.42/janusweb.min.js"></script>
+  <script>
+    // Polyfill for THREE.Math.clamp which JanusWeb uses
+    if (typeof THREE !== 'undefined') {
+      console.log('Applying THREE.Math.clamp polyfill');
+      if (!THREE.MathUtils) THREE.MathUtils = {};
+      THREE.MathUtils.clamp = function(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      };
+      if (!THREE.Math) THREE.Math = THREE.MathUtils;
+      else if (!THREE.Math.clamp) THREE.Math.clamp = THREE.MathUtils.clamp;
+    }
+    
+    // Wait for document to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Configure JanusWeb with minimal settings
+        const config = {
+          el: document.getElementById('janusweb'),
+          networking: false,       // Disable networking to avoid connection errors
+          datapath: '/packages/janusweb/build/1.5.42/media/',
+          fullscreen: true,        // Use fullscreen mode
+          useWebVR: false,         // Disable WebVR
+          showchat: false,         // Disable chat UI
+          shownavigation: false,   // Disable navigation UI
+          usevoip: false,          // Disable voice chat
+          resolution: 1.0,         // Reduce resolution for better performance
+          rendermode: 'automatic',
+          // Load a simple example room
+          homepage: 'http://localhost:8001/janusvr-examples/default/index.html',
+          uiconfig: {} // Explicitly set UI config to an empty object
+        };
+        
+        console.log('Initializing minimal JanusWeb with config:', config);
+        elation.janusweb.init(config);
+      } catch(e) {
+        console.error('Error initializing JanusWeb:', e);
+      }
+    });
+  </script>
+</body>
+</html>

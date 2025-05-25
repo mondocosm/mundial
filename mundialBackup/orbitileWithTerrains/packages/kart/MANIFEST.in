@@ -1,0 +1,4 @@
+include README.md
+include COPYING
+include kart/diff-view.html
+include kart/VERSION

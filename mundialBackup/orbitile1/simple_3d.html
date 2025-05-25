@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Simple 3D Scene</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 18px;
+      z-index: 100;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">Simple 3D Scene - Use WASD to move, mouse to look around</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.js"></script>
+  <!-- Inline FontLoader -->
+  <script>
+    class FontLoader extends THREE.Loader {
+      constructor(manager) {
+        super(manager);
+      }
+
+      load(url, onLoad, onProgress, onError) {
+        const scope = this;
+        const loader = new THREE.FileLoader(this.manager);
+        loader.setPath(this.path);
+        loader.setRequestHeader(this.requestHeader);
+        loader.setWithCredentials(this.withCredentials);
+
+        loader.load(url, function (text) {
+          let json;
+          try {
+            json = JSON.parse(text);
+          } catch (e) {
+            console.warn('THREE.FontLoader: Failed to parse ' + url + ' as JSON.', e);
+            if (onError) {
+              onError(e);
+            }
+            return;
+          }
+          const font = scope.parse(json);
+          if (onLoad) {
+            onLoad(font);
+          }
+        }, onProgress, onError);
+      }
+
+      parse(json) {
+        // Simplified parse
+        class Font {
+          constructor(data) {
+            this.isFont = true;
+            this.type = 'Font';
+            this.data = data;
+          }
+          generateShapes(text, size) {
+            console.warn('THREE.Font.generateShapes: Simplified. Returning empty shapes.');
+            return [];
+          }
+        }
+        return new Font(json);
+      }
+    }
+    THREE.FontLoader = FontLoader;
+
+    class TextGeometry extends THREE.BufferGeometry {
+      constructor(text, parameters) {
+        super();
+        this.type = 'TextGeometry';
+        parameters = parameters || {};
+        const font = parameters.font;
+
+        if (!(font && font.isFont)) {
+          console.error('THREE.TextGeometry: font parameter is not an instance of THREE.Font.');
+          // Return an empty geometry or handle error appropriately
+          return;
+        }
+
+        console.warn('THREE.TextGeometry: Using simplified placeholder geometry.');
+        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        this.copy(geometry);
+        geometry.dispose();
+      }
+    }
+    THREE.TextGeometry = TextGeometry;
+  </script>
+
+  <!-- Implement our own PointerLockControls -->
+  <script>
+    // Simple PointerLockControls implementation
+    THREE.PointerLockControls = function(camera, domElement) {
+      this.camera = camera;
+      this.domElement = domElement || document.body;
+      this.isLocked = false;
+      
+      // Initial position
+      this.moveSpeed = 0.1;
+      this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
+      this.vec = new THREE.Vector3();
+      
+      // Handle mouse movement
+      const onMouseMove = (event) => {
+        if (!this.isLocked) return;
+        
+        const movementX = event.movementX || 0;
+        const movementY = event.movementY || 0;
+        
+        // Update camera rotation based on mouse movement
+        this.euler.setFromQuaternion(camera.quaternion);
+        this.euler.y -= movementX * 0.002;
+        this.euler.x -= movementY * 0.002;
+        this.euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.euler.x));
+        
+        camera.quaternion.setFromEuler(this.euler);
+      };
+      
+      // Handle pointer lock change
+      const onPointerlockChange = () => {
+        this.isLocked = document.pointerLockElement === this.domElement;
+      };
+      
+      // Movement methods
+      this.moveForward = (distance) => {
+        this.vec.setFromMatrixColumn(camera.matrix, 0);
+        this.vec.crossVectors(camera.up, this.vec);
+        camera.position.addScaledVector(this.vec, distance);
+      };
+      
+      this.moveRight = (distance) => {
+        this.vec.setFromMatrixColumn(camera.matrix, 0);
+        camera.position.addScaledVector(this.vec, distance);
+      };
+      
+      // Lock/unlock pointer
+      this.lock = () => {
+        this.domElement.requestPointerLock();
+      };
+      
+      this.unlock = () => {
+        document.exitPointerLock();
+      };
+      
+      // Event listeners
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('pointerlockchange', onPointerlockChange);
+    };
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Main script content goes here
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb); // Sky blue background
+    // Camera setup
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.7, 5); // Position camera at eye level
+    
+    // Renderer setup
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    
+    // Controls setup
+    const controls = new THREE.PointerLockControls(camera, document.body);
+    
+    // Click to start
+    document.addEventListener('click', function() {
+      controls.lock();
+    });
+    
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(5, 10, 7.5);
+    directionalLight.castShadow = true;
+    scene.add(directionalLight);
+    
+    // Create a red cube
+    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    cube.position.set(0, 1, 0);
+    cube.castShadow = true;
+    scene.add(cube);
+    
+    // Create text
+    const loader = new THREE.FontLoader();
+    loader.load('https://cdn.jsdelivr.net/npm/three@0.159.0/examples/fonts/helvetiker_regular.typeface.json', function(font) {
+      const textGeometry = new THREE.TextGeometry('Hello 3D World', {
+        font: font,
+        size: 0.5,
+        height: 0.1
+      });
+      const textMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+      const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+      textMesh.position.set(-2, 2.5, 0);
+      scene.add(textMesh);
+    });
+    
+    // Create a floor
+    const floorGeometry = new THREE.PlaneGeometry(20, 20);
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+    floor.receiveShadow = true;
+    scene.add(floor);
+    
+    // Movement controls
+    const moveSpeed = 0.1;
+    const keys = {
+      'w': false,
+      'a': false,
+      's': false,
+      'd': false
+    };
+    
+    document.addEventListener('keydown', (event) => {
+      if (keys.hasOwnProperty(event.key.toLowerCase())) {
+        keys[event.key.toLowerCase()] = true;
+      }
+    });
+    
+    document.addEventListener('keyup', (event) => {
+      if (keys.hasOwnProperty(event.key.toLowerCase())) {
+        keys[event.key.toLowerCase()] = false;
+      }
+    });
+    
+    // Window resize handler
+    window.addEventListener('resize', function() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Handle WASD movement
+      if (controls.isLocked) {
+        const direction = new THREE.Vector3();
+        
+        if (keys.w) {
+          direction.z = -1;
+        }
+        if (keys.s) {
+          direction.z = 1;
+        }
+        if (keys.a) {
+          direction.x = -1;
+        }
+        if (keys.d) {
+          direction.x = 1;
+        }
+        
+        if (direction.length() > 0) {
+          direction.normalize();
+          direction.multiplyScalar(moveSpeed);
+          
+          // Move in the direction the camera is facing
+          direction.applyQuaternion(camera.quaternion);
+          controls.moveRight(direction.x);
+          controls.moveForward(-direction.z);
+        }
+      }
+      
+      // Rotate the cube
+      cube.rotation.y += 0.01;
+      
+      renderer.render(scene, camera);
+    }
+    
+    animate();
+    }); // Close DOMContentLoaded listener
+  </script>
+</body>
+</html>

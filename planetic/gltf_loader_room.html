@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GLTF Loader Room</title>
+</head>
+<body>
+    <fireboxroom>
+        <room>
+            <assets>
+                <!-- AssetObject will be added here by script -->
+            </assets>
+            <object id="status_text" js_id="status_text_obj" text="Waiting for GLTF..." pos="0 1.6 -2" scale="0.5 0.5 0.5" col="1 1 1"></object>
+            <!-- Loaded GLTF will be placed as an object here -->
+        </room>
+    </fireboxroom>
+
+    <script>
+        console.log('[GLTFLoaderRoom] Script execution started. Waiting for Janus and messages.');
+
+        function handleLoadGltfMessage(event) {
+            // Basic origin check for security - adjust if needed for your setup
+            // if (event.origin !== window.location.origin && event.origin !== 'http://localhost:8000') {
+            //     console.warn('[GLTFLoaderRoom] Message from untrusted origin:', event.origin);
+            //     return;
+            // }
+
+            if (event.data && event.data.type === 'loadGLTFAsRoom') {
+                console.log('[GLTFLoaderRoom] Received loadGLTFAsRoom message:', event.data);
+                const statusText = window.janus && window.janus.id ? window.janus.id.status_text_obj : null;
+                if (statusText) {
+                    statusText.text = "GLTF Received. Loading...";
+                }
+                
+                const gltfString = event.data.gltfString;
+                const tilesetName = event.data.tilesetName || 'LoadedGLTF';
+
+                if (gltfString) {
+                    if (!window.janus || !window.janus.ready) {
+                        console.warn('[GLTFLoaderRoom] Received GLTF message, but Janus is not ready. Ignoring.');
+                        if (statusText) statusText.text = "Error: Janus not ready for GLTF.";
+                        return;
+                    }
+                    try {
+                        const gltfBlob = new Blob([gltfString], { type: 'model/gltf+json' });
+                        const blobURL = URL.createObjectURL(gltfBlob);
+                        console.log('[GLTFLoaderRoom] Created Blob URL for GLTF:', blobURL);
+
+                        const assetId = "dynamicGltfAsset";
+                        const objectId = "dynamicGltfObject";
+
+                        if (window.janus.room.assets[assetId]) {
+                            window.janus.room.removeasset(assetId);
+                            console.log('[GLTFLoaderRoom] Removed existing asset:', assetId);
+                        }
+                        if (window.janus.room.objects[objectId]) {
+                             window.janus.room.removeobject(objectId);
+                             console.log('[GLTFLoaderRoom] Removed existing object:', objectId);
+                        }
+                       
+                        window.janus.room.createasset({
+                            tag: 'AssetObject',
+                            id: assetId,
+                            src: blobURL
+                        });
+                        console.log('[GLTFLoaderRoom] Created AssetObject:', assetId);
+                        
+                        window.janus.room.createobject('Object', {
+                            id: objectId,
+                            js_id: objectId,
+                            asset_id: assetId,
+                            pos: "0 0 0",
+                            scale: "1 1 1",
+                            col: "1 1 1"
+                        });
+                        console.log('[GLTFLoaderRoom] Created Object:', objectId);
+                        if (statusText) statusText.text = `${tilesetName} loaded!`;
+
+                    } catch (e) {
+                        console.error('[GLTFLoaderRoom] Error processing GLTF message:', e);
+                        if (statusText) statusText.text = "Error loading GLTF.";
+                    }
+                } else {
+                    console.warn('[GLTFLoaderRoom] GLTF string was empty.');
+                    if (statusText) statusText.text = "Received empty GLTF data.";
+                }
+            }
+        }
+
+        function checkJanusReady() {
+            console.log('[GLTFLoaderRoom] checkJanusReady called.');
+            if (window.janus && window.janus.ready) {
+                console.log('[GLTFLoaderRoom] Janus is ready. Activating message listener.');
+                const statusText = window.janus.id.status_text_obj;
+                if (statusText) {
+                    statusText.text = "Janus Ready. Listening for GLTF...";
+                }
+                window.addEventListener('message', handleLoadGltfMessage);
+                console.log('[GLTFLoaderRoom] Message listener for loadGLTFAsRoom is now active within gltf_loader_room.');
+            } else {
+                let reason = "";
+                if (!window.janus) reason = "window.janus is not defined.";
+                else if (!window.janus.ready) reason = "janus.ready is false.";
+                console.log(`[GLTFLoaderRoom] Janus not ready yet (${reason}). Retrying in 500ms...`);
+                try {
+                    if (window.janus && window.janus.id && window.janus.id.status_text_obj && window.janus.id.status_text_obj.text) {
+                         window.janus.id.status_text_obj.text = `Janus loading... (${reason.substring(0,30)})`;
+                    } else if (document.getElementById('status_text_obj_fallback')) { // Should not be needed if JanusML parses first
+                        document.getElementById('status_text_obj_fallback').textContent = `Janus loading... (${reason.substring(0,30)})`;
+                    }
+                } catch (e) { /* ignore */ }
+                setTimeout(checkJanusReady, 500);
+            }
+        }
+        
+        // Start checking for Janus readiness.
+        // The handleLoadGltfMessage function is defined above and will be used by the listener once active.
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            checkJanusReady();
+        } else {
+            document.addEventListener('DOMContentLoaded', checkJanusReady);
+        }
+    </script>
+</body>
+</html>

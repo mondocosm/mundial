@@ -1,0 +1,47 @@
+name: Release CI
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+jobs:
+  publish-npm:
+    
+    permissions:
+      contents: write
+    
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: ./.github/actions/main
+
+      - run: npm run test
+
+      - run: npm run build
+
+      - run: npm run docs || true
+
+      - name: Disable Jekyll
+        run: echo > docs/.nojekyll
+
+      - name: Deploy to openglobus.github.io
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          SSH_DEPLOY_KEY : ${{ secrets.SSH_DEPLOY_KEY  }}
+        with:
+          source-directory: docs
+          destination-github-username: openglobus
+          destination-repository-name: openglobus.github.io
+          user-name: Github Bot
+          user-email: github-actions[bot]@users.noreply.github.com
+          target-branch: master
+          target-directory: docs
+
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

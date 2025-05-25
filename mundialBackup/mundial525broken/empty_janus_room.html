@@ -1,0 +1,130 @@
+<fireboxroom id="gltf_loader_room_external">
+    <room pos="0 0 0" default_sounds="false">
+        <assets></assets>
+        <object id="status_text" js_id="status_text_obj" text="Room Initializing..." pos="0 1.6 -2" scale="0.5 0.5 0.5" col="1 1 1" />
+    </room>
+<!--
+    <script>
+        console.log('[EmptyJanusRoom] Script started.');
+        let roomReadyCalled = false;
+
+        function onRoomReady() {
+            if (roomReadyCalled) return;
+            roomReadyCalled = true;
+            console.log('[EmptyJanusRoom] Room is ready. `janus` object:', window.janus);
+            console.log('[EmptyJanusRoom] `janus.room` object:', window.janus.room);
+            console.log('[EmptyJanusRoom] `janus.id` object:', window.janus.id);
+
+            const statusText = window.janus.id.status_text_obj;
+            if (statusText) {
+                statusText.text = "Select tileset to load.";
+                console.log('[EmptyJanusRoom] Status text updated to: Select tileset to load.');
+            } else {
+                console.warn('[EmptyJanusRoom] status_text_obj not found in janus.id:', window.janus.id);
+            }
+
+            window.addEventListener('message', function(event) {
+                // Basic origin check for security - replace with your actual wrapper's origin if known
+                // if (event.origin !== window.location.origin && !window.location.origin.includes('localhost')) {
+                //     console.warn('[EmptyJanusRoom] Message from untrusted origin:', event.origin);
+                //     return;
+                // }
+
+                console.log('[EmptyJanusRoom] Message received in room:', event);
+
+                if (event.data && event.data.type === 'loadGLTFAsRoom') {
+                    console.log('[EmptyJanusRoom] Received loadGLTFAsRoom message in room:', event.data);
+                    const gltfString = event.data.gltfString;
+                    const tilesetName = event.data.tilesetName || 'LoadedGLTF';
+                    const currentStatusText = window.janus.id.status_text_obj;
+
+                    if (!window.janus || !window.janus.room || typeof window.janus.room.createasset !== 'function') {
+                        console.error('[EmptyJanusRoom] Janus room or createasset not available for GLTF loading.');
+                        if (currentStatusText) currentStatusText.text = "Error: Janus room API missing.";
+                        return;
+                    }
+                    
+                    if (currentStatusText) currentStatusText.text = "GLTF Data Received. Loading...";
+
+                    if (gltfString) {
+                        try {
+                            const gltfBlob = new Blob([gltfString], { type: 'model/gltf+json' });
+                            const blobURL = URL.createObjectURL(gltfBlob);
+                            console.log('[EmptyJanusRoom] Created Blob URL for GLTF:', blobURL);
+
+                            const assetId = "dynamicGltfAssetInRoom";
+                            const objectId = "dynamicGltfObjectInRoom";
+
+                            // Clear previous if they exist
+                            if (window.janus.room.assets[assetId]) {
+                                console.log('[EmptyJanusRoom] Removing existing asset:', assetId);
+                                window.janus.room.removeasset(assetId);
+                            }
+                            if (window.janus.room.objects[objectId]) {
+                                console.log('[EmptyJanusRoom] Removing existing object:', objectId);
+                                window.janus.room.removeobject(objectId);
+                            }
+                           
+                            window.janus.room.createasset({ tag: 'AssetObject', id: assetId, src: blobURL });
+                            console.log('[EmptyJanusRoom] Created AssetObject:', assetId);
+                            
+                            window.janus.room.createobject('Object', { 
+                                id: objectId, 
+                                js_id: objectId, // Make it accessible via janus.id
+                                asset_id: assetId, 
+                                pos: "0 0 0", 
+                                scale: "1 1 1", 
+                                col: "1 1 1" 
+                            });
+                            console.log('[EmptyJanusRoom] Created Object:', objectId);
+                            if (currentStatusText) currentStatusText.text = `${tilesetName} loaded!`;
+
+                        } catch (e) {
+                            console.error('[EmptyJanusRoom] Error processing GLTF message:', e);
+                            if (currentStatusText) currentStatusText.text = "Error loading GLTF.";
+                        }
+                    } else {
+                        console.warn('[EmptyJanusRoom] GLTF string was empty.');
+                        if (currentStatusText) currentStatusText.text = "Received empty GLTF data.";
+                    }
+                }
+            });
+            console.log('[EmptyJanusRoom] Message listener for loadGLTFAsRoom is now active in room.');
+        }
+
+        let attempts = 0;
+        const maxAttempts = 300; // 30 seconds
+
+        function waitForRoomReady() {
+            if (roomReadyCalled) return;
+            attempts++;
+
+            // Check for janus, janus.room, and a specific object (status_text_obj) to ensure the room is parsed
+            if (window.janus && window.janus.room && window.janus.id && window.janus.id.status_text_obj && typeof window.janus.room.createasset === 'function') {
+                console.log(`[EmptyJanusRoom] Room appears ready (janus, room, id.status_text_obj, createasset exist - attempt ${attempts}).`);
+                onRoomReady();
+            } else if (window.janus && window.janus.ready) { // Fallback to janus.ready if it becomes true
+                 console.log(`[EmptyJanusRoom] Room appears ready (janus.ready is true - attempt ${attempts}).`);
+                onRoomReady();
+            }
+            else if (attempts < maxAttempts) {
+                if (window.janus && window.janus.id) {
+                     console.log(`[EmptyJanusRoom] Waiting for room... (attempt ${attempts}). janus.room: ${!!window.janus.room}, status_text_obj: ${!!window.janus.id.status_text_obj}, createasset: ${typeof (window.janus.room || {}).createasset}`);
+                } else if (window.janus) {
+                    console.log(`[EmptyJanusRoom] Waiting for room... (attempt ${attempts}). janus.id not yet populated.`);
+                } else {
+                    console.log(`[EmptyJanusRoom] Waiting for janus object... (attempt ${attempts})`);
+                }
+                setTimeout(waitForRoomReady, 100);
+            } else {
+                console.error('[EmptyJanusRoom] Timed out waiting for room to become ready.');
+                const statusText = window.janus && window.janus.id ? window.janus.id.status_text_obj : null;
+                if (statusText) {
+                    statusText.text = "Error: Room failed to init.";
+                }
+            }
+        }
+        waitForRoomReady(); // Start polling
+    </script>
+-->
+</fireboxroom>

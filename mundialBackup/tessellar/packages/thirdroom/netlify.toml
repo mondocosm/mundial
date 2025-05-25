@@ -1,0 +1,48 @@
+[build]
+  publish = "dist/"
+
+[[redirects]]
+  from = "https://staging.thirdroom.io/*"
+  to = "https://staging--thirdroom.netlify.app/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/.well-known/*"
+  to = "/well-known/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/logviewer"
+  to = "/logviewer/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/storybook"
+  to = "/storybook/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+[[headers]]
+for = "/.well-known/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[context.production.environment]
+  VITE_NETLIFY_DEPLOY_CONTEXT = "production"
+
+[context.deploy-preview.environment]
+  VITE_NETLIFY_DEPLOY_CONTEXT = "deploy-preview"
+
+[context.branch-deploy.environment]
+  VITE_NETLIFY_DEPLOY_CONTEXT = "branch-deploy"

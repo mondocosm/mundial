@@ -1,0 +1,26 @@
+-c requirements.txt
+-c test.txt
+-c docs.txt
+
+# If new packages are added here, check they don't end up in the PyInstaller
+# bundle. If they do, add to Analysis().excludes in /kart.spec. The bundle
+# process prints out the included files as it runs, or you can check the
+# PYMODULE entries in /build/pyinstaller/kart/Analysis-00.toc
+
+ipdb
+ipython
+    # dependencies of ipython on various platforms...
+    # https://github.com/ipython/ipython/blob/d0a0447a4baf31d8a558b72f1840895f1376f8c0/setup.py#L202-L208
+    pexpect>4.3
+    appnope
+    colorama
+
+mypy
+    # note: not maintained; not compatible with sqlalchemy 2.x
+    # so, probably drop this when we upgrade sqlalchemy
+    sqlalchemy-stubs==0.4
+    msgpack-types
+    types-jsonschema
+    types-psycopg2
+    types-Pygments==2.13.0
+    types-tqdm

@@ -1,0 +1,11 @@
+Thumbs.db
+node_modules
+docs
+.eslintrc
+.csslintrc
+.idea
+coverage
+lib
+.vscode
+**/.DS_Store
+examples

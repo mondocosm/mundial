@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Local JanusWeb Client Loader</title>
+    <script src="janusweb.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+        janus-viewer { display: block; width: 100%; height: 100%; } /* Ensure viewer takes full space */
+    </style>
+</head>
+<body>
+    <!-- Option 1: Using janus-viewer custom element -->
+    <janus-viewer id="janusviewer"></janus-viewer>
+
+    <!-- Option 2: Or, if janusweb.js initializes a global 'janus' object, we might interact directly -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[LocalJanusClient] DOMContentLoaded. JanusWeb script should be loaded.');
+
+            const params = new URLSearchParams(window.location.search);
+            const roomUrl = params.get('url'); // e.g., /mundial/empty_janus_room.html
+            const networkingParam = params.get('networking'); // "false" or null
+            const noStatsParam = params.get('nostats');
+            const noVrParam = params.get('novr');
+            const permissionsAutoAcceptParam = params.get('permissions_auto_accept');
+
+            console.log('[LocalJanusClient] URL Parameters:', { roomUrl, networkingParam, noStatsParam, noVrParam, permissionsAutoAcceptParam });
+
+            if (!roomUrl) {
+                console.error('[LocalJanusClient] "url" parameter is missing.');
+                document.body.innerHTML = '<p>Error: "url" parameter is missing.</p>';
+                return;
+            }
+
+            // Attempt to configure and start JanusWeb
+            // This part is highly dependent on how `janusweb.js` (v1.5.42) is designed to be initialized.
+            // It might automatically pick up a <janus-viewer> element, or require manual initialization.
+
+            const viewer = document.getElementById('janusviewer');
+
+            if (viewer && typeof viewer.janus !== 'undefined' && typeof viewer.janus.load === 'function') {
+                // This assumes <janus-viewer> is the way and it exposes a janus instance
+                console.log('[LocalJanusClient] janus-viewer found. Attempting to load room:', roomUrl);
+                
+                // How to set networking=false is the tricky part.
+                // It might be a property on viewer.janus or viewer.janus.network before load,
+                // or a parameter to viewer.janus.load(). This needs knowledge of the 1.5.42 API.
+
+                // Simplistic attempt:
+                if (networkingParam === 'false') {
+                    if (viewer.janus.network && typeof viewer.janus.network.setActive === 'function') {
+                        viewer.janus.network.setActive(false);
+                        console.log('[LocalJanusClient] Attempted to set janus.network.setActive(false)');
+                    } else if (typeof viewer.janus.configure === 'function') {
+                         // Hypothetical configure method
+                        viewer.janus.configure({ networking: false });
+                        console.log('[LocalJanusClient] Attempted to call janus.configure({ networking: false })');
+                    } else {
+                        console.warn('[LocalJanusClient] Could not determine how to set networking=false on janus-viewer instance.');
+                    }
+                }
+                
+                // Set other params if possible (these are often handled by the client's internal defaults or UI)
+                // For nostats, novr, permissions_auto_accept, these might be specific attributes on <janus-viewer>
+                // or properties/configuration options.
+                if (noStatsParam === 'true' && viewer.janus.ui && viewer.janus.ui.hud_stats) {
+                    viewer.janus.ui.hud_stats.visible = false;
+                }
+                 if (permissionsAutoAcceptParam === 'true' && viewer.janus.permissions) {
+                    viewer.janus.permissions.auto_accept = true;
+                }
+
+
+                viewer.src = roomUrl; // For <janus-viewer>, src usually triggers loading.
+                // viewer.janus.load(roomUrl); // Alternative if direct .src doesn't work or re-init.
+                
+                console.log('[LocalJanusClient] Room load initiated for:', roomUrl);
+
+            } else if (window.janus && typeof window.janus.launch === 'function') {
+                // Alternative: if janusweb.js creates a global `janus` object with a launch/init method
+                console.log('[LocalJanusClient] Global window.janus.launch found.');
+                
+                let launchOpts = {
+                    url: roomUrl,
+                    networking: networkingParam !== 'false', // defaults to true if not "false"
+                    show_stats: noStatsParam !== 'true',
+                    // VR mode is usually handled by browser/device capabilities + user interaction
+                };
+                if (permissionsAutoAcceptParam === 'true' && window.janus.permissions) {
+                     window.janus.permissions.auto_accept = true;
+                }
+
+                console.log('[LocalJanusClient] Launching with options:', launchOpts);
+                window.janus.launch(launchOpts);
+
+            } else {
+                console.error('[LocalJanusClient] Could not find janus-viewer or a global janus.launch method. Cannot initialize JanusWeb.');
+                document.body.innerHTML = '<p>Error: Could not initialize local JanusWeb client.</p>';
+            }
+        });
+    </script>
+</body>
+</html>

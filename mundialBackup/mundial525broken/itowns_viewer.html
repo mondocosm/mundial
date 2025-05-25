@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>iTowns Viewer</title>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+        #itowns-viewer-div { width: 100%; height: 100%; background-color: #333; }
+    </style>
+</head>
+<body>
+    <div id="itowns-viewer-div"></div>
+
+    <!-- Load THREE.js first, version compatible with iTowns 2.45.1 (expects ~0.174.0) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.min.js"></script>
+    <!-- Then load iTowns -->
+    <script src="https://unpkg.com/itowns@2.45.1/dist/itowns.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('[iTownsViewer] DOMContentLoaded.');
+            const viewerDiv = document.getElementById('itowns-viewer-div');
+
+            if (!viewerDiv) {
+                console.error('[iTownsViewer] Viewer div #itowns-viewer-div not found.');
+                return;
+            }
+            // Check for THREE first, as iTowns depends on it.
+            if (typeof THREE === 'undefined') {
+                console.error('[iTownsViewer] THREE.js library not loaded. Check script paths.');
+                viewerDiv.innerHTML = '<p style="color:red;text-align:center;">Error: THREE.js library not loaded.</p>';
+                return;
+            }
+            if (typeof itowns === 'undefined') {
+                console.error('[iTownsViewer] iTowns library not loaded. Check script paths.');
+                viewerDiv.innerHTML = '<p style="color:red;text-align:center;">Error: iTowns library not loaded.</p>';
+                return;
+            }
+            console.log('[iTownsViewer] iTowns and THREE.js seem to be loaded.');
+            console.log('[iTownsViewer] iTowns version:', itowns.VERSION);
+            console.log('[iTownsViewer] THREE.js revision:', THREE.REVISION);
+
+
+            const placement = {
+                coord: new itowns.Coordinates('EPSG:4326', 2.35, 48.85), // Paris
+                range: 250000,
+            };
+
+            const view = new itowns.GlobeView(viewerDiv, placement, {
+                // Info: Don't use `handleCollision: false` with `const view = new itowns.GlobeView(viewerDiv, placement)`
+                // (handleCollision is true by default)
+                // itowns.GlobeControls will be used by default if `handleCollision` is true.
+                // These controls allow the user to zoom, pan, and rotate the view.
+                // See https://github.com/iTowns/itowns/blob/master/docs/user_guide/API_Reference.md#globeview
+                // and https://github.com/iTowns/itowns/blob/master/docs/user_guide/Controls.md
+                handleCollision: true,
+                renderer: null // Use default renderer
+            });
+            console.log('[iTownsViewer] GlobeView initialized:', view);
+
+            // Add one imagery layer to the source.
+            // This layer is defined in a json file but it could be defined inline.
+            // function addColorLayerFromConfig(config) {
+            //     config.source = new itowns.WMTSSource(config.source);
+            //     let layer = new itowns.ColorLayer(config.id, config);
+            //     view.addLayer(layer); // Removed .then(menuGlobe.addLayerGUI.bind(menuGlobe)) as menuGlobe is not defined here
+            //     return layer;
+            // }
+
+            // Add OpenStreetMap - The following line will likely fail due to path issues if examples are not hosted.
+            // itowns.Fetcher.json('../examples/layers/JSONLayers/Ortho.json').then(addColorLayerFromConfig);
+            // console.log('[iTownsViewer] Attempted to add layer from examples/layers/JSONLayers/Ortho.json (may fail).');
+
+            // Example of adding a simple tile layer (OSM) directly
+            console.log('[iTownsViewer] Adding OSM ColorLayer directly.');
+            const osmLayer = new itowns.ColorLayer('OSM', {
+                source: new itowns.TMSSource({
+                    name: 'OpenStreetMap',
+                    crs: 'EPSG:3857',
+                    url: 'https://tile.openstreetmap.org/${z}/${x}/${y}.png',
+                    attribution: '&copy; OpenStreetMap contributors',
+                    tileMatrixSet: 'PM'
+                }),
+            });
+            view.addLayer(osmLayer)
+                .then(() => console.log('[iTownsViewer] OSM ColorLayer added successfully.'))
+                .catch(err => console.error('[iTownsViewer] Error adding OSM ColorLayer:', err));
+
+            // Add atmosphere
+            view.getLayerById('atmosphere').visible = true;
+            view.getLayerById('atmosphere').lighting.enable = true;
+
+            console.log('[iTownsViewer] iTowns setup complete. View should be interactive.');
+
+        });
+    </script>
+</body>
+</html>

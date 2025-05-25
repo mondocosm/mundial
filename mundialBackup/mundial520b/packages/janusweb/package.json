@@ -1,0 +1,34 @@
+{
+  "name": "janusweb",
+  "description": "Web client for JanusVR worlds",
+  "version": "1.5.55",
+  "main": "scripts/janusweb.js",
+  "author": "James Baicoianu",
+  "license": "MIT",
+  "scripts": {
+    "postinstall": "./utils/init.sh",
+    "clean": "./utils/clean-build.sh",
+    "build": "./utils/build.sh",
+    "postversion": "git push origin v`npm view janusweb version`",
+    "test": "./utils/activate.sh && ./node_modules/.bin/karma start tests/karma.conf.js --single-run",
+    "start:dev": "nodemon -w scripts/ -w css/ -w ../engine/scripts/ -w ../engine/css/ -w ../physics/scripts/ -w ../utils/scripts/ -w ../elements/scripts/ -w ../elements/css/ --exec ./utils/build.sh"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbaicoianu/janusweb"
+  },
+  "dependencies": {
+    "elation-engine": ">=0.9.114",
+    "uglify-js": "*"
+  },
+  "keywords": [
+    "elation",
+    "three.js",
+    "3d",
+    "webgl",
+    "webvr",
+    "janusvr",
+    "metaverse"
+  ]
+}

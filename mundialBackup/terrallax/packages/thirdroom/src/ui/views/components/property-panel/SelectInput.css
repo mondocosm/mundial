@@ -1,0 +1,27 @@
+.SelectInput {
+  width: 100%;
+  padding: 0 var(--sp-xxs);
+  height: 30px;
+  border: 1px solid var(--bg-surface-border);
+  border-radius: var(--br-xxs);
+
+  &:hover {
+    background-color: var(--bg-surface-hover);
+  }
+}
+.SelectInput--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.SelectInput__button {
+  height: 100%;
+  cursor: pointer;
+}
+
+.SelectInput__content {
+  padding: var(--sp-xxs) 0;
+  background-color: var(--bg-surface);
+  border-radius: var(--br-xs);
+  box-shadow: var(--bs-dropdown);
+  overflow: hidden;
+}

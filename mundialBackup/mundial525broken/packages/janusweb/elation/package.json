@@ -1,0 +1,16 @@
+{
+  "name": "elation",
+  "description": "Elation Javascript Component Framework",
+  "version": "2.3.23",
+  "main": "build/elation.js",
+  "author": "James Baicoianu",
+  "license": "MIT",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbaicoianu/elation"
+  },
+  "keywords": [
+    "elation"
+  ]
+}

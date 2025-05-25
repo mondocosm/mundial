@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JanusWeb Minimal Room Example</title>
+  <script>
+    // Define polyfills before loading JanusWeb
+    window.extendclass = function(parent, child) {
+      if (!parent || !parent.prototype) {
+        console.error('extendclass: Parent or parent.prototype is undefined:', parent);
+        return child;
+      }
+      for (var key in parent.prototype) {
+        if (parent.prototype.hasOwnProperty(key)) {
+          child.prototype[key] = parent.prototype[key];
+        }
+      }
+      child.prototype.constructor = child;
+      child.prototype.parent = parent.prototype;
+      return child;
+    };
+  </script>
+  <script src="/packages/janusweb/build/1.5.42/janusweb.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    #janusweb {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="janusweb"></div>
+  <script>
+    // Polyfill for THREE.Math.clamp which JanusWeb uses
+    if (typeof THREE !== 'undefined') {
+      console.log('Applying THREE.Math.clamp polyfill');
+      if (!THREE.MathUtils) THREE.MathUtils = {};
+      THREE.MathUtils.clamp = function(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      };
+      if (!THREE.Math) THREE.Math = THREE.MathUtils;
+      else if (!THREE.Math.clamp) THREE.Math.clamp = THREE.MathUtils.clamp;
+    }
+
+    // Wait for document to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Define a minimal room directly in the config
+        const simpleRoom = `<FireBoxRoom>
+          <Assets>
+            <AssetImage id="sky" src="https://i.imgur.com/6dXMYOI.jpg" />
+          </Assets>
+          <Room skybox_left_id="sky" skybox_right_id="sky" skybox_up_id="sky" skybox_down_id="sky" skybox_front_id="sky" skybox_back_id="sky">
+            <Object id="cube" pos="0 1 5" scale="1 1 1" color="1 0 0" />
+          </Room>
+        </FireBoxRoom>`;
+
+        // Configure JanusWeb with minimal settings and inline room
+        const config = {
+          el: document.getElementById('janusweb'),
+          networking: false, // Disable networking
+          datapath: '/',
+          assetspath: '/',
+          homepage: simpleRoom, // Use the inline room XML
+          uiconfig: null, // Disable UI
+          shownavigation: false,
+          showchat: false,
+          showavatar: false
+        };
+
+        console.log('Initializing JanusWeb with minimal config');
+        elation.janusweb.init(config);
+      } catch(e) {
+        console.error('Error initializing JanusWeb:', e);
+      }
+    });
+  </script>
+</body>
+</html>

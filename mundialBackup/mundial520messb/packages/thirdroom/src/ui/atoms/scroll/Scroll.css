@@ -1,0 +1,32 @@
+.Scroll,
+.Scroll__viewport {
+  height: 100%;
+  width: 100%;
+
+  & > div {
+    /* Radix sets it to table which cause overflow issues with flex items */
+    display: block !important;
+  }
+}
+
+.Scroll__track {
+  --radix-scroll-area-thumb-width: 100%;
+  --radix-scroll-area-thumb-height: 100%;
+  padding: 2px;
+  margin: 2px;
+  border-radius: 10px;
+  background-color: var(--bg-surface-scroll-track);
+  z-index: 1;
+}
+
+.Scroll__track[data-orientation="vertical"] {
+  width: 10px;
+}
+.Scroll__track[data-orientation="horizontal"] {
+  height: 10px;
+}
+
+.Scroll__thumb {
+  background-color: var(--bg-surface-scroll-thumb);
+  border-radius: 10px;
+}

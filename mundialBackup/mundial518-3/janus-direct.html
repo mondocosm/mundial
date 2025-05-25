@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JanusWeb Direct Example</title>
+  <script>
+    // Define polyfills before loading JanusWeb
+    window.extendclass = function(parent, child) {
+      if (!parent || !parent.prototype) {
+        console.error('extendclass: Parent or parent.prototype is undefined:', parent);
+        return child;
+      }
+      for (var key in parent.prototype) {
+        if (parent.prototype.hasOwnProperty(key)) {
+          child.prototype[key] = parent.prototype[key];
+        }
+      }
+      child.prototype.constructor = child;
+      child.prototype.parent = parent.prototype;
+      return child;
+    };
+  </script>
+  <script src="/mundial/janusweb-build/janusweb.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    #janusweb {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="janusweb"></div>
+  <script>
+    // Polyfill for THREE.Math.clamp which JanusWeb uses
+    if (typeof THREE !== 'undefined') {
+      console.log('Applying THREE.Math.clamp polyfill');
+      if (!THREE.MathUtils) THREE.MathUtils = {};
+      THREE.MathUtils.clamp = function(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      };
+      if (!THREE.Math) THREE.Math = THREE.MathUtils;
+      else if (!THREE.Math.clamp) THREE.Math.clamp = THREE.MathUtils.clamp;
+    }
+
+    // Wait for document to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Configure JanusWeb
+        const config = {
+          el: document.getElementById('janusweb'),
+          networking: true,
+          datapath: '/mundial/janusweb-build/media/',
+          assetspath: '/mundial/janusweb-build/media/',
+          homepage: 'http://localhost:8001/janusvr-examples/default/index.html',
+          corsproxy: '',
+          uiconfig: '/packages/janusweb/build/1.5.42/media/assets/webui/default.json'
+        };
+
+        console.log('Config object:', config); // Log the config object
+        elation.janusweb.init(config);
+      } catch(e) {
+        console.error('Error initializing JanusWeb:', e);
+      }
+    });
+  </script>
+</body>
+</html>

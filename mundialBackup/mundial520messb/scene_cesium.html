@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cesium Scene Viewer</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+            font-family: sans-serif;
+        }
+        .status-message {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 8px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="cesium-status" class="status-message" style="display: none;"></div>
+
+    <script>
+        let viewer;
+        let currentGltfEntity = null;
+
+        function showCesiumStatus(message) {
+            const statusDiv = document.getElementById('cesium-status');
+            if (!statusDiv) return;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            console.log("Cesium Status:", message);
+            setTimeout(() => { statusDiv.style.display = 'none'; }, 5000);
+        }
+
+        try {
+            // Cesium.Ion.defaultAccessToken = 'YOUR_CESIUM_ION_ACCESS_TOKEN'; // Optional
+
+            viewer = new Cesium.Viewer('cesiumContainer', {
+                terrainProvider: Cesium.createWorldTerrain(),
+                baseLayerPicker: true,
+                geocoder: false,
+                homeButton: true,
+                sceneModePicker: true,
+                navigationHelpButton: false,
+                animation: false,
+                timeline: false,
+                fullscreenButton: true,
+                infoBox: false,
+                selectionIndicator: false,
+                shadows: true,
+            });
+
+            viewer.scene.skyAtmosphere = new Cesium.SkyAtmosphere();
+            viewer.scene.globe.enableLighting = true;
+            showCesiumStatus("Cesium viewer initialized.");
+
+        } catch (error) {
+            console.error("Error initializing Cesium Viewer:", error);
+            showCesiumStatus("Error initializing Cesium: " + error.message);
+        }
+
+        window.addEventListener('message', function(event) {
+            // Origin check can be added here for security if needed
+            // console.log("scene_cesium.html received message:", event.data);
+
+            if (event.data && event.data.type === 'loadGLTF' && event.data.gltfString) {
+                showCesiumStatus("Received GLTF data. Loading model...");
+                const { gltfString, tilesetCenter, tilesetName } = event.data; // Expecting center and name
+
+                if (currentGltfEntity) {
+                    if (viewer) viewer.entities.remove(currentGltfEntity);
+                    currentGltfEntity = null;
+                    console.log("Removed previous GLTF model from Cesium scene.");
+                }
+                
+                try {
+                    // The gltfString is already a JSON string from tilesetExporter.js
+                    const blob = new Blob([gltfString], { type: 'model/gltf+json' });
+                    const url = URL.createObjectURL(blob);
+
+                    const modelOptions = {
+                        uri: url,
+                        show: true,
+                    };
+                    
+                    let entityPosition;
+                    if (tilesetCenter && typeof tilesetCenter.lon === 'number' && typeof tilesetCenter.lat === 'number') {
+                        entityPosition = Cesium.Cartesian3.fromDegrees(tilesetCenter.lon, tilesetCenter.lat, tilesetCenter.height || 0.0);
+                        // For models not georeferenced at origin, modelMatrix might be needed.
+                        // Our GLTF is built with (0,0,0) as its local center, representing the tileset.
+                        // So, we place the entity at the geographic center.
+                        // modelOptions.position = entityPosition; // This sets the entity's position.
+                    } else {
+                        console.warn("Tileset center not provided, model will be loaded at default position or origin.");
+                    }
+
+                    const promise = Cesium.Model.fromGltfAsync(modelOptions); // fromGltfAsync is deprecated, use fromUri
+                    // Corrected: Cesium.Model.fromGltf -> Cesium.Model.fromUri
+                    // Actually, for GLTF data directly, it's better to use Resource with data URI
+                    
+                    const resource = new Cesium.Resource({
+                        url: url, // This can be a data URI or blob URL
+                        // queryParameters: { versionId: '1.0' } // Example
+                    });
+
+
+                    viewer.scene.primitives.add(Cesium.Model.fromGltf({ // fromGltf is for options object
+                        resource: resource, // Use Cesium.Resource
+                        modelMatrix: entityPosition ? Cesium.Transforms.eastNorthUpToFixedFrame(entityPosition) : Cesium.Matrix4.IDENTITY,
+                        show: true,
+                        // minimumPixelSize: 128
+                    })).then(model => {
+                        // Note: adding primitive doesn't return an entity to easily remove.
+                        // For simplicity with removal, using entities is easier.
+                        // Let's stick to entities for now if direct model primitive is hard to manage.
+                        // Reverting to entities.add with model property
+                        if (currentGltfEntity) viewer.entities.remove(currentGltfEntity); // ensure clean
+
+                        currentGltfEntity = viewer.entities.add({
+                            name: tilesetName || 'Loaded Tileset GLTF',
+                            position: entityPosition || Cesium.Cartesian3.fromDegrees(0,0,0), // Fallback position
+                            model: {
+                                uri: url,
+                                // minimumPixelSize: 64
+                            }
+                        });
+
+                        viewer.flyTo(currentGltfEntity).then(() => {
+                             showCesiumStatus("GLTF model loaded and focused in Cesium.");
+                        });
+                        // URL.revokeObjectURL(url); // Revoke later after model is fully processed by Cesium
+                    }).catch(function(error) {
+                        console.error("Cesium failed to load GLTF model:", error);
+                        showCesiumStatus("Error loading GLTF in Cesium: " + error.message);
+                        URL.revokeObjectURL(url); 
+                    });
+
+                } catch (e) {
+                    console.error("Error processing GLTF data for Cesium:", e);
+                    showCesiumStatus("Error processing GLTF: " + e.message);
+                }
+            }
+        });
+
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'cesiumIframeReady' }, '*');
+            console.log("scene_cesium.html posted 'cesiumIframeReady' message.");
+        }
+    </script>
+</body>
+</html>

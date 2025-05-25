@@ -1,0 +1,16 @@
+.Content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.Content__top,
+.Content__bottom {
+  flex-shrink: 0;
+}
+.Content,
+.Content__children {
+  flex-grow: 1;
+  min-height: 0;
+  min-width: 0;
+}

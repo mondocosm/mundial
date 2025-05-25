@@ -1,0 +1,34 @@
+{
+  "kart.diff/v1+hexwkb": {
+    "nz_pa_points_topo_150k": {
+      "feature": [
+        {
+          "-": {
+            "geom": "0101000000DD1A926B95F16540D5B4783B715642C0",
+            "fid": 1095,
+            "macronated": "Y",
+            "name": "Harataunga (Rākairoa)\n",
+            "name_ascii": "Harataunga (Rakairoa)\n",
+            "t50_fid": 2427339
+          },
+          "+": {
+            "geom": "0101000000DD1A926B95F16540D5B4783B715642C0",
+            "fid": 1095,
+            "macronated": "N",
+            "name": null,
+            "name_ascii": null,
+            "t50_fid": 2427339
+          }
+        }
+      ]
+    }
+  },
+  "kart.patch/v1": {
+    "authorEmail": "someone@example.com",
+    "authorName": "Someone",
+    "authorTime": "2019-06-20T14:28:33Z",
+    "authorTimeOffset": "+01:00",
+    "message": "Change the Coromandel",
+    "base": "1582725544d9122251acd4b3fc75b5c88ac3fd17"
+  }
+}

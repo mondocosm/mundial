@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JanusWeb Room with OpenGlobus Surface</title>
+</head>
+<body>
+    <FireBoxRoom>
+        <Assets>
+            <!-- <AssetWebSurface id="og_surface" src="openglobus_for_janus.html" width="1024" height="768" /> -->
+        </Assets>
+        <Room use_local_asset="room_plane">
+            <!-- <Plane pos="0 1.6 -5" scale="4 3 1" xdir="1 0 0" ydir="0 1 0" col="og_surface" /> -->
+            <Text pos="0 1.6 -5" scale="0.5 0.5 0.5" col="white">Simplified Room for Debugging</Text>
+        </Room>
+    </FireBoxRoom>
+
+    <script>
+        function handleGltfLoad(gltfData) {
+            console.log('Janus room: handleGltfLoad called with:', gltfData);
+            const gltfString = gltfData.gltfString;
+            const tilesetName = gltfData.tilesetName || 'loaded_tileset';
+
+            if (!gltfString) {
+                console.error('Janus room: No gltfString in message.');
+                return;
+            }
+
+            // This is the critical check: ensure janus and janus.room are available.
+            if (!window.janus || !window.janus.room) {
+                console.error('Janus room: janus.room API not available at time of GLTF processing. This should not happen if waited correctly.');
+                return;
+            }
+
+            try {
+                const blob = new Blob([gltfString], { type: 'model/gltf+json' });
+                const blobUrl = URL.createObjectURL(blob);
+                console.log('Janus room: Created Blob URL for GLTF:', blobUrl);
+
+                const objectId = 'dynamic_gltf_object_' + Date.now();
+
+                // Create the Object in the room
+                // Placeholder position and scale. This needs to be calculated based on geospatial data.
+                const gltfObject = janus.room.createObject('Object', {
+                    id: objectId,
+                    js_id: objectId + '_js',
+                    src: blobUrl,
+                    pos: '0 0 -3', // Placeholder: In front of WebSurface, slightly into the scene
+                    scale: '1 1 1', // Placeholder scale
+                    // Additional properties like lighting, collision can be added here
+                });
+
+                console.log(`Janus room: Created Object with id '${objectId}' for GLTF: ${tilesetName}`);
+
+                // TODO: Implement logic to remove or update a previously loaded GLTF object
+                // if (window.currentLoadedGltfObjectId) {
+                //     janus.removeObject(window.currentLoadedGltfObjectId);
+                // }
+                // window.currentLoadedGltfObjectId = objectId;
+
+            } catch (e) {
+                console.error('Janus room: Error creating GLTF object in Janus:', e);
+                if (blobUrl) {
+                    URL.revokeObjectURL(blobUrl); // Clean up blob if object creation failed
+                }
+            }
+        }
+
+        function initializeJanusMessageListener() {
+            console.log('Janus room: Attempting to initialize message listener.');
+            if (window.janus && janus.ready) { // Check if janus is ready
+                console.log('Janus room: Janus is ready. Attaching message listener.');
+                window.addEventListener('message', function(event) {
+                    if (event.data && event.data.type === 'loadGLTFAsRoom') {
+                        console.log('Janus room: Received loadGLTFAsRoom message (after janus.ready).');
+                        handleGltfLoad(event.data);
+                    }
+                });
+                console.log('Janus room: Message listener for GLTF loading attached.');
+            } else {
+                console.log('Janus room: Janus not ready yet, retrying listener initialization in 200ms.');
+                setTimeout(initializeJanusMessageListener, 200); // Retry after a short delay
+            }
+        }
+
+        // Start checking for Janus readiness after the document is loaded.
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            initializeJanusMessageListener();
+        } else {
+            document.addEventListener('DOMContentLoaded', initializeJanusMessageListener);
+        }
+    </script>
+</body>
+</html>

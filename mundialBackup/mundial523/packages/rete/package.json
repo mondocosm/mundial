@@ -1,0 +1,36 @@
+{
+  "name": "rete",
+  "version": "2.0.5",
+  "description": "JavaScript framework",
+  "scripts": {
+    "build": "rete build -c rete.config.ts",
+    "postinstall": "node postinstall.js",
+    "doc": "rete doc",
+    "lint": "rete lint",
+    "test": "rete test"
+  },
+  "author": "Vitaliy Stoliarov",
+  "license": "MIT",
+  "keywords": [
+    "dataflow",
+    "visual programming",
+    "node editor",
+    "rete",
+    "Rete.js"
+  ],
+  "homepage": "https://retejs.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retejs/rete.git"
+  },
+  "bugs": {
+    "url": "https://github.com/retejs/rete/issues"
+  },
+  "devDependencies": {
+    "jest-environment-jsdom": "^29.1.2",
+    "rete-cli": "~2.0.2"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.21.0"
+  }
+}

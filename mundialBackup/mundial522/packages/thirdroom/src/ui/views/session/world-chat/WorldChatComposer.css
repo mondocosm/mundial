@@ -1,0 +1,16 @@
+.WorldChatComposer {
+  line-height: 0;
+  & input {
+    min-width: 0;
+    width: 100%;
+    border: none;
+    background-color: transparent;
+
+    &:focus {
+      outline: none;
+    }
+    &::placeholder {
+      color: var(--tc-world);
+    }
+  }
+}

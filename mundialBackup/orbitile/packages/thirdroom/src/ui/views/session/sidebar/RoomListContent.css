@@ -1,0 +1,7 @@
+.RoomListViewContent {
+  min-height: 100%;
+
+  & > * {
+    padding-bottom: var(--sp-xs);
+  }
+}

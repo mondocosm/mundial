@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JanusWeb Direct Init Wrapper</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+        #janus-target-div { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="janus-target-div"></div>
+    <script src="packages/janusweb/build/1.5.55/janusweb.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('[JanusDirectWrapper] DOMContentLoaded. Initializing JanusWeb.');
+
+            if (typeof elation === 'undefined' || typeof elation.janusweb === 'undefined') {
+                console.error('[JanusDirectWrapper] elation.janusweb is not defined. Ensure janusweb.js loaded correctly.');
+                document.getElementById('janus-target-div').innerHTML = '<p style="color:red;text-align:center;">Error: JanusWeb script not loaded.</p>';
+                return;
+            }
+
+            // const roomToLoad = 'gltf_loader_room.html'; // Intentionally removed for this test
+            const janusArgs = {
+                // url: roomToLoad, // No initial URL
+                target: 'janus-target-div',
+                networking: false,
+                shownavigation: true,
+                showchat: false,
+                autoload: false, // Explicitly false
+                permissions_auto_accept: true
+            };
+
+            console.log('[JanusDirectWrapper] Calling elation.janusweb.init() with args (no initial URL, autoload:false):', janusArgs);
+
+            elation.janusweb.init(janusArgs)
+                .then(function(client) {
+                    console.log('[JanusDirectWrapper] elation.janusweb.init() successful. Client instance:', client);
+                    console.log('[JanusDirectWrapper] Inspecting client.janus:', client.janus);
+
+                    if (client.janus) {
+                        window.janus = client.janus;
+                        console.log('[JanusDirectWrapper] window.janus object IS DEFINED and set from client.janus.');
+                        
+                        // Now try to load the room manually
+                        const roomToLoadManually = 'gltf_loader_room.html'; // Try relative first
+                        // const roomToLoadManually = '/mundial/gltf_loader_room.html'; // Absolute path alternative
+                        console.log(`[JanusDirectWrapper] Attempting to load room manually: ${roomToLoadManually}`);
+                        
+                        if (typeof client.janus.load === 'function') {
+                            client.janus.load(roomToLoadManually); // Common API pattern
+                            console.log(`[JanusDirectWrapper] Called client.janus.load('${roomToLoadManually}')`);
+                        } else if (client.janus.room && typeof client.janus.room.load === 'function') {
+                            client.janus.room.load(roomToLoadManually);
+                             console.log(`[JanusDirectWrapper] Called client.janus.room.load('${roomToLoadManually}')`);
+                        } else {
+                            console.error('[JanusDirectWrapper] Neither client.janus.load nor client.janus.room.load is a function.');
+                        }
+
+                        // The script in gltf_loader_room.html will poll for window.janus and janus.ready.
+                        // Set up the message listener here; gltf_loader_room.html will define window.handleRoomGltfMessage.
+                        window.addEventListener('message', function(event) {
+                            if (event.data && (event.data.type === 'loadGLTFAsRoom' || event.data.type === 'setRoom')) {
+                                console.log('[JanusDirectWrapper] Received message from parent, attempting to call window.handleRoomGltfMessage:', event.data);
+                                if (typeof window.handleRoomGltfMessage === 'function') {
+                                    window.handleRoomGltfMessage(event);
+                                } else {
+                                    console.warn('[JanusDirectWrapper] window.handleRoomGltfMessage is not (yet) defined. GLTF might not load if room script has not run.');
+                                }
+                            }
+                        });
+                        console.log('[JanusDirectWrapper] Global message listener set up. It will call window.handleRoomGltfMessage if defined by room.');
+
+                    } else {
+                        console.error('[JanusDirectWrapper] client.janus IS UNDEFINED after init. Cannot proceed.');
+                        window.janus = undefined; // Ensure it's explicitly undefined
+                    }
+                })
+                .catch(function(err) {
+                    console.error('[JanusDirectWrapper] elation.janusweb.init() failed:', err);
+                    document.getElementById('janus-target-div').innerHTML = '<p style="color:red;text-align:center;">Error initializing JanusWeb.</p>';
+                });
+        });
+        console.log('[JanusDirectWrapper] Script loaded. Waiting for DOMContentLoaded.');
+    </script>
+</body>
+</html>

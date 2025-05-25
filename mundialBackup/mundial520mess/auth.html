@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication - Mundial</title>
+    <link rel="stylesheet" href="css/style.css"> <!-- Link to main site styles -->
+    <link rel="stylesheet" href="../auth/auth.css"> <!-- Auth-specific styles (can override or add to main styles) -->
+    <!-- Consider linking to main style.css if toolbar styles are defined there and not in auth.css -->
+    <!-- e.g., <link rel="stylesheet" href="css/style.css"> -->
+</head>
+<body class="auth-page">
+    <div id="toolbar">
+        <h1 id="app-title">WRLDS</h1>
+        <div class="toolbar-spacer"></div> <!-- Used to push button to the right with flexbox -->
+        <button class="toolbar-button return-btn" type="button" onclick="window.location.href='index.html'">Return</button>
+    </div>
+
+    <div class="auth-container">
+        <!-- Removed old .auth-header as its content is now in #toolbar -->
+        <div class="auth-form-container">
+            <div class="form-toggle">
+                <button id="show-login-btn" class="active" type="button">Sign In</button>
+                <button id="show-signup-btn" type="button">Sign Up</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form">
+                <h2>Sign In</h2>
+                <div class="form-group">
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" name="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" name="login-password" required>
+                </div>
+                <button type="submit" class="submit-btn">Sign In</button>
+                <p class="form-message" id="login-message"></p>
+            </form>
+
+            <!-- Signup Form -->
+            <form id="signup-form" class="auth-form" style="display: none;">
+                <h2>Sign Up</h2>
+                <div class="form-group">
+                    <label for="signup-username">Username:</label>
+                    <input type="text" id="signup-username" name="signup-username" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-email">Email:</label>
+                    <input type="email" id="signup-email" name="signup-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-password">Password:</label>
+                    <input type="password" id="signup-password" name="signup-password" required>
+                </div>
+                <button type="submit" class="submit-btn">Sign Up</button>
+                <p class="form-message" id="signup-message"></p>
+            </form>
+        </div>
+    </div>
+    <script src="../auth/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+.Icon {
+  display: inline-block;
+  flex-shrink: 0;
+  mask-repeat: no-repeat;
+  mask-size: cover;
+
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.Icon--xl {
+  width: var(--ic-xl);
+  height: var(--ic-xl);
+}
+.Icon--lg {
+  width: var(--ic-lg);
+  height: var(--ic-lg);
+}
+.Icon--md {
+  width: var(--ic-md);
+  height: var(--ic-md);
+}
+.Icon--sm {
+  width: var(--ic-sm);
+  height: var(--ic-sm);
+}
+.Icon--xs {
+  width: var(--ic-xs);
+  height: var(--ic-xs);
+}
+
+.Icon--surface {
+  background-color: var(--ic-surface);
+}
+.Icon--surface-low {
+  background-color: var(--ic-surface-low);
+}
+.Icon--world {
+  background-color: var(--ic-world);
+}
+.Icon--primary {
+  background-color: var(--ic-primary);
+}
+.Icon--on-primary {
+  background-color: var(--ic-on-primary);
+}
+.Icon--secondary {
+  background-color: var(--ic-secondary);
+}
+.Icon--on-secondary {
+  background-color: var(--ic-on-secondary);
+}
+.Icon--danger {
+  background-color: var(--ic-danger);
+}
+.Icon--on-danger {
+  background-color: var(--ic-on-danger);
+}
+.Icon--tooltip {
+  background-color: var(--ic-tooltip);
+}
+.Icon--link {
+  background-color: var(--ic-link);
+}

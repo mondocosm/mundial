@@ -1,0 +1,53 @@
+{
+  "kart.diff/v1+hexwkb": {
+    "nz_pa_points_topo_150k": {
+      "feature": [
+        {
+          "+": {
+            "fid": 9999,
+            "geom": "01010000005788C5255BEA6540CB85AC5AC54242C0",
+            "macronated": null,
+            "name": null,
+            "name_ascii": "new",
+            "t50_fid": null
+          }
+        },
+        {
+          "-": {
+            "fid": 1241,
+            "geom": "0101000000492A45C30AEB6540551507C3663C42C0",
+            "macronated": "N",
+            "name": null,
+            "name_ascii": null,
+            "t50_fid": 2427486
+          }
+        },
+        {
+          "+": {
+            "fid": 1795,
+            "geom": "010100000091C8DB9402C765403DDEF1BAB99F41C0",
+            "macronated": "N",
+            "name": null,
+            "name_ascii": "updated",
+            "t50_fid": 2428041
+          },
+          "-": {
+            "fid": 1795,
+            "geom": "010100000091C8DB9402C765403DDEF1BAB99F41C0",
+            "macronated": "N",
+            "name": null,
+            "name_ascii": null,
+            "t50_fid": 2428041
+          }
+        }
+      ]
+    }
+  },
+  "kart.patch/v1": {
+    "authorEmail": "craig@destigter.nz",
+    "authorName": "Craig de Stigter",
+    "authorTime": "2020-04-30T23:36:58Z",
+    "authorTimeOffset": "+12:00",
+    "message": "A patch"
+  }
+}

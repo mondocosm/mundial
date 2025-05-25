@@ -1,0 +1,73 @@
+.WorldView {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.WorldView > * {
+  pointer-events: all;
+}
+
+.WorldView__chat {
+  --chat-width: 200px;
+  max-width: var(--chat-width);
+  width: 100%;
+  height: calc(100% - 70px);
+
+  position: absolute;
+  bottom: var(--sp-md);
+  left: var(--sp-md);
+  pointer-events: none;
+}
+.WorldView__chat--open {
+  --chat-width: 385px;
+}
+
+.WorldView__controls {
+  position: absolute;
+  bottom: var(--sp-md);
+  right: var(--sp-md);
+  gap: var(--sp-xs);
+
+  & .IconButton {
+    padding: var(--sp-xs);
+  }
+}
+
+.WorldView .Hotbar {
+  position: absolute;
+  bottom: var(--sp-md);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.WorldView__toast-container {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+
+  pointer-events: none;
+}
+
+.WorldView__toast {
+  border-radius: var(--br-xs);
+  background-color: var(--bg-world-overlay);
+  height: 40px;
+  padding: 0 8px;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.WorldView__toast--shown {
+  opacity: 1;
+}

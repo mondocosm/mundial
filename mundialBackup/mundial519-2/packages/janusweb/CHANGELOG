@@ -1,0 +1,184 @@
+JanusWeb 1.5.42
+===============
+- New Features
+  - TiltBrush / OpenBrush support via three-icosa
+  - VOIP "start call" button
+  - Synced avatar morphtargets over network
+  - New <outliner> built-in element
+  - Support for .hdr envmaps
+- Updates
+  - glTF optimizations: KTX2 textures, Meshopt compression
+  - VR controller improvements
+  - Scriptable player walk/run speeds
+  - Editor improvements
+  - Upgrade Three.js to r140
+- Bugfixes
+  - Handle localStorage permission rejection
+  - Fixed particle rates < 1 particle per frame
+  - Fixed toon shader for <room toon="true">
+  - Material fixes for emissive, clearcoat, transmission tint, etc
+  - Fixed FBX texture load path
+  - Update player gravity when flying is toggled
+
+
+JanusWeb 1.5
+============
+- Threejs upgrade to r133
+- Skeletal and morphtarget animation support
+- Lighting and material improvements
+  - Transmission
+  - Clearcoat
+  - HDRI envmaps (EXR)
+  - Improved shadow mapping
+  - light_style parameter for Quake-style light patterns
+  - DRACO glTF compression
+- Avatar improvements
+  - Ready Player Me
+  - Animation packs
+  - Morph targets for speaking, blinking, etc
+  - Smarter fading
+  - Third person camera option
+- WebXR improvements
+  - Stripped out all legacy WebVR and draft WebXR code
+  - Optimized performance
+  - WebXR Layers for equi video playback
+  - WebXR Navigation
+  - In-VR UI
+- Collision improvements
+  - New collision combos: sphere/mesh, capsule/mesh, capsule/capsule
+- Audio Improvements
+  - Room audio graph support
+  - HiFi VOIP backend support
+  - Configurable VOIP backend per room
+- Experimental / future Stuff
+  - AR with plane detection and lighting estimation
+  - Swappable physics backends
+  - NVIDIA PhysX / multi-threaded physics
+  - TensorFlow.js integration - BlazePose full-body tracking, FacePose, HandPose
+  - Hybrid standalone XR HMD + desktop processing using local network WebRTC
+  - Continued performance improvements
+  - iOS support
+  - Patreon and Gitcoin donation pages
+
+JanusWeb 1.3
+============
+- Engine improvements
+  - Improved mobile browser performance and usability
+  - Edit mode improvements (F1 to access)
+  - Suport for glTF with embedded textures
+  - Asset load optimizations
+  - Text objects cast shadows
+  - Inventory improvements
+  - Send network updates every 20ms instead of 100ms
+  - Fix head rotation with gamepads
+- Scripting and markup improvements
+  - Fixed custom element initialization race condition
+  - Fixed collision_scale
+  - Added object.getParentByTagName() / object.getParentByClassName()
+  - Update particles if particle_scale is changed
+  - Allow dynamic room.near / room.far
+  - <Image> attributes: sbs3d, ou3d, reverse3d, maxsize, preload
+  - Leap motion hand improvements
+  - Added onloadstart / onloadprogress / onload events to <Image> and <Object>
+- UI improvements
+  - New virtual onscreen gamepad system
+  - Chat render fixes in Chrome
+  - New landing page
+
+JanusWeb 1.2
+==============
+- Engine improvements
+  - Improved 3d positional audio HRTF panning mode
+  - Fixed SBS3D video and images
+  - Fixed skybox direction (thanks Spyduck!)
+  - FIxed edit sync (thanks Spyduck!)
+  - Fixed sound.play_once (thanks Spyduck!)
+  - Fixed screenshots with (window) resolution
+- Scripting and markup improvements
+  - Create room objects from Three.js objects
+  - Fixed spot lights, added "light_target" parameter
+  - Fixed light creation bugs
+  - object.parts lets you access the individual parts which make up a 3d model
+  - Added object.getBoundingSphere() / object.getBoundingBox()
+  - Added room.private support
+- UI improvements
+  - Configurable panels
+  - Installable UI apps (https://github.com/jbaicoianu/janusweb/wiki/Creating-a-UI-App)
+  - Improved settings UI
+  - Improved inventory with primitives + Google Poly
+  - Drag-drop editing improvements
+  - Support drag-drop from local files
+
+JanusWeb 1.2.5
+==============
+
+
+
+JanusWeb 1.1.16
+===============
+- JanusWeb HTML one-liners (<janus-viewer></janus-viewer>, <janus-viewer-video360 src="..."></janus-viewer-video360>, etc)
+- Rotation fixes: xdir/ydir/zdir orthonormalization is now consistent with native, plus support for rotation and rotation_order
+- Gaze events: ongazeenter / ongazemove / ongazeleave / ongazeactivate events (see https://docs.google.com/document/d/10AuBi7IhdPv6koolGJdT2_8AK9JeOgsU_yRVtW-IN5g for proposal, https://vesta.janusvr.com/bai/gaze-events-demo/ for example)
+- room.raycast() and object.raycast() (see https://docs.google.com/document/d/1Nm0CBd70fiuLwGGdC3UpOLg35FimyWa6ARO3uq41P8A for proposal)
+- Improved Leap Motion support (desktop + HMD mount) options now available via config panel
+- object.class parameter
+- object.addClass() / removeClass() / hasClass()
+- room.class parameter
+- room.addClass() / removeClass() / hasClass() / getObjectsByClassName() / getObjectsByTagName()
+- Emissive map support
+- tex/tex0 fixes
+- Added experimental teleporter (click-and-hold, move to aim, release to jump)
+- player.addForce() / removeForce()
+- Sound fixes (non-positional/ambient sounds, don't autoplay every sound, etc)
+- Custom element improvements/bugfixes
+- Improved ghost asset handling
+- Support for creating dynamic AssetImages from <canvas> elements
+- Dynamic room.fog_col support
+- Support for setting object alpha via object.col = V(r,g,b,a)
+- Improved per-room asset tracking (no more asset naming conflicts between rooms)
+- Asset loading bugs (spaces, multiple references, etc)
+- Optimize asset loading worker thread management (use number of cores to determine number of workers, load minimal code into worker)
+- Experimental collision detection enhancements - see https://github.com/jbaicoianu/janusweb/wiki/Collision-Meshes for info
+
+// TODO - this info is available in the wiki, but should be made available here too
+
+??? ?? 2016 - 0.4b
+------------------
+AssetScript support
+GIF support
+Improved build process
+Made available via NPM
+Stop and start all assets in a room when entering/leaving
+VIVE and Rift CV1 support
+Improved automated testing
+
+
+May  6 2016 - 0.3a
+------------------
+Bookmark your favorite rooms with ctrl+b, then view them later in the bookmarks room
+Browse Reddit in VR
+Preliminary edit mode support
+Improved gamepad support
+VOIP improvements
+Better HTTP error handling
+Improved texture blending support
+Proper 3d sound distance falloff
+Fixed transparency
+Fixed rotate_axis
+Fixed giraffe-head
+
+
+Apr 19 2016 - 0.2a
+------------------
+Added VOIP support between web and native users
+Switched to HTTPS by default.
+Lighting fixes
+Fixed video textures
+Improved build script
+
+
+Apr  7 2016 - 0.1a
+------------------
+First public release
+Basic JanusVR room viewer with simple networking and chat support
+Supports gamepads, 3D positional audio, WebVR

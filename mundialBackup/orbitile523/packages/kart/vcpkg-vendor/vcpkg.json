@@ -1,0 +1,80 @@
+{
+    "name": "kart-vendor",
+    "version-string": "0.1.2",
+    "builtin-baseline": "943c5ef1c8f6b5e6ced092b242c8299caae2ff01",
+    "dependencies": [
+        {
+            "name": "sqlite3",
+            "features": [
+                "json1", "rtree", "tool", "zlib"
+            ]
+        },
+        {
+            "name": "libpq",
+            "features": [
+                "client"
+            ]
+        },
+        {
+            "name": "libgit2"
+        },
+        {
+            "name": "unixodbc",
+            "platform": "!windows"
+        },
+        {
+            "name": "curl",
+            "default-features": false,
+            "features": ["ssl", "http2"]
+        },
+        {
+            "name": "tiff",
+            "features": [
+                "webp",
+                "zstd"
+            ]
+        },
+        {
+            "name": "proj",
+            "features": [
+                "tools"
+            ]
+        },
+        {
+            "name": "gdal",
+            "default-features": false,
+            "features": [
+                "recommended-features",
+                "tools",
+                "postgresql",
+                "geos",
+                "curl",
+                "lzma",
+                "webp",
+                "zstd",
+                "kea"
+            ]
+        },
+        {
+            "name": "pdal",
+            "default-features": false
+        },
+        {
+            "name": "libspatialite",
+            "default-features": false
+        },
+        {
+            "name": "pcre2"
+        },
+        {
+            "name": "openssl"
+        },
+        {
+            "name": "libffi"
+        },
+        {
+            "name": "python3",
+            "platform": "linux"
+        }
+    ]
+}

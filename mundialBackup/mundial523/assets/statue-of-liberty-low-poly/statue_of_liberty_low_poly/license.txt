@@ -1,0 +1,11 @@
+Model Information:
+* title:	Statue Of Liberty Low Poly
+* source:	https://sketchfab.com/3d-models/statue-of-liberty-low-poly-e899267a0951468aaa868e5daf22c290
+* author:	e-sfera (https://sketchfab.com/skolskaknjiga)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Statue Of Liberty Low Poly" (https://sketchfab.com/3d-models/statue-of-liberty-low-poly-e899267a0951468aaa868e5daf22c290) by e-sfera (https://sketchfab.com/skolskaknjiga) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

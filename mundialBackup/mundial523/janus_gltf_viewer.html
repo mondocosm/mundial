@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JanusWeb GLTF Viewer</title>
+    <style>
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background-color: #222; 
+        }
+        #janusweb-container {
+            width: 100%;
+            height: 100%;
+        }
+        #status-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: lime;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
+    <!-- JanusWeb scripts -->
+    <script src="https://web.janusxr.org/janusweb.js"></script>
+</head>
+<body>
+    <div id="status-overlay">Initializing JanusWeb GLTF Viewer...</div>
+    <div id="janusweb-container"></div>
+
+    <script>
+        // Status reporting
+        const statusOverlay = document.getElementById('status-overlay');
+        function updateStatus(message) {
+            console.log(message);
+            statusOverlay.innerText = message;
+        }
+
+        // Handle errors
+        function handleError(error) {
+            console.error(error);
+            updateStatus('ERROR: ' + (error.message || error));
+        }
+
+        // Initialize JanusWeb
+        let janusInstance = null;
+        
+        function initJanusWeb() {
+            try {
+                updateStatus('Initializing JanusWeb...');
+                
+                // Check if JanusWeb is available
+                if (!window.elation || !window.elation.janusweb) {
+                    throw new Error('JanusWeb library not loaded properly');
+                }
+                
+                // Initialize JanusWeb client
+                janusInstance = new elation.janusweb.client({
+                    container: document.getElementById('janusweb-container'),
+                    showchat: false,
+                    autoload: false, // Don't load a default URL yet
+                    networking: false, // Disable multiplayer for this viewer
+                    homepage: ''
+                });
+                
+                updateStatus('JanusWeb initialized, preparing to load model...');
+                
+                // Check for GLTF data
+                setTimeout(checkAndLoadGLTF, 500);
+                
+            } catch (err) {
+                handleError(err);
+            }
+        }
+        
+        // Check for GLTF data and load it
+        function checkAndLoadGLTF() {
+            try {
+                // 1. First check URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const gltfParam = urlParams.get('gltf');
+                const nameParam = urlParams.get('name') || 'Orbitile Tileset';
+                
+                if (gltfParam) {
+                    // URL parameter exists - it could be a direct URL or an encoded string
+                    updateStatus(`Loading GLTF from URL parameter: ${nameParam}`);
+                    loadGLTFModel(gltfParam, nameParam);
+                    return;
+                }
+                
+                // 2. Check localStorage
+                const storedGLTF = localStorage.getItem('orbitile_gltf');
+                const storedName = localStorage.getItem('orbitile_gltf_name') || 'Orbitile Tileset';
+                
+                if (storedGLTF) {
+                    updateStatus(`Loading GLTF from localStorage: ${storedName}`);
+                    loadGLTFModel(storedGLTF, storedName);
+                    return;
+                }
+                
+                // No GLTF data found
+                updateStatus('No GLTF data found. Please select a tileset and use "View in JanusWeb".');
+                
+            } catch (err) {
+                handleError(err);
+            }
+        }
+        
+        // Load the GLTF model
+        function loadGLTFModel(gltfData, modelName) {
+            try {
+                updateStatus(`Preparing to load GLTF model: ${modelName}`);
+                
+                // Create a blob URL if gltfData is a string
+                let modelUrl = gltfData;
+                
+                if (gltfData.startsWith('{')) {
+                    // This appears to be a JSON string - create a blob URL
+                    const blob = new Blob([gltfData], { type: 'model/gltf+json' });
+                    modelUrl = URL.createObjectURL(blob);
+                    updateStatus(`Created blob URL: ${modelUrl}`);
+                }
+                
+                // If JanusWeb is ready, load the model
+                if (janusInstance) {
+                    updateStatus(`Loading model into JanusWeb: ${modelName}`);
+                    
+                    // Try to create a room with this model
+                    const roomData = {
+                        "janus.roomid": modelName.replace(/[^a-z0-9]/gi, '_'),
+                        "title": modelName,
+                        "assets": {
+                            "assetlist": [
+                                {
+                                    "assetid": "main_model",
+                                    "src": modelUrl,
+                                    "mtl": "",
+                                    "tex0": "",
+                                    "tex1": "",
+                                    "tex2": "",
+                                    "tex3": ""
+                                }
+                            ]
+                        },
+                        "room": {
+                            "skybox_left": "",
+                            "skybox_right": "",
+                            "skybox_up": "",
+                            "skybox_down": "",
+                            "skybox_front": "",
+                            "skybox_back": "",
+                            "gravity": -9.8,
+                            "col": "1 1 1",
+                            "pos": "0 0 0",
+                            "fwd": "0 0 1"
+                        },
+                        "objects": [
+                            {
+                                "id": "gltf_model",
+                                "js_id": "model1",
+                                "collision_id": "main_model",
+                                "pos": "0 0 0", 
+                                "xdir": "1 0 0",
+                                "ydir": "0 1 0",
+                                "zdir": "0 0 1",
+                                "scale": "1 1 1",
+                                "gltf_model": "main_model",
+                                "lighting": true,
+                                "visible": true
+                            }
+                        ]
+                    };
+                    
+                    // Create a blob URL for the room data
+                    const roomDataBlob = new Blob([JSON.stringify(roomData)], { type: 'application/json' });
+                    const roomUrl = URL.createObjectURL(roomDataBlob);
+                    
+                    // Load the room
+                    janusInstance.load(roomUrl);
+                    updateStatus(`JanusWeb room created and loading with model: ${modelName}`);
+                } else {
+                    updateStatus('JanusWeb not initialized yet, waiting...');
+                    setTimeout(() => loadGLTFModel(gltfData, modelName), 500);
+                }
+                
+            } catch (err) {
+                handleError(err);
+            }
+        }
+        
+        // Handle incoming GLTF data from other windows
+        window.addEventListener('message', function(event) {
+            // Simple security check - adjust if needed
+            if (event.origin !== window.location.origin) return;
+            
+            if (event.data && event.data.type === 'loadGLTF' && event.data.gltfString) {
+                const modelName = event.data.name || 'Orbitile Tileset';
+                updateStatus(`Received GLTF data via postMessage: ${modelName}`);
+                
+                // Store in localStorage for potential reuse
+                localStorage.setItem('orbitile_gltf', event.data.gltfString);
+                localStorage.setItem('orbitile_gltf_name', modelName);
+                
+                // Load the model
+                loadGLTFModel(event.data.gltfString, modelName);
+            }
+        });
+        
+        // Initialize JanusWeb when the page is loaded
+        document.addEventListener('DOMContentLoaded', initJanusWeb);
+    </script>
+</body>
+</html>

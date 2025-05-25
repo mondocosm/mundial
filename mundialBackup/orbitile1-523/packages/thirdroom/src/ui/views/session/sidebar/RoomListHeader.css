@@ -1,0 +1,6 @@
+.RoomListHeader {
+  height: 54px;
+  padding: 0 var(--sp-md);
+
+  border-bottom: 1px solid var(--bg-surface-border);
+}

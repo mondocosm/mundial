@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JanusWeb XR Wrapper</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #222; }
+        iframe#janusweb-client-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- JanusWeb client will be loaded into this iframe -->
+    <iframe id="janusweb-client-iframe" title="JanusWeb Client View" src="/orbitile2/minimal_janus_room.html" allow="xr-spatial-tracking;fullscreen;microphone;camera;gyroscope;accelerometer"></iframe>
+
+    <script>
+        alert("DEBUG: xr_janus_wrapper.html SCRIPT IS RUNNING! Child iframe src is: " + document.getElementById('janusweb-client-iframe')?.src);
+        const janusWebClientFrame = document.getElementById('janusweb-client-iframe');
+        let currentGltfObjectURL = null;
+        let minimalRoomIsReady = false; // Flag to track if minimal_janus_room.html has signaled readiness
+
+        // Listen for the minimal_janus_room.html to signal it's ready
+        window.addEventListener('message', function(event) {
+            if (event.source === janusWebClientFrame.contentWindow && event.data && event.data.type === 'minimalRoomReady') {
+                minimalRoomIsReady = true;
+                console.log("xr_janus_wrapper: Received 'minimalRoomReady' (status: " + (event.data.status || 'unknown') + ") from child iframe.");
+            }
+        });
+
+        window.addEventListener('message', function(event) {
+            // Optional: Add origin check for security
+            // if (event.origin !== 'YOUR_APP_ORIGIN') return;
+            
+            if (event.data && event.data.type === 'loadGLTFAsRoom' && event.data.gltfString) {
+                const tilesetName = event.data.tilesetName || "Custom Tileset";
+                console.log(`xr_janus_wrapper: Received 'loadGLTFAsRoom' for "${tilesetName}". Minimal room ready state: ${minimalRoomIsReady}`);
+                
+                if (currentGltfObjectURL) {
+                    URL.revokeObjectURL(currentGltfObjectURL);
+                    console.log("xr_janus_wrapper: Revoked previous GLTF Object URL:", currentGltfObjectURL);
+                    currentGltfObjectURL = null;
+                }
+
+                try {
+                    const blob = new Blob([event.data.gltfString], { type: 'model/gltf+json' });
+                    currentGltfObjectURL = URL.createObjectURL(blob);
+                    console.log("xr_janus_wrapper: Created new GLTF Object URL:", currentGltfObjectURL);
+                    
+                    const sendDataToMinimalRoom = () => {
+                        if (janusWebClientFrame.contentWindow) {
+                            janusWebClientFrame.contentWindow.postMessage({
+                                type: 'loadGLTFDataFromWrapper', // This is what minimal_janus_room.html (functional version) expects
+                                url: currentGltfObjectURL,
+                                tilesetName: tilesetName
+                            }, '*');
+                            console.log(`xr_janus_wrapper: Posted 'loadGLTFDataFromWrapper' to child iframe with URL: ${currentGltfObjectURL}`);
+                        } else {
+                            console.error("xr_janus_wrapper: Child iframe (minimal_janus_room.html) contentWindow not accessible.");
+                        }
+                    };
+
+                    if (minimalRoomIsReady) {
+                        sendDataToMinimalRoom();
+                    } else {
+                        // Wait for minimalRoomReady or a timeout
+                        let attempts = 0;
+                        const maxAttempts = 10; // Wait up to 2 seconds (10 * 200ms)
+                        const intervalId = setInterval(() => {
+                            attempts++;
+                            if (minimalRoomIsReady) {
+                                clearInterval(intervalId);
+                                console.log("xr_janus_wrapper: Minimal room became ready. Sending GLTF data.");
+                                sendDataToMinimalRoom();
+                            } else if (attempts >= maxAttempts) {
+                                clearInterval(intervalId);
+                                console.warn("xr_janus_wrapper: Timeout waiting for 'minimalRoomReady'. Attempting to send GLTF data anyway if contentWindow exists.");
+                                if (janusWebClientFrame.contentWindow) { // Final check
+                                    sendDataToMinimalRoom();
+                                } else {
+                                    console.error("xr_janus_wrapper: Child iframe contentWindow still not available after timeout.");
+                                }
+                            } else {
+                                console.log(`xr_janus_wrapper: Waiting for minimalRoomReady... (attempt ${attempts})`);
+                            }
+                        }, 200);
+                    }
+
+                } catch (e) {
+                    console.error("xr_janus_wrapper: Error processing GLTF data for JanusWeb:", e);
+                    if (currentGltfObjectURL) {
+                        URL.revokeObjectURL(currentGltfObjectURL); // Clean up if error occurs
+                        currentGltfObjectURL = null;
+                    }
+                }
+            } else if (event.data && event.data.type === 'janusNavigate') { // For portal navigation
+                 if (janusWebClientFrame && janusWebClientFrame.contentWindow && janusWebClientFrame.contentWindow.janus) {
+                    janusWebClientFrame.contentWindow.janus.navigate(event.data.url, event.data.portal_id);
+                    console.log(`xr_janus_wrapper: Navigating Janus to ${event.data.url}`);
+                 }
+            }
+        });
+
+        // Inform the parent window that the Janus wrapper is ready (optional)
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'janusWrapperReady' }, '*');
+            console.log("xr_janus_wrapper: Posted 'janusWrapperReady' to parent.");
+        }
+
+        console.log("xr_janus_wrapper.html loaded and listener is active.");
+    </script>
+</body>
+</html>

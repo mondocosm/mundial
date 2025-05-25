@@ -1,0 +1,12 @@
+.DropdownMenu {
+  background-color: var(--bg-surface);
+  border-radius: var(--br-xs);
+  box-shadow: var(--bs-dropdown);
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+}
+
+.DropdownMenu__trigger {
+  display: inline-flex;
+  line-height: 0;
+}

@@ -1,0 +1,19 @@
+.CategoryHeader {
+  width: 100%;
+
+  & > button {
+    cursor: pointer;
+  }
+}
+
+.CategoryHeader__content {
+  padding: var(--sp-xs) var(--sp-md);
+}
+
+.CategoryHeader__options {
+  padding-right: var(--sp-md);
+
+  & > *:not(:last-child) {
+    margin-right: var(--sp-sm);
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "defaultHomeServer": "thirdroom.io",
+  "homeserverList": ["thirdroom.io", "matrix.org"],
+  "onboardingVersion": 1,
+  "whatsNewVersion": 1,
+  "bugReportEndpointUrl": "https://element.io/bugreports/submit",
+  "repositoryRoomIdOrAlias": "#repository-room:thirdroom.io",
+  "staticOidcClients": {
+    "https://id.thirdroom.io/realms/thirdroom/": {
+      "client_id": "thirdroom",
+      "guestKeycloakIdpHint": "guest"
+    }
+  }
+}

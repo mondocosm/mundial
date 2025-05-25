@@ -1,0 +1,27 @@
+#!/usr/bin/php
+<?php
+if (file_exists("../include/elation.php")) {
+  require_once("../include/elation.php");
+} else if (file_exists("include/elation.php")) {
+  require_once("include/elation.php");
+} else {
+  require_once("elation.php");
+}
+$root = getcwd();
+elation_readpaths($root);
+
+require_once("include/app_class.php");
+
+if (count($argv) >= 2) {
+  $script = array_shift($argv);
+  $component = array_shift($argv);
+  $componentargs = array();
+  if (!empty($argv)) {
+    foreach ($argv as $arg) {
+      list($k, $v) = explode("=", $arg, 2);
+      $componentargs[$k] = $v;
+    }
+  }
+  $app = new App($root, $componentargs);
+  print $app->display("/" . str_replace(".", "/", $component), $componentargs);
+}

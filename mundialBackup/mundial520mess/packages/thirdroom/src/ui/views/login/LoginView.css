@@ -1,0 +1,44 @@
+.LoginView {
+  height: 100%;
+  padding: var(--sp-md);
+  background-color: var(--bg-surface-low);
+}
+.LoginView__card {
+  width: 100%;
+  max-width: 450px;
+  padding: var(--sp-lg);
+  background-color: var(--bg-surface);
+  border-radius: var(--br-md);
+}
+.LoginView__form {
+  & > .Text-s1,
+  & > .Button {
+    margin-top: var(--sp-md);
+  }
+}
+.LoginView__orDivider {
+  &::before,
+  &::after {
+    content: "";
+    width: 100%;
+    border-bottom: 1px solid var(--bg-surface-border);
+  }
+  & + .Button {
+    margin-top: 0;
+  }
+}
+
+.MissingFeature__overlay {
+  background-color: var(--bg-surface-low) !important;
+}
+
+.MissingFeature__content {
+  padding: var(--sp-xl) var(--sp-md);
+
+  & .Text-h2 {
+    margin-bottom: var(--sp-lg);
+  }
+  & ul {
+    margin-bottom: var(--sp-lg);
+  }
+}

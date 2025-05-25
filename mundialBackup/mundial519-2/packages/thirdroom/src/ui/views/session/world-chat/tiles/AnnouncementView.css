@@ -1,0 +1,11 @@
+.WorldChat__AnnouncementView {
+  padding: var(--sp-xxs) var(--sp-xs);
+  background-color: var(--bg-world-overlay);
+  border-radius: var(--br-xs);
+  display: inline-block;
+
+  & > .Text {
+    word-break: break-word;
+    font-style: italic;
+  }
+}

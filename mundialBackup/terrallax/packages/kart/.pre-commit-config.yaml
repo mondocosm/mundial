@@ -1,0 +1,38 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-json
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.6.1
+    hooks:
+      - id: ruff
+        # Run both the linter and formatter (and commit the changes automatically)
+        entry: ".hooks/kx-ruff.py"
+  - repo: https://github.com/sirosen/check-jsonschema
+    rev: 0.6.0
+    hooks:
+      - id: check-github-workflows
+  - repo: https://github.com/cheshirekow/cmake-format-precommit
+    rev: v0.6.13
+    hooks:
+      - id: cmake-format
+      - id: cmake-lint
+        args:
+          - --suppress-decorations
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: Check types with mypy
+        language: system
+        entry: build/venv/bin/mypy
+        pass_filenames: false

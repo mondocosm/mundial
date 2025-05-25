@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Babylon.js + MapLibre</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+        #maplibre-map {
+            width: 50%; /* Example layout: map on left */
+            height: 100%;
+            float: left;
+        }
+        #babylon-canvas {
+            width: 50%; /* Example layout: Babylon on right */
+            height: 100%;
+            float: left;
+            touch-action: none; /* Recommended for Babylon.js */
+        }
+        /* Basic error/status message styling */
+        .status-message {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px; /* Position controls on the MapLibre side */
+            background: rgba(255,255,255,0.8);
+            padding: 5px;
+            border-radius: 3px;
+            z-index: 100;
+        }
+        .controls button {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .controls label { /* Style for the new label */
+            display: block;
+            margin-bottom: 3px;
+            font-size: 0.9em;
+            color: #333; /* Assuming controls div has light background */
+        }
+        .controls select { /* Style for the new select */
+            margin-bottom: 5px;
+            width: 100%;
+            padding: 3px;
+            box-sizing: border-box;
+        }
+    </style>
+    <!-- MapLibre GL JS (v5.5.0 from your example) -->
+    <link href="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.css" rel="stylesheet">
+    <script src="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.js"></script>
+    <!-- Babylon.js -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+    <div class="controls">
+        <label for="babylon-basemap-select">Basemap:</label>
+        <select id="babylon-basemap-select">
+            <option value="osm">OpenStreetMap</option>
+            <option value="satellite" selected>Satellite</option> <!-- Set Satellite as default -->
+            <option value="topo">Topographic</option>
+        </select>
+        <button type="button" id="toggle-terrain-btn">Toggle Terrain</button>
+        <button type="button" id="toggle-buildings-btn">Toggle Buildings</button>
+    </div>
+    <div id="maplibre-map"></div>
+    <canvas id="babylon-canvas"></canvas>
+    <div id="status" class="status-message" style="display: none;"></div>
+
+    <script>
+        let map;
+        let engine;
+        let scene;
+
+        // --- Tile Math Utilities ---
+        function long2tile(lon, zoom) { return (Math.floor((lon + 180) / 360 * Math.pow(2, zoom))); }
+        function lat2tile(lat, zoom)  { return (Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom))); }
+        function tile2long(x, zoom) { return (x / Math.pow(2, zoom) * 360 - 180); }
+        function tile2lat(y, zoom) {
+            const n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
+            return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));
+        }
+        // --- End Tile Math Utilities ---
+
+        let gridSourceInitialized = false; // Flag to ensure source/layer are added only once
+
+        const mapTilerKey = "T82iw5O12y2FVZUGLFIX"; // IMPORTANT: Replace this
+        
+        function showStatus(message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            console.log("Status:", message);
+        }
+
+        // Initialize MapLibre
+        function initMapLibre(initialCenter = [-74.0066, 40.7135], initialZoom = 15.5) {
+            try {
+                map = new maplibregl.Map({
+                    container: 'maplibre-map',
+                    zoom: initialZoom,
+                    center: initialCenter,
+                    pitch: 45, 
+                    bearing: -17.6,
+                    style: {
+                        version: 8,
+                        sources: {
+                            // 'base-raster-source' will be defined dynamically below
+                            terrainSource: { // Switched to MapTiler Terrain RGB
+                                type: 'raster-dem',
+                                // url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json', // Old problematic source
+                                tiles: [`https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.png?key=${mapTilerKey}`],
+                                tileSize: 256, // MapTiler Terrain RGB is typically 256x256 or 512x512 for @2x
+                                // encoding: "mapbox", // MapLibre usually auto-detects for Mapbox/MapTiler Terrain RGB
+                                maxzoom: 14 // Max zoom for MapTiler Terrain RGB v2
+                            },
+                            openmaptiles_buildings: {
+                                type: 'vector',
+                                url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}`
+                            }
+                        },
+                        layers: [
+                            {
+                                id: 'base-raster-layer', // Renamed for generic basemap
+                                type: 'raster',
+                                source: 'base-raster-source'
+                            },
+                            { // Optional hillshade layer for better terrain visualization
+                                id: 'hills',
+                                type: 'hillshade',
+                                source: 'terrainSource', // Use the same DEM source
+                                layout: {visibility: 'visible'},
+                                paint: {'hillshade-shadow-color': '#473B24'}
+                            }
+                            // 3D Buildings layer will be added on load if source exists
+                        ],
+                        terrain: { // Terrain initially enabled
+                            source: 'terrainSource',
+                            exaggeration: 1.0
+                        }
+                        // Removed sky property entirely for now to see if map loads
+                    },
+                    maxZoom: 18, // General map maxZoom
+                    maxPitch: 85
+                });
+
+                // Determine initial basemap from select element
+                const basemapSelectElement = document.getElementById('babylon-basemap-select');
+                const initialBasemapValue = basemapSelectElement ? basemapSelectElement.value : 'osm';
+                let initialTilesUrl;
+                let initialAttribution;
+                let initialTileMaxZoom = 19;
+
+                if (initialBasemapValue === 'satellite') {
+                    initialTilesUrl = [`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${mapTilerKey}`];
+                    initialAttribution = `&copy; <a href="https://www.maptiler.com/">MapTiler</a> &copy; <a href="http://www.maxar.com/">Maxar</a>`;
+                    initialTileMaxZoom = 20;
+                } else if (initialBasemapValue === 'topo') {
+                    initialTilesUrl = ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'];
+                    initialAttribution = '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)';
+                    initialTileMaxZoom = 17;
+                } else { // Default to OSM
+                    initialTilesUrl = ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', 'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png', 'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'];
+                    initialAttribution = '&copy; OpenStreetMap Contributors';
+                    initialTileMaxZoom = 19;
+                }
+                
+                // Add the initial base raster source and layer once the style object is available
+                // This needs to be done before map.on('load') if layers depend on it,
+                // or within map.on('load') before other layers that should be on top.
+                // For simplicity, modifying the style object directly before map instantiation is cleaner if possible,
+                // but MapLibre's style is passed in constructor. So, we add it on 'style.load' or 'load'.
+                // Let's ensure the source is part of the initial style object passed to the constructor.
+
+                // Reconstruct the style object with the dynamic base raster source
+                const styleObject = {
+                    version: 8,
+                    sources: {
+                        'base-raster-source': {
+                            type: 'raster',
+                            tiles: initialTilesUrl,
+                            tileSize: 256,
+                            attribution: initialAttribution,
+                            maxzoom: initialTileMaxZoom
+                        },
+                        terrainSource: {
+                            type: 'raster-dem',
+                            tiles: [`https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.png?key=${mapTilerKey}`],
+                            tileSize: 256,
+                            maxzoom: 14
+                        },
+                        openmaptiles_buildings: {
+                            type: 'vector',
+                            url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerKey}`
+                        }
+                    },
+                    layers: [
+                        {
+                            id: 'base-raster-layer',
+                            type: 'raster',
+                            source: 'base-raster-source'
+                        },
+                        {
+                            id: 'hills',
+                            type: 'hillshade',
+                            source: 'terrainSource',
+                            layout: {visibility: 'visible'},
+                            paint: {'hillshade-shadow-color': '#473B24'}
+                        }
+                        // 3D buildings layer will be added in map.on('load')
+                    ],
+                    terrain: {
+                        source: 'terrainSource',
+                        exaggeration: 1.0
+                    }
+                };
+                // Re-assign the map with the fully constructed style
+                map.setStyle(styleObject);
+
+
+                map.on('load', () => {
+                    showStatus('MapLibre map loaded. Configuring layers and grid...');
+                    
+                    // Add ZL21 Grid Source and Layer
+                    if (!map.getSource('grid-source')) {
+                        map.addSource('grid-source', {
+                            type: 'geojson',
+                            data: { type: 'FeatureCollection', features: [] }
+                        });
+                    }
+                    if (!map.getLayer('grid-layer')) {
+                        map.addLayer({
+                            id: 'grid-layer',
+                            type: 'line',
+                            source: 'grid-source',
+                            paint: {
+                                'line-color': '#000000', // Black for grid
+                                'line-width': 1,
+                                'line-opacity': 0.7 // Opacity for grid
+                            },
+                            minzoom: 18 // Only show ZL21 grid at high zoom levels
+                        });
+                    }
+                    gridSourceInitialized = true;
+                    updateMapGrid(); // Initial grid draw
+
+                    map.on('moveend', updateMapGrid);
+                    map.on('zoomend', updateMapGrid);
+
+                    const layers = map.getStyle().layers;
+                    let labelLayerId;
+                    for (let i = 0; i < layers.length; i++) {
+                        if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+                            labelLayerId = layers[i].id;
+                            break;
+                        }
+                    }
+
+                    // Add 3D Buildings Layer (initially visible by default if source exists)
+                    if (map.getSource('openmaptiles_buildings')) {
+                        map.addLayer(
+                            {
+                                'id': '3d-buildings',
+                                'source': 'openmaptiles_buildings',
+                                'source-layer': 'building',
+                                'type': 'fill-extrusion',
+                                'minzoom': 14,
+                                'filter': ['!=', ['get', 'hide_3d'], true],
+                                'paint': {
+                                    'fill-extrusion-color': [
+                                        'interpolate', ['linear'], ['get', 'render_height'],
+                                        0, 'lightgray', 50, 'royalblue', 100, 'darkslateblue'
+                                    ],
+                                    'fill-extrusion-height': ['get', 'render_height'],
+                                    'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+                                    'fill-extrusion-opacity': 0.85
+                                }
+                            },
+                            labelLayerId
+                        );
+                        showStatus('MapLibre map configured with terrain and 3D buildings.');
+                    } else {
+                        showStatus('MapLibre map configured with terrain. Building source "openmaptiles_buildings" not available.');
+                        console.warn("Building source 'openmaptiles_buildings' not found in style, skipping 3d-buildings layer.");
+                    }
+                    // --- End re-enable 3D Buildings Layer ---
+
+
+                    map.addControl(new maplibregl.NavigationControl({visualizePitch: true}));
+                    if (map.getSource('terrainSource')) {
+                        map.addControl(new maplibregl.TerrainControl({source: 'terrainSource', exaggeration: 1.0})); 
+                    }
+                });
+                map.on('error', (e) => {
+                    console.error('MapLibre Error:', e);
+                    showStatus('MapLibre Error: ' + (e.error?.message || 'Unknown error'));
+                });
+            } catch (err) {
+                console.error("Failed to initialize MapLibre:", err);
+                showStatus("Failed to initialize MapLibre: " + err.message);
+            }
+        }
+
+        // Initialize Babylon.js
+        function initBabylon() {
+            const canvas = document.getElementById('babylon-canvas');
+            if (!canvas) {
+                console.error("Babylon canvas not found!");
+                showStatus("Babylon canvas not found!");
+                return;
+            }
+            try {
+                engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+                scene = new BABYLON.Scene(engine);
+                scene.clearColor = new BABYLON.Color4(0.2, 0.2, 0.3, 1);
+
+                const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 10, new BABYLON.Vector3(0, 0, 0), scene);
+                camera.attachControl(canvas, true);
+                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
+                const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
+                const groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+                groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                ground.material = groundMaterial;
+                
+                showStatus('Babylon.js scene initialized.');
+
+                engine.runRenderLoop(() => {
+                    if (scene && scene.activeCamera) {
+                        scene.render();
+                    }
+                });
+                window.addEventListener('resize', () => { if (engine) { engine.resize(); } });
+            } catch (err) {
+                console.error("Failed to initialize Babylon.js:", err);
+                showStatus("Failed to initialize Babylon.js: " + err.message);
+            }
+        }
+
+        let initialViewData = null; 
+
+        function receiveSetupData(event) {
+            // if (event.origin !== "http://localhost:8000") return; 
+            if (event.data && event.data.type === 'initialSetup') {
+                console.log("Received initialSetup data:", event.data);
+                if (event.data.mapView) {
+                    initialViewData = event.data.mapView;
+                }
+
+                if (!map) { 
+                    initMapLibre(initialViewData?.center, initialViewData?.zoom);
+                } else { 
+                     if (initialViewData && initialViewData.center && typeof initialViewData.zoom === 'number') {
+                        map.setCenter(initialViewData.center);
+                        map.setZoom(initialViewData.zoom);
+                        showStatus(`Map view updated to Lon: ${initialViewData.center[0].toFixed(4)}, Lat: ${initialViewData.center[1].toFixed(4)}, Zoom: ${initialViewData.zoom.toFixed(2)}`);
+                    }
+                }
+                
+                const tiles = event.data.tilesetData;
+                if (tiles && tiles.length > 0) {
+                    showStatus(`Received ${tiles.length} tiles for Babylon.js scene.`);
+                    processTilesForBabylon(tiles);
+                } else {
+                    showStatus("No tileset data received for Babylon.js, or tileset is empty.");
+                }
+            } else if (event.data && event.data.type === 'loadGLTF' && event.data.gltfString) {
+                console.log("Received 'loadGLTF' message for Babylon.js. Tileset name:", event.data.tilesetName || "(No name provided)");
+                if (scene) { // Ensure Babylon scene is initialized
+                    showStatus("Received GLTF data, attempting to load into Babylon.js...");
+                    try {
+                        // Clear previous models/tiles
+                        const meshesToRemove = [];
+                        scene.meshes.forEach(mesh => {
+                            if (mesh.name === "loadedTilesetGLTF_root" || mesh.name.startsWith("tile_") || mesh.name === "ground") { // Remove old ground too
+                                meshesToRemove.push(mesh);
+                            }
+                        });
+                        meshesToRemove.forEach(mesh => mesh.dispose(false, true));
+                        if (meshesToRemove.length > 0) {
+                             console.log(`Disposed ${meshesToRemove.length} previous meshes from Babylon scene.`);
+                        }
+
+                        const gltfData = event.data.gltfString;
+                        const blob = new Blob([gltfData], { type: 'model/gltf+json' });
+                        const url = URL.createObjectURL(blob);
+
+                        BABYLON.SceneLoader.ImportMeshAsync(
+                            null, // meshNames - null to load all
+                            "",   // rootUrl
+                            url,  // sceneFilename - the blob URL
+                            scene,
+                            function (evt) { /* onProgress */ },
+                            '.gltf'
+                        ).then((result) => {
+                            showStatus(`GLTF model "${event.data.tilesetName || 'Tileset'}" loaded successfully.`);
+                            console.log("GLTF loaded into Babylon:", result);
+                            if (result.meshes.length > 0) {
+                                const rootNode = new BABYLON.TransformNode("loadedTilesetGLTF_root", scene);
+                                result.meshes.forEach(m => m.parent = rootNode);
+                                // Basic auto-framing (can be improved)
+                                scene.createDefaultCameraOrLight(true, true, true); // Ensure camera exists
+                                if (scene.activeCamera && typeof scene.activeCamera.setTarget === 'function') {
+                                     scene.activeCamera.setTarget(BABYLON.Vector3.Zero()); // Target origin of loaded model
+                                     if (result.meshes[0] && result.meshes[0].getBoundingInfo()) {
+                                        const boundingInfo = result.meshes[0].getHierarchyBoundingVectors(true);
+                                        const size = boundingInfo.max.subtract(boundingInfo.min);
+                                        const maxDim = Math.max(size.x, size.y, size.z);
+                                        if (scene.activeCamera.radius && maxDim > 0) {
+                                            scene.activeCamera.radius = maxDim * 2; // Adjust radius based on model size
+                                        }
+                                     } else if (scene.activeCamera.radius) {
+                                        scene.activeCamera.radius = 20; // Default radius if no bounding info
+                                     }
+                                }
+                            }
+                            URL.revokeObjectURL(url);
+                        }).catch((error) => {
+                            console.error("Error loading GLTF into Babylon.js:", error);
+                            showStatus("Error loading GLTF model: " + error.message);
+                            URL.revokeObjectURL(url);
+                        });
+                    } catch (e) {
+                        console.error("Exception during GLTF processing for Babylon:", e);
+                        showStatus("Exception processing GLTF: " + e.message);
+                    }
+                } else {
+                    showStatus("Babylon.js scene not ready for 'loadGLTF'.");
+                    console.warn("Babylon.js scene not ready for 'loadGLTF' message.");
+                }
+            }
+        }
+
+        function processTilesForBabylon(tiles) {
+             if (!scene) {
+                showStatus("Babylon.js scene not ready to receive tiles.");
+                return;
+            }
+            const existingGround = scene.getMeshByName("ground");
+            if (existingGround) {
+                existingGround.dispose();
+            }
+            const TILE_WORLD_SIZE = 10; 
+            const TILE_Y_OFFSET = 0;    
+
+            tiles.forEach((tile, index) => {
+                const posX = index * TILE_WORLD_SIZE; 
+                const posZ = 0; 
+                const tilePlane = BABYLON.MeshBuilder.CreateGround(`tile_${tile.z}_${tile.x}_${tile.y}`, {
+                    width: TILE_WORLD_SIZE,
+                    height: TILE_WORLD_SIZE
+                }, scene);
+                tilePlane.position = new BABYLON.Vector3(posX, TILE_Y_OFFSET, posZ);
+                const tileMaterial = new BABYLON.StandardMaterial(`tileMat_${index}`, scene);
+                const colors = [new BABYLON.Color3(1,0,0), new BABYLON.Color3(0,1,0), new BABYLON.Color3(0,0,1), new BABYLON.Color3(1,1,0)];
+                tileMaterial.diffuseColor = colors[index % colors.length];
+                tileMaterial.alpha = 0.7;
+                tilePlane.material = tileMaterial;
+                console.log(`Created Babylon plane for tile Z:${tile.z} X:${tile.x} Y:${tile.y} at world X:${posX} Z:${posZ}`);
+            });
+            showStatus(`Processed ${tiles.length} tiles into Babylon.js scene.`);
+        }
+
+        function updateMapGrid() {
+            if (!map || !gridSourceInitialized || map.getZoom() < 18) { // Check zoom level
+                if (map && map.getSource('grid-source')) {
+                     // Clear grid if zoomed out too far
+                    map.getSource('grid-source').setData({ type: 'FeatureCollection', features: [] });
+                }
+                return;
+            }
+
+            const ZL21 = 21;
+            const bounds = map.getBounds();
+            const ne = bounds.getNorthEast();
+            const sw = bounds.getSouthWest();
+
+            // Get tile range for ZL21
+            const minTileX = long2tile(sw.lng, ZL21);
+            const maxTileX = long2tile(ne.lng, ZL21);
+            const minTileY = lat2tile(ne.lat, ZL21); // Note: lat2tile is inverted for typical map Y
+            const maxTileY = lat2tile(sw.lat, ZL21);
+
+            const gridFeatures = [];
+
+            // Horizontal lines
+            for (let y = minTileY; y <= maxTileY + 1; y++) {
+                const lat = tile2lat(y, ZL21);
+                gridFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[tile2long(minTileX, ZL21), lat], [tile2long(maxTileX + 1, ZL21), lat]]
+                    }
+                });
+            }
+
+            // Vertical lines
+            for (let x = minTileX; x <= maxTileX + 1; x++) {
+                const lon = tile2long(x, ZL21);
+                gridFeatures.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[lon, tile2lat(minTileY, ZL21)], [lon, tile2lat(maxTileY + 1, ZL21)]]
+                    }
+                });
+            }
+            
+            if (map.getSource('grid-source')) {
+                map.getSource('grid-source').setData({
+                    type: 'FeatureCollection',
+                    features: gridFeatures
+                });
+            }
+            // console.log(`Updated ZL21 grid with ${gridFeatures.length} lines.`);
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            showStatus('Initializing components...');
+            initBabylon(); // Init Babylon first
+            
+            // Fallback to initialize MapLibre with defaults if no message received after a short delay
+            setTimeout(() => {
+                if (!map) { // If message hasn't initialized map yet
+                    console.log("No initialSetup message received or map not yet initialized by message, initializing MapLibre with defaults.");
+                    initMapLibre(initialViewData?.center, initialViewData?.zoom); 
+                }
+            }, 500); 
+
+            window.addEventListener('message', receiveSetupData); // Listen for setup data
+
+            // Setup toggle button listeners
+            document.getElementById('toggle-terrain-btn')?.addEventListener('click', () => {
+                if (!map) return;
+                const currentTerrain = map.getTerrain();
+                if (currentTerrain) {
+                    map.setTerrain(null);
+                    showStatus('Terrain disabled.');
+                } else {
+                    if (map.getSource('terrainSource')) {
+                        map.setTerrain({source: 'terrainSource', exaggeration: 1.0});
+                        showStatus('Terrain enabled.');
+                    } else {
+                        showStatus('Terrain source not available to enable.');
+                        console.warn('Cannot enable terrain: terrainSource is not defined.');
+                    }
+                }
+            });
+
+            document.getElementById('toggle-buildings-btn')?.addEventListener('click', () => {
+                if (!map) return;
+                const buildingLayer = map.getLayer('3d-buildings');
+                if (buildingLayer) {
+                    const visibility = map.getLayoutProperty('3d-buildings', 'visibility');
+                    if (visibility === 'visible' || visibility === undefined) {
+                        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+                        showStatus('3D Buildings hidden.');
+                    } else {
+                        map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
+                        showStatus('3D Buildings shown.');
+                    }
+                } else {
+                    showStatus('3D Buildings layer not available to toggle.');
+                    console.warn('Cannot toggle buildings: 3d-buildings layer not defined.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

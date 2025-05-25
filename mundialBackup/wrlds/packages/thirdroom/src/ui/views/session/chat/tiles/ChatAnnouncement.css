@@ -1,0 +1,8 @@
+.ChatAnnouncement__content {
+  padding-left: 50px;
+
+  & .Text {
+    word-break: break-word;
+    font-style: italic;
+  }
+}

@@ -1,0 +1,459 @@
+#!/bin/bash
+
+ACTION=$1
+SUBACTION=$2
+RETVAL=
+shift 2
+
+export COMPONENTPATHS=$(pwd && [ -f config/elation.path ] && cat config/elation.path)
+export COMPONENTMEDIATYPES="css scripts images media"
+
+expand_path() {
+  echo $1 |sed "s/^~/$(echo $HOME |sed 's/\//\\\//g')/"
+}
+framework_do() {
+  CMD=$*
+  echo " * $CMD"
+  $CMD
+}
+
+error() {
+  echo -e '\033[1m\033[31mERROR\033[0m:' $*
+}
+component_get_dir() {
+  COMPONENTNAME=$1
+  COMPONENTSUBDIR=$(echo $COMPONENTNAME |sed 's/\./\/components\//g')
+  for CPATH in $COMPONENTPATHS; do
+    COMPONENTPATH=$(expand_path $CPATH)
+    if [ -e $COMPONENTPATH/components/$COMPONENTSUBDIR ]; then
+      echo $COMPONENTPATH/components/$COMPONENTSUBDIR
+      return
+    fi
+  done
+  echo components/$COMPONENTNAME |sed 's/\./\/components\//g'
+
+}
+component_get_classname() {
+  COMPONENTNAME=$1
+  echo $COMPONENTNAME |tr '.' '_'
+}
+component_exists() {
+  COMPONENTNAME=$1
+
+  if [ -d $(component_get_dir $COMPONENTNAME)/ ]; then 
+    RET=0
+  else 
+    RET=1
+  fi
+
+  return $RET
+}
+component_create() {
+  export COMPONENTNAME=$1
+  if [ -z $COMPONENTNAME ]; then
+    error "Must provide name of component to create"
+    return
+  fi
+  export COMPONENTDIR=$(component_get_dir $COMPONENTNAME)
+  export COMPONENTCLASSNAME=$(echo $COMPONENTNAME |tr '.' '_')
+  export COMPONENTPARTS=($(echo ${COMPONENTNAME//./ }))
+  export SUBCOMPONENTNAME=$(echo ${COMPONENTPARTS[${#COMPONENTPARTS[*]}-1]})
+
+  if component_exists $COMPONENTNAME; then
+    error "Module '$COMPONENTNAME' already exists"
+  else
+    echo "Create $COMPONENTNAME"
+    framework_do mkdir -p $COMPONENTDIR
+    if [ -d $COMPONENTDIR ]; then
+      framework_do mkdir $COMPONENTDIR/css
+      framework_do mkdir $COMPONENTDIR/scripts
+      framework_do mkdir $COMPONENTDIR/images
+      framework_do mkdir $COMPONENTDIR/templates
+      for CPATH in $COMPONENTPATHS; do
+        COMPONENTPATH=$(expand_path $CPATH)
+        if [ -e $COMPONENTPATH/config/component_skeleton.php ]; then
+          cat $COMPONENTPATH/config/component_skeleton.php |perl -ne 's/%(.*?)%/$ENV{$1}/g; print' >$COMPONENTDIR/$COMPONENTCLASSNAME.php
+          break
+        fi
+      done
+      echo $COMPONENTCLASSNAME > $COMPONENTDIR/templates/$SUBCOMPONENTNAME.tpl
+    fi
+  fi
+}
+component_enable() {
+  COMPONENTNAMES=$*
+  for COMPONENTNAME in $COMPONENTNAMES; do
+    component_enable_single $COMPONENTNAME
+  done
+}
+component_enable_single() {
+  COMPONENTNAME=$1
+  COMPONENTDIR=$(component_get_dir $COMPONENTNAME)
+  LINKPATH=$(echo $COMPONENTNAME |tr '.' '/')
+  COMPONENTFILENAME=$(echo $COMPONENTNAME |tr '.' '_')
+  BASEDIR=$(pwd)
+
+  if component_exists $COMPONENTNAME; then
+    echo -n "Enable '${COMPONENTNAME}': "
+    for TYPE in $COMPONENTMEDIATYPES; do
+      if [ ! -d htdocs/$TYPE ]; then 
+        mkdir -p htdocs/$TYPE
+      fi
+      if [ -L htdocs/$TYPE/$LINKPATH ]; then
+        rm htdocs/$TYPE/$LINKPATH
+      fi
+      if [ -e $COMPONENTDIR/$TYPE ]; then
+        echo -n "$TYPE "
+        cd htdocs/$TYPE && ln -sf $COMPONENTDIR/$TYPE $LINKPATH 
+        cd $BASEDIR
+      elif [ -e $COMPONENTDIR/htdocs/$TYPE ]; then
+        echo -n "$TYPE "
+        cd htdocs/$TYPE
+        ln -sf $COMPONENTDIR/htdocs/$TYPE $LINKPATH
+        cd $BASEDIR
+      fi
+    done
+    if [ -e $COMPONENTDIR/$COMPONENTFILENAME.model ]; then
+      [ ! -e config/model ] && mkdir config/model
+      cd config/model && ln -sf $COMPONENTDIR/$COMPONENTFILENAME.model . && cd $BASEDIR
+      echo -n "model "
+    fi
+    if [ -e $COMPONENTDIR/model ]; then
+      [ ! -e include/model ] && mkdir include/model
+      cd include/model && ln -sf $COMPONENTDIR/model/*_class.php . && cd $BASEDIR
+      echo -n "classes "
+    fi
+    echo ""
+  else
+    error "Unknown component '${COMPONENTNAME}'"
+  fi
+}
+
+component_disable() {
+  COMPONENTNAME=$1
+  COMPONENTDIR=$(component_get_dir $COMPONENTNAME)
+  LINKPATH=$(echo $COMPONENTNAME |tr '.' '/')
+
+  echo -n "Disable ${COMPONENTNAME}: "
+  for TYPE in $COMPONENTMEDIATYPES; do
+    [ -L htdocs/$TYPE/$LINKPATH ] && rm htdocs/$TYPE/$LINKPATH && echo -n "$TYPE "
+  done
+  [ -L config/model/$COMPONENTNAME.conf ] && rm config/model/$COMPONENTNAME.conf && echo -n "model "
+  for F in components/$COMPONENTNAME/model/*_class.php; do
+    FNAME=$(basename $F)
+    [ -L "include/model/$FNAME" ] && rm include/model/$FNAME
+  done
+  echo DONE
+}
+component_run() {
+  ./util/component $*
+}
+
+db_init() {
+  echo -n Initializing db...
+  cat <<EOF |mysql
+create database supercritical;
+grant all privileges on supercritical.* to supercritical@'%' identified by 'h4xm3';
+EOF
+  echo done
+}
+
+web_create() {
+  DIRNAME=$1
+  if [ -d $DIRNAME ]; then
+    echo Directory \'$DIRNAME\' already exists, aborting
+  else
+    echo -n Creating web directory \'$DIRNAME\'...
+    mkdir "$DIRNAME" "$DIRNAME/config" "$DIRNAME/htdocs"
+    pwd >"$DIRNAME/config/elation.path"
+    cp htdocs/.htaccess "$DIRNAME/htdocs/"
+    cp htdocs/index.php "$DIRNAME/htdocs/"
+    echo done.
+  fi
+}
+
+web_init() {
+  echo -n Initializing web...
+  [ ! -d tmp ] && mkdir -m 2777 tmp
+  echo done
+  
+  if [ -f config/elation.components ]; then
+    for I in $(cat config/elation.components); do
+      component_enable $I
+    done
+  fi
+}
+
+web_compact() {
+  MINIFIEDBASE="tmp/minified"
+  MINIFIEDBASEREGEX="tmp\/minified"
+
+  if [ -d "htdocs/scripts-orig" ]; then
+    CHANGEDSCRIPTS=$(find -L htdocs/scripts-orig/ -name "*.js" -newer $MINIFIEDBASE/scripts/)
+    if [ ! -z "$CHANGEDSCRIPTS" ]; then
+      echo -n "Minifying Javascript (incremental): "
+      for I in $CHANGEDSCRIPTS; do BASENAME=`echo $I |sed "s/htdocs\/scripts-orig\//$MINIFIEDBASEREGEX\/scripts\//"`; cat $I |./util/jsmin.py > $BASENAME && echo -n "."; done
+      echo " done"
+      touch $MINIFIEDBASE/scripts
+    else
+      echo "No JavaScript changes"
+    fi
+  else
+  	echo -n "Minifying Javascript: "
+  	find htdocs/scripts/ -name "*.js" -follow -exec sh -c 'FILE={}; FNAME=`basename $FILE`; DESTDIR=tmp/minified/`dirname $FILE |sed s/htdocs\//`; (([ ! -d "$DESTDIR" ] && mkdir -p $DESTDIR); cat {} |./util/jsmin.py >$DESTDIR/$FNAME && echo -n ".")  || echo -n "!" ' \;
+    echo " done"
+  fi
+
+  if [ -d "htdocs/css-orig" ]; then
+    CHANGEDCSS=$(find -L htdocs/css-orig/ -name "*.css" -newer $MINIFIEDBASE/css/)
+    if [ ! -z "$CHANGEDCSS" ]; then
+    	echo -n "Minifying CSS (incremental): "
+      for I in $CHANGEDCSS; do BASENAME=`echo $I |sed "s/htdocs\/css-orig\/$MINIFIEDBASEREGEX\/css\//"`; cat $I |./util/cssmin.py > $BASENAME && echo -n "."; done
+      echo " done"
+      touch $MINIFIEDBASE/css
+    else
+      echo "No CSS changes"
+    fi
+  else
+  	echo -n "Minifying CSS: "
+  	find htdocs/css/ -name "*.css" -follow -exec sh -c 'FILE={}; FNAME=`basename $FILE`; DESTDIR=tmp/minified/`dirname $FILE |sed s/htdocs\//`; (([ ! -d "$DESTDIR" ] && mkdir -p $DESTDIR); cat {} |./util/cssmin.py >$DESTDIR/$FNAME && echo -n ".")  || echo -n "!" ' \;
+    echo " done"
+  fi
+
+  echo -n Swapping out compacted directories:
+  cd htdocs
+  if [ ! -L htdocs/scripts ] && [ "$(ls -A ../$MINIFIEDBASE/scripts)" ]; then
+    mv scripts scripts-orig && ln -s ../$MINIFIEDBASE/scripts && echo -n ' scripts' || echo -n ' !scripts!'
+  fi
+  if [ ! -L htdocs/css ] && [ "$(ls -A ../$MINIFIEDBASE/css)" ]; then
+    mv css css-orig && ln -s ../$MINIFIEDBASE/css && echo -n ' css' || echo -n ' !css!'
+  fi
+  echo 
+  cd ..
+}
+web_uncompact() {
+  if [ -d htdocs/scripts-orig ]; then
+    rm htdocs/scripts && mv htdocs/scripts-orig htdocs/scripts
+    rm -r tmp/minified/scripts
+  else
+    echo "Scripts not minified"
+  fi
+  if [ -d htdocs/css-orig ]; then
+    rm htdocs/css && mv htdocs/css-orig htdocs/css
+    rm -r tmp/minified/css
+  else
+    echo "CSS not minified"
+  fi
+  if [ -d tmp/minified ]; then
+    if [ ! "$(ls -A tmp/minified)" ]; then
+      echo "Removing empty tmp/minified directory"
+      rmdir tmp/minified
+    else
+      echo "Couldn't remove tmp/minified (not empty)"
+    fi
+  fi
+}
+web_recompact() {
+  web_uncompact
+  web_compact
+}
+
+system_package() {
+  VERSION=$1
+  INSTALLDIR=debian/package/elation-$VERSION
+  
+  if [ -z "$VERSION" ]; then
+    echo "Usage: $0 system package <version>"
+  else
+    echo Installing in $INSTALLDIR
+    [ ! -d "$INSTALLDIR/DEBIAN" ] && mkdir -p "$INSTALLDIR/DEBIAN" 
+    [ ! -d "$INSTALLDIR/etc/elation" ] && mkdir -p "$INSTALLDIR/etc/elation" 
+    [ ! -d "$INSTALLDIR/usr/bin" ] && mkdir -p "$INSTALLDIR/usr/bin" 
+    [ ! -d "$INSTALLDIR/usr/share/elation" ] && mkdir -p "$INSTALLDIR/usr/share/elation" 
+    [ ! -d "$INSTALLDIR/usr/share/php" ] && mkdir -p "$INSTALLDIR/usr/share/php" 
+    [ ! -d "$INSTALLDIR/var/lib/elation" ] && mkdir -p "$INSTALLDIR/var/lib/elation" 
+
+    cp elation $INSTALLDIR/usr/bin
+    cp -r components config htdocs include lib README templates tests util $INSTALLDIR/usr/share/elation
+    cp include/elation.php $INSTALLDIR/usr/share/php
+    cp -r config/* $INSTALLDIR/etc/elation
+    echo
+    # Evaluate shell variables in control file
+    CONTROLFILE="echo \"$(cat debian/control)\""
+    eval "$CONTROLFILE" |tee $INSTALLDIR/DEBIAN/control
+
+    cd debian/package/
+    fakeroot dpkg-deb --build elation-$VERSION
+    if [ -e elation-$VERSION.deb ]; then
+      mv elation-$VERSION.deb ../..
+      echo done
+    else
+      error "Failed to create file: elation-$VERSION.deb"
+    fi
+    cd ../..
+    if [ -d $INSTALLDIR ]; then
+      echo .
+      #rm -r $INSTALLDIR
+    fi
+  fi
+}
+docs_init() {
+  MEDIADIR=components/elation/media
+  DOCROOT=docs
+  if [ ! -d "$MEDIADIR" ]; then
+    mkdir -p "$MEDIADIR"
+  fi
+  if [ ! -d "$DOCROOT/js" ]; then
+    mkdir "$DOCROOT/js"
+  fi
+  if [ ! -d "$DOCROOT/php" ]; then
+    mkdir "$DOCROOT/php"
+  fi
+  if [ -L "$MEDIADIR/docs" ]; then
+    rm "$MEDIADIR/docs"
+  fi
+}
+docs_create_link() {
+  if [ ! -L "$MEDIADIR/docs" ]; then
+    ln -s "$(pwd)/$DOCROOT" "$MEDIADIR/docs"
+  fi
+}
+docs_generate_php() {
+  docs_init
+  DOCDIR=docs/php
+  if [ ! -d "$DOCDIR" ]; then
+    mkdir -p "$DOCDIR"
+  fi
+  phpdoc -d components/ -t "$DOCDIR"
+
+  docs_create_link
+}
+docs_generate_js() {
+  docs_init
+  DOCDIR=docs/js
+  if [ ! -d "$DOCDIR" ]; then
+    mkdir -p "$DOCDIR"
+  fi
+  jsdoc -c config/jsdoc.conf -d "$DOCDIR"
+
+  docs_create_link
+}
+
+node_run() {
+  COMPONENTNAME=$1
+  shift
+  COMPONENTPATH=$(echo $COMPONENTNAME |sed 's/\./\//g').js
+  SCRIPTROOT=`pwd`/htdocs/scripts
+
+  NODE=`which node`
+#  echo "check exists: $NODE"
+  if [ -z "$NODE" ]; then
+    #echo "$NODE doesn't exist, try alternate"
+    NODE=`which nodejs`
+  fi
+  if [ -z "$NODE" ]; then
+    echo "ERROR - could not find nodejs executable"
+  else
+    #echo -n "Found: $NODE "
+    #node --version
+    NODE_PATH="$SCRIPTROOT" "$NODE" "$SCRIPTROOT/$COMPONENTPATH" $*
+  fi
+}
+
+bundle() {
+  COMPONENTNAME=$1
+  BUNDLEPATH=$2
+
+  node_run "utils.pack" "$COMPONENTNAME"
+  mv bundle-pack.js $BUNDLEPACK.js
+  mv bundle-pack.css $BUNDLEPACK.css
+
+}
+
+# Begin main execution
+
+case "$ACTION" in
+  system)
+    case "$SUBACTION" in
+      package)
+        system_package $*
+        ;;
+      *)
+        echo "Usage: $0 $ACTION [package]"
+        ;;
+    esac
+    ;;
+  db)
+    case "$SUBACTION" in
+      init)
+        db_init
+        ;;
+      *)
+        echo "Usage: $0 $ACTION [init]"
+        ;;
+    esac
+    ;;
+  web)
+    case "$SUBACTION" in
+      create)
+        web_create $*
+        ;;
+      init)
+        web_init
+        ;;
+      compact)
+        web_compact
+        ;;
+      uncompact)
+        web_uncompact
+        ;;
+      recompact)
+        web_recompact
+        ;;
+      *)
+        echo "Usage: $0 $ACTION [create|init|compact|uncompact|recompact]"
+        ;;
+    esac
+    ;;
+  component)
+    MODNAME=$3
+    case "$SUBACTION" in
+      create)
+        component_create $*
+        ;;
+      enable)
+        component_enable $*
+        ;;
+      disable)
+        component_disable $*
+        ;;
+      run)
+        component_run $*
+        ;;
+      runjs)
+        node_run $*
+        ;;
+      *)
+        echo "Usage: $0 $ACTION [create|enable|disable|run|runjs]"
+        ;;
+    esac
+    ;;
+  docs)
+    case "$SUBACTION" in
+      php)
+        docs_generate_php
+        ;;
+      js)
+        docs_generate_js
+        ;;
+      *)
+        echo "Usage: $0 $ACTION [php|js]"
+        ;;
+    esac
+    ;;
+  *)
+    echo "Usage: $0 [system|db|web|component|docs] help"
+    ;;
+
+esac
+

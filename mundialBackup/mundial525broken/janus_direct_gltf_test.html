@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JanusWeb Direct GLTF Test</title>
+    <style> body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; } </style>
+    <!-- Using the latest official janusweb.js from CDN -->
+    <script src="https://web.janusvr.com/janusweb.js"></script>
+</head>
+<body>
+    <janus-viewer id="janusviewer" networking="false" permissions_auto_accept="true" nostats="true" novr="true">
+        <!-- No explicit room URL, relying on networking="false" to provide a base scene -->
+    </janus-viewer>
+
+    <script>
+        console.log('[JanusDirectGLTFTest] Script block started.');
+        let janusObjectPollAttempts = 0;
+        const maxJanusObjectPollAttempts = 200; // 20s for janus object
+        let janusRoomPollAttempts = 0;
+        const maxJanusRoomPollAttempts = 200; // 20s for janus.room
+        let janusReadyPollAttempts = 0;
+        const maxJanusReadyPollAttempts = 200; // 20s for janus.ready
+
+        let listenerAndStatusSetupDone = false;
+
+        function setupListenerAndStatus() {
+            if (listenerAndStatusSetupDone) return;
+            listenerAndStatusSetupDone = true;
+            console.log('[JanusDirectGLTFTest] Janus sufficiently initialized. Setting up listener and initial status.');
+
+            const statusText = window.janus && window.janus.id ? window.janus.id.status_text_obj : null;
+            if (statusText) {
+                statusText.text = "Select tileset to load.";
+            } else {
+                console.warn('[JanusDirectGLTFTest] status_text_obj not found, cannot set initial prompt.');
+            }
+
+            window.addEventListener('message', function(event) {
+                console.log('[JanusDirectGLTFTest] Message received:', event);
+                if (event.data && event.data.type === 'loadGLTFAsRoom') {
+                    console.log('[JanusDirectGLTFTest] Received loadGLTFAsRoom message:', event.data);
+                    const gltfString = event.data.gltfString;
+                    const tilesetName = event.data.tilesetName || 'LoadedGLTF';
+                    const currentStatusText = window.janus && window.janus.id ? window.janus.id.status_text_obj : null;
+
+                    // Try to use janus.createObject directly if janus.room is not available in networking="false"
+                    let targetForCreation = window.janus && window.janus.room;
+                    if (!targetForCreation && window.janus && typeof window.janus.createObject === 'function') {
+                        // This is a guess: perhaps janus itself is the context in a no-room, networking=false scenario
+                        // Or perhaps there's a 'world' or 'scene' object on janus.
+                        // For now, let's assume if janus.room isn't there, we might try janus.createObject directly
+                        // or that janus.room will eventually appear even in networking=false for the base scene.
+                        // The polling logic for janus.room should clarify this.
+                        console.log('[JanusDirectGLTFTest] janus.room not found, will attempt creation on janus.room if it appears, or log failure.');
+                    }
+                    
+                    if (gltfString && window.janus && window.janus.room && typeof window.janus.room.createAsset === 'function' && typeof window.janus.room.createObject === 'function') { // Note: API might be createAsset/createObject
+                        if (currentStatusText) currentStatusText.text = "GLTF Received. Loading...";
+                        try {
+                            const gltfBlob = new Blob([gltfString], { type: 'model/gltf+json' });
+                            const blobURL = URL.createObjectURL(gltfBlob);
+                            console.log('[JanusDirectGLTFTest] Created Blob URL:', blobURL);
+
+                            const assetId = "dynamicGltfAsset";
+                            const objectId = "dynamicGltfObject";
+
+                            // Clear previous if they exist (defensive)
+                            if (window.janus.room.assets && window.janus.room.assets[assetId]) window.janus.room.removeAsset(assetId);
+                            if (window.janus.room.objects && window.janus.room.objects[objectId]) window.janus.room.removeObject(objectId);
+                           
+                            window.janus.room.createAsset({ tag: 'AssetObject', id: assetId, src: blobURL });
+                            console.log('[JanusDirectGLTFTest] Called createAsset:', assetId);
+                            
+                            window.janus.room.createObject('Object', { id: objectId, js_id: objectId, asset_id: assetId, pos: "0 0 0", scale: "1 1 1", col: "1 1 1" });
+                            console.log('[JanusDirectGLTFTest] Called createObject:', objectId, `(${tilesetName})`);
+                            if (currentStatusText) currentStatusText.text = `${tilesetName} loaded!`;
+
+                        } catch (e) {
+                            console.error('[JanusDirectGLTFTest] Error processing GLTF:', e);
+                            if (currentStatusText) currentStatusText.text = "Error loading GLTF.";
+                        }
+                    } else {
+                        console.warn('[JanusDirectGLTFTest] GLTF string empty or janus.room.createAsset/createObject not available. Janus object:', window.janus, 'Janus.room:', window.janus ? window.janus.room : 'N/A');
+                        if (currentStatusText) currentStatusText.text = "Error: Could not process GLTF.";
+                    }
+                }
+            });
+            console.log('[JanusDirectGLTFTest] GLTF Message listener is NOW ACTIVE.');
+        }
+
+        function pollForJanusReady() {
+            if (listenerAndStatusSetupDone && window.janus && window.janus.ready) {
+                 console.log(`[JanusDirectGLTFTest] POLL: janus.ready is TRUE, listener likely already set up.`);
+                 return;
+            }
+             if (listenerAndStatusSetupDone && !(window.janus && window.janus.ready)) {
+                // Listener was set up based on janus.room, but janus.ready might still become true later.
+            } else if (listenerAndStatusSetupDone) { // Already set up and janus.ready was true
+                return;
+            }
+
+            janusReadyPollAttempts++;
+            if (window.janus && window.janus.ready) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.ready is TRUE (attempt ${janusReadyPollAttempts}).`);
+                setupListenerAndStatus();
+            } else if (janusReadyPollAttempts < maxJanusReadyPollAttempts) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.ready is still ${window.janus ? window.janus.ready : 'N/A'} (attempt ${janusReadyPollAttempts}). Retrying for janus.ready...`);
+                setTimeout(pollForJanusReady, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for janus.ready to become true.');
+                if (!listenerAndStatusSetupDone) {
+                     console.log('[JanusDirectGLTFTest] POLL: Final fallback: setting up listener as janus.ready never became true.');
+                     setupListenerAndStatus();
+                }
+            }
+        }
+
+        function pollForJanusRoom() {
+            if (listenerAndStatusSetupDone) {
+                pollForJanusReady();
+                return;
+            }
+            janusRoomPollAttempts++;
+            // Check for janus.room and its methods, or just janus.id for status text.
+            // The critical part is whether we can create assets/objects.
+            // In networking="false" and no URL, janus.room might represent the base scene.
+            const janusRoomReady = window.janus && window.janus.room &&
+                                 typeof window.janus.room.createAsset === 'function' && // Adjusted to createAsset
+                                 typeof window.janus.room.createObject === 'function'; // Adjusted to createObject
+            const statusObjReady = window.janus && window.janus.id && window.janus.id.status_text_obj;
+
+            if (janusRoomReady && statusObjReady) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.room (with createAsset/createObject) AND status_text_obj ARE available (attempt ${janusRoomPollAttempts}).`);
+                console.log('[JanusDirectGLTFTest] janus.room properties:', Object.keys(window.janus.room));
+                setupListenerAndStatus();
+                pollForJanusReady(); // Still poll for janus.ready for completeness
+            } else if (janusRoomPollAttempts < maxJanusRoomPollAttempts) {
+                console.log(`[JanusDirectGLTFTest] POLL: janus.room (with methods: ${!!janusRoomReady}) or status_text_obj (${!!statusObjReady}) not yet fully available (attempt ${janusRoomPollAttempts}). Retrying...`);
+                setTimeout(pollForJanusRoom, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for janus.room (with methods) and status_text_obj.');
+                // Fallback: even if room isn't fully ready, maybe janus.ready will become true and allow some interaction.
+                pollForJanusReady();
+            }
+        }
+
+        function pollForJanusObject() {
+            janusObjectPollAttempts++;
+            if (window.janus) {
+                console.log(`[JanusDirectGLTFTest] POLL: window.janus object IS defined (attempt ${janusObjectPollAttempts}).`);
+                pollForJanusRoom();
+            } else if (janusObjectPollAttempts < maxJanusObjectPollAttempts) {
+                console.log(`[JanusDirectGLTFTest] POLL: window.janus object NOT YET defined (attempt ${janusObjectPollAttempts}). Retrying for janus object...`);
+                setTimeout(pollForJanusObject, 100);
+            } else {
+                console.error('[JanusDirectGLTFTest] POLL: Timed out waiting for window.janus object.');
+            }
+        }
+
+        customElements.whenDefined('janus-viewer').then(() => {
+            console.log('[JanusDirectGLTFTest] <janus-viewer> custom element defined.');
+            pollForJanusObject();
+        }).catch(err => {
+             console.error('[JanusDirectGLTFTest] Error waiting for janus-viewer:', err);
+        });
+    </script>
+</body>
+</html>

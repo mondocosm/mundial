@@ -1,0 +1,12 @@
+node_modules
+.idea/
+.vscode/
+.sonarlint
+.scannerwork
+.nyc_output
+/coverage
+npm-debug.log
+/dist
+docs
+.rete-cli
+.sonar

@@ -1,0 +1,10 @@
+Package: elation
+Version: $VERSION
+Section: web
+Priority: optional
+Architecture: all
+Depends: 
+Recommends: 
+Maintainer: James Baicoianu <james@thefind.com>
+Description: Elation Web Framework
+  http://github.com/jbaicoianu/elation

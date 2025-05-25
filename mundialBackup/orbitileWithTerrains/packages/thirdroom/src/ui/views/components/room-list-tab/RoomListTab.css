@@ -1,0 +1,27 @@
+.RoomListTab {
+  min-width: 40px;
+  min-height: 40px;
+
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+
+  border-radius: var(--br-sm);
+  cursor: pointer;
+
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--bg-surface-hover);
+    }
+  }
+  &:focus {
+    background-color: var(--bg-surface-hover);
+  }
+  &:active {
+    background-color: var(--bg-surface-active);
+  }
+}
+
+.RoomListTab--active {
+  box-shadow: var(--bs-surface-border);
+}

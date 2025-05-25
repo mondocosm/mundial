@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLTF Conversion Test</title>
+    <style>
+        body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
+        #scene-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80vw;
+            height: 80vh;
+            max-width: 1200px;
+            max-height: 90vh;
+            background-color: #333;
+            border: 1px solid #555;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            display: flex; /* Use flex for internal layout */
+            flex-direction: column; /* Stack header, content, footer */
+            color: white;
+        }
+        .panel-header { padding: 10px; background-color: #444; text-align: center; }
+        .panel-content { flex-grow: 1; position: relative; background-color: #222; overflow: hidden; } /* Key for viewer */
+        #scene-status-bar {
+            position: absolute; top: 0; left: 0; width: 100%;
+            background-color: rgba(0,0,0,0.7); color: white;
+            padding: 8px; text-align: center; z-index: 10;
+            font-size: 0.9em; display: none;
+        }
+        #threejs-viewer-area { width: 100%; height: 100%; }
+        .panel-footer { padding: 10px; background-color: #444; text-align: center; }
+        button { padding: 8px 12px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="scene-panel">
+        <div class="panel-header">
+            <h4 id="scene-title">3D Tiles to GLTF Conversion Test</h4>
+        </div>
+        <div class="panel-content">
+            <div id="scene-status-bar">Loading...</div>
+            <div id="threejs-viewer-area"></div>
+        </div>
+        <div class="panel-footer">
+            <button id="test-conversion-btn">Test Sample Tileset Conversion</button>
+            <button id="download-gltf-btn" style="display:none;">Download Merged GLTF</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <script src="js/tilesetExporter.js"></script> <!-- Assumes this is in js/ relative to gltf_test.html -->
+    <script src="js/gltf_test_main.js"></script> <!-- New JS file for this test page -->
+</body>
+</html>

@@ -1,0 +1,9 @@
+.Stats {
+  position: absolute;
+  right: 8px;
+  top: 54px;
+  width: 200px;
+  padding: var(--sp-xs);
+  background-color: var(--bg-world-overlay);
+  overflow: hidden;
+}

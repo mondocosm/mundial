@@ -1,0 +1,23 @@
+.WorldChatTimeline .Timeline {
+  width: 100%;
+}
+
+.WorldChatTimeline .Timeline_scroller {
+  height: 100%;
+  pointer-events: all;
+
+  & > ul {
+    list-style: none;
+    padding: var(--sp-xs) 0;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+
+    & > li {
+      pointer-events: all;
+      margin-top: var(--sp-xs);
+    }
+  }
+}

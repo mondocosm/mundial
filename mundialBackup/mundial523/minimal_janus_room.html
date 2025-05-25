@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Minimal Janus Room Loader</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, shrink-to-fit=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; color: #fff; }
+        #janus-viewer { width: 100%; height: 100%; }
+    </style>
+    <!-- Assuming janusweb.js is available globally or adjust path if using local JanusWeb build -->
+    <!-- It's often better to use a specific version from a CDN or local build -->
+    <script src="https://web.janusxr.org/janusweb.js"></script>
+</head>
+<body>
+    <h1 style="color: lime; position: absolute; top: 0; left: 0; z-index: 9999; font-size: 24px;">MINIMAL_JANUS_ROOM.HTML IS LOADED! (DEBUG)</h1>
+    <div id="janus-viewer">This is the janus-viewer div inside minimal_janus_room.html.</div>
+    <script>
+        console.log("MINIMAL_JANUS_ROOM.HTML: Script executed. No Janus init in this debug version.");
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'minimalRoomReady', status: 'debug_text_only' }, '*');
+        }
+    </script>
+</body>
+</html>

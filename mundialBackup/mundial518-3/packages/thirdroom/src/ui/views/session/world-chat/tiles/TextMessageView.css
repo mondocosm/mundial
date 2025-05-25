@@ -1,0 +1,18 @@
+.WorldChat__TextMessageView {
+  padding: var(--sp-xxs) var(--sp-xs);
+  background-color: var(--bg-world-overlay);
+  border-radius: var(--br-xs);
+  display: inline-block;
+
+  & > .Text {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+.WorldChat__TextMessageView--emote {
+  font-style: italic;
+}
+
+.WorldChat__TextMessageView-sender {
+  margin-right: var(--sp-xxs);
+}

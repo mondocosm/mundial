@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JanusWeb Minimal Test Room</title>
+</head>
+<body>
+    <FireBoxRoom>
+        <Room>
+            <Text pos="0 1.6 -3" col="white">Minimal Test</Text>
+        </Room>
+    </FireBoxRoom>
+    <script>
+        function initializeJanusTestListener() {
+            if (window.janus && window.janus.ready) {
+                console.log('Minimal Test Room: Janus is ready.');
+                // You could try a very simple janus.room.createObject here if needed for further testing
+            } else {
+                console.log('Minimal Test Room: Janus not ready yet, retrying in 200ms.');
+                setTimeout(initializeJanusTestListener, 200);
+            }
+        }
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            initializeJanusTestListener();
+        } else {
+            document.addEventListener('DOMContentLoaded', initializeJanusTestListener);
+        }
+    </script>
+</body>
+</html>

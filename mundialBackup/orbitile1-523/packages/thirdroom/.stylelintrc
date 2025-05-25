@@ -1,0 +1,27 @@
+{
+  "extends": ["stylelint-config-standard", "stylelint-config-prettier"],
+  "rules": {
+    "color-hex-case": null,
+    "comment-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "length-zero-no-unit": null,
+    "rule-empty-line-before": null,
+    "color-hex-length": null,
+    "max-empty-lines": 1,
+    "no-eol-whitespace": true,
+    "number-no-trailing-zeros": null,
+    "number-leading-zero": null,
+    "selector-list-comma-newline-after": null,
+    "at-rule-no-unknown": null,
+    "no-descending-specificity": null,
+    "no-empty-first-line": true,
+    "selector-class-pattern": null,
+    "custom-property-empty-line-before": null,
+    "declaration-block-no-redundant-longhand-properties": [
+      true,
+      {
+        "ignoreShorthands": ["grid-template"]
+      }
+    ]
+  }
+}

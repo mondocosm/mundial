@@ -1,0 +1,29 @@
+.AssetPipeline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: black;
+}
+
+.AssetPipeline__dropzone {
+  width: 100%;
+  height: 100%;
+}
+
+.AssetPipeline__content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 40px;
+}
+
+.AssetPipeline__message {
+  text-align: center;
+}

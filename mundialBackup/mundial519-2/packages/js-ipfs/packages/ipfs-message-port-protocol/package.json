@@ -1,0 +1,97 @@
+{
+  "name": "ipfs-message-port-protocol",
+  "version": "0.15.1",
+  "description": "IPFS client/server protocol over message port",
+  "license": "Apache-2.0 OR MIT",
+  "homepage": "https://github.com/ipfs/js-ipfs/tree/master/packages/ipfs-message-port-protocol#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ipfs/js-ipfs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ipfs/js-ipfs/issues"
+  },
+  "keywords": [
+    "ipfs"
+  ],
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=7.0.0"
+  },
+  "type": "module",
+  "types": "./dist/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "*",
+        "dist/*",
+        "dist/src/*",
+        "dist/src/*/index"
+      ],
+      "src/*": [
+        "*",
+        "dist/*",
+        "dist/src/*",
+        "dist/src/*/index"
+      ]
+    }
+  },
+  "files": [
+    "src",
+    "dist",
+    "!dist/test",
+    "!**/*.tsbuildinfo"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./block": {
+      "types": "./src/block.d.ts",
+      "import": "./src/block.js"
+    },
+    "./cid": {
+      "types": "./src/cid.d.ts",
+      "import": "./src/cid.js"
+    },
+    "./core": {
+      "types": "./src/core.d.ts",
+      "import": "./src/core.js"
+    },
+    "./dag": {
+      "types": "./src/dag.d.ts",
+      "import": "./src/dag.js"
+    },
+    "./error": {
+      "types": "./src/error.d.ts",
+      "import": "./src/error.js"
+    }
+  },
+  "eslintConfig": {
+    "extends": "ipfs",
+    "parserOptions": {
+      "sourceType": "module"
+    }
+  },
+  "scripts": {
+    "build": "aegir build",
+    "test": "aegir test",
+    "test:node": "aegir test -t node --cov",
+    "test:chrome": "aegir test -t browser --cov",
+    "test:chrome-webworker": "aegir test -t webworker",
+    "test:firefox": "aegir test -t browser -- --browser firefox",
+    "test:firefox-webworker": "aegir test -t webworker -- --browser firefox",
+    "lint": "aegir lint",
+    "clean": "aegir clean",
+    "dep-check": "aegir dep-check -i ipfs-core-types"
+  },
+  "dependencies": {
+    "ipfs-core-types": "^0.14.1",
+    "multiformats": "^11.0.0"
+  },
+  "devDependencies": {
+    "aegir": "^37.11.0",
+    "uint8arrays": "^4.0.2"
+  }
+}

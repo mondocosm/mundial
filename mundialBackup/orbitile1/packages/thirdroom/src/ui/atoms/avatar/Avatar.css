@@ -1,0 +1,53 @@
+.Avatar {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+
+  border-radius: var(--br-md);
+  background-color: var(--bg-surface-low);
+  overflow: hidden;
+
+  & img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: none;
+  }
+}
+button.Avatar {
+  cursor: pointer;
+}
+
+.Avatar--xl {
+  width: var(--av-xl);
+  height: var(--av-xl);
+  border-radius: var(--br-lg);
+}
+.Avatar--lg {
+  width: var(--av-lg);
+  height: var(--av-lg);
+  border-radius: var(--br-lg);
+}
+.Avatar--md {
+  width: var(--av-md);
+  height: var(--av-md);
+}
+.Avatar--sm {
+  width: var(--av-sm);
+  height: var(--av-sm);
+  border-radius: var(--br-sm);
+}
+.Avatar--xs {
+  width: var(--av-xs);
+  height: var(--av-xs);
+  border-radius: var(--br-xs);
+}
+.Avatar--xxs {
+  width: var(--av-xxs);
+  height: var(--av-xxs);
+  border-radius: var(--br-xs);
+}
+
+.Avatar--circle {
+  border-radius: 50%;
+}

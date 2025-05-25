@@ -1,0 +1,23 @@
+.EditorView {
+  pointer-events: none !important;
+  padding: var(--sp-xs);
+  width: 100%;
+  height: 100%;
+}
+
+.EditorView__leftPanel,
+.EditorView__rightPanel {
+  max-width: 320px;
+  width: 100vw;
+}
+
+.EditorView__toolbar,
+.EditorView__leftPanel,
+.EditorView__rightPanel,
+.EditorView__centerPanel {
+  pointer-events: none;
+
+  & > * {
+    pointer-events: all;
+  }
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenGlobus Embed</title>
+    <link rel="stylesheet" href="packages/openglobus/lib/og.css" type="text/css">
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+        #globusContainerEmbed { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="globusContainerEmbed"></div>
+
+    <script type="module">
+        // Set path for OpenGlobus resources (like shaders, fonts)
+        // This needs to be relative to this HTML file, or an absolute path if hosted.
+        // Assuming this HTML is in 'mundial/', and 'packages/' is at the same level as 'mundial/'
+        // which is not the case. 'packages/' is inside 'mundial/'.
+        // Let's adjust based on the project structure.
+        // If mundial/openglobus_for_janus.html is loading mundial/packages/...
+        window.OG_RESOURCES_PATH = 'packages/openglobus/res';
+
+        import * as og from './packages/openglobus/lib/og.es.js';
+
+        if (typeof og !== 'undefined') {
+            const globusContainer = document.getElementById('globusContainerEmbed');
+            if (globusContainer) {
+                const simpleGlobe = new og.Globe({
+                    target: globusContainer,
+                    name: "EmbedGlobe",
+                    terrain: new og.terrain.GlobusRgbTerrain(), // Simple terrain
+                    layers: [
+                        new og.layer.XYZ("OpenStreetMap", {
+                            isBaseLayer: true,
+                            url: "//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                            visibility: true,
+                            attribution: '© OpenStreetMap contributors'
+                        })
+                    ],
+                    sun: { active: false }, // Keep it simple, no sun
+                    atmosphereEnabled: false, // Keep it simple
+                    lon: 0,
+                    lat: 0,
+                    alt: 10000000 // Zoomed out view
+                });
+                console.log("Embedded OpenGlobus instance created.");
+            } else {
+                console.error("Embed: globusContainerEmbed not found.");
+            }
+        } else {
+            console.error("Embed: OpenGlobus library (og) not loaded.");
+        }
+    </script>
+</body>
+</html>

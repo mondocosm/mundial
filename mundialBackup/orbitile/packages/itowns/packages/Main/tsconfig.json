@@ -1,0 +1,11 @@
+{
+    "extends": "../../tsconfig.json",
+    "include": [ "src/Main.js", "src/global.d.ts" ],
+    "exclude": [ "lib" ],
+    "compilerOptions": {
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "outDir": "lib",
+        "baseUrl": "src"
+    }
+}
